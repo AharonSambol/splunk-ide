@@ -590,35 +590,7 @@ function createView(file) {
     // Listen for key events forwarded from the webview preload
     view.addEventListener('ipc-message', (event) => {
         if (event.channel === 'webview-keydown') {
-            const d = event.args[0] || {};
-            const ctrlOrMeta = !!(d.ctrl || d.meta);
-            const key = (d.key || '').toLowerCase();
-
-            // handle double-Shift (shift-shift) forwarded from webview
-            if (key === 'shift') {
-                shiftTapCount += 1;
-
-                if (shiftTapCount === 1) {
-                    shiftTimer = globalThis.setTimeout(() => {
-                        shiftTapCount = 0;
-                    }, 400);
-                } else if (shiftTapCount === 2) {
-                    globalThis.clearTimeout(shiftTimer);
-                    shiftTapCount = 0;
-                    openQuickSearch();
-                }
-                return;
-            }
-
-            if (ctrlOrMeta && key === 'tab') {
-                handleWebviewShortcut('ctrl-tab');
-            } else if (ctrlOrMeta && key === 'n') {
-                handleWebviewShortcut('ctrl-n');
-            } else if (ctrlOrMeta && (d.code === 'ArrowLeft' || key === 'arrowleft')) {
-                handleWebviewShortcut('ctrl-left');
-            } else if (ctrlOrMeta && (d.code === 'ArrowRight' || key === 'arrowright')) {
-                handleWebviewShortcut('ctrl-right');
-            }
+            handleWebviewKeydown(event.args[0] || {});
         }
     });
 
@@ -667,6 +639,45 @@ function switchToFile(targetId) {
     document.querySelectorAll('.explorer-item').forEach(item => {
         item.classList.toggle('active', item.dataset.fileId === targetId);
     });
+}
+
+function handleWebviewKeydown(d) {
+    if (!d || typeof d.key !== 'string') {
+        return;
+    }
+
+    const key = d.key.toLowerCase();
+    const ctrlOrMeta = !!(d.ctrl || d.meta);
+
+    if (key === 'shift') {
+        shiftTapCount += 1;
+
+        if (shiftTapCount === 1) {
+            shiftTimer = globalThis.setTimeout(() => {
+                shiftTapCount = 0;
+            }, 400);
+        } else if (shiftTapCount === 2) {
+            globalThis.clearTimeout(shiftTimer);
+            shiftTapCount = 0;
+            openQuickSearch();
+        }
+
+        return;
+    }
+
+    if (!ctrlOrMeta) {
+        return;
+    }
+
+    if (key === 'tab') {
+        handleWebviewShortcut('ctrl-tab');
+    } else if (key === 'n') {
+        handleWebviewShortcut('ctrl-n');
+    } else if (d.code === 'ArrowLeft' || key === 'arrowleft') {
+        handleWebviewShortcut('ctrl-left');
+    } else if (d.code === 'ArrowRight' || key === 'arrowright') {
+        handleWebviewShortcut('ctrl-right');
+    }
 }
 
 function updateExplorer() {
@@ -985,5 +996,5 @@ function handleQuickSearchKeydown(event) {
 
 function activateFileFromQuickSearch(fileId) {
     closeQuickSearch();
-    switchToFile(fileId);
+    openFile(fileId);
 }
