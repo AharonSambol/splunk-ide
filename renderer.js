@@ -6,6 +6,7 @@ const path = require('node:path');
 const { ipcRenderer } = require('electron');
 
 const newFileBtn = document.getElementById('new-file-btn');
+const newFolderBtn = document.getElementById('new-folder-btn');
 const newProjectBtn = document.getElementById('new-project-btn');
 const openProjectBtn = document.getElementById('open-project-btn');
 const projectNameLabel = document.getElementById('project-name');
@@ -18,10 +19,13 @@ const quickSearchResults = document.getElementById('quick-search-results');
 const newFileModal = document.getElementById('new-file-modal');
 const newFileModalLabel = document.getElementById('new-file-modal-label');
 const newFileModalInput = document.getElementById('new-file-modal-input');
+const newFileFolderRow = document.getElementById('new-file-folder-row');
+const newFileFolderSelect = document.getElementById('new-file-folder-select');
 const newFileCreateBtn = document.getElementById('new-file-create');
 const newFileCancelBtn = document.getElementById('new-file-cancel');
 
 let files = [];
+let folders = [];
 let activeFileId = null;
 let fileMru = [];
 let currentProjectPath = null;
@@ -35,6 +39,7 @@ let modalTargetFileId = null;
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
 newFileBtn.addEventListener('click', openNewFileModal);
+newFolderBtn.addEventListener('click', openNewFolderModal);
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
 newFileModalInput.addEventListener('keydown', event => {
@@ -67,7 +72,7 @@ function handleWebviewShortcut(shortcut) {
     }
 }
 
-function createNewFile(name) {
+function createNewFile(name, parentFolder = '') {
     if (!currentProjectPath) {
         alert('Please create or open a project before creating files.');
         return;
@@ -75,21 +80,58 @@ function createNewFile(name) {
 
     const defaultName = `Search ${fileCounter}`;
     const fileName = name ? name.trim() || defaultName : defaultName;
+    const normalizedFileName = fileName.replaceAll('\\', '/').trim();
     const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
     fileCounter++;
 
-    const filePath = getProjectFilePath(fileName);
+    const relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
+    const filePath = getProjectFilePath(relativeFileName);
     ensureDirectoryExists(path.dirname(filePath));
     fs.writeFileSync(filePath, SPLUNK_URL, 'utf8');
 
-    const file = { id: fileId, name: fileName, path: filePath, url: SPLUNK_URL };
+    const file = { id: fileId, name: relativeFileName, path: filePath, url: SPLUNK_URL };
     files.push(file);
     fileMru.unshift(fileId);
 
+    const fileParentFolder = getFileFolder(relativeFileName);
+    if (fileParentFolder) {
+        addFolderForPath(fileParentFolder);
+    }
     createTab(file);
     createView(file);
     updateExplorer();
     switchToFile(fileId);
+}
+
+function createNewFolder(name, parentFolder = '') {
+    if (!currentProjectPath) {
+        alert('Please create or open a project before creating folders.');
+        return;
+    }
+
+    const folderNameRaw = name ? name.trim() : '';
+    if (!folderNameRaw) {
+        return;
+    }
+
+    const normalizedFolder = folderNameRaw.replaceAll('\\', '/').trim();
+    const relativeFolder = parentFolder ? `${parentFolder}/${normalizedFolder}` : normalizedFolder;
+    const folderPath = path.join(currentProjectPath, ...relativeFolder.split('/'));
+    ensureDirectoryExists(folderPath);
+
+    addFolderForPath(relativeFolder);
+    updateExplorer();
+}
+
+function addFolderForPath(folderPath) {
+    const segments = folderPath.split('/').map(segment => segment.trim()).filter(Boolean);
+    let accumulated = '';
+    segments.forEach(segment => {
+        accumulated = accumulated ? `${accumulated}/${segment}` : segment;
+        if (!folders.includes(accumulated)) {
+            folders.push(accumulated);
+        }
+    });
 }
 
 function closeTab(fileId) {
@@ -131,6 +173,44 @@ function deleteFile(fileId) {
 
     closeTab(fileId);
     removeFile(fileId, true);
+}
+
+function deleteFolder(folderPath) {
+    if (!confirm(`Delete folder "${folderPath}" and all of its contents?`)) {
+        return;
+    }
+
+    const fullPath = path.join(currentProjectPath, ...folderPath.split('/'));
+    removeFolderRecursive(fullPath);
+
+    const removedFileIds = files
+        .filter(file => file.name === folderPath || file.name.startsWith(`${folderPath}/`))
+        .map(file => file.id);
+
+    removedFileIds.forEach(id => {
+        closeTab(id);
+        removeFile(id, false);
+    });
+
+    folders = folders.filter(folder => folder !== folderPath && !folder.startsWith(`${folderPath}/`));
+    updateExplorer();
+}
+
+function removeFolderRecursive(folderPath) {
+    if (!fs.existsSync(folderPath)) {
+        return;
+    }
+
+    fs.readdirSync(folderPath, { withFileTypes: true }).forEach(dirent => {
+        const fullPath = path.join(folderPath, dirent.name);
+        if (dirent.isDirectory()) {
+            removeFolderRecursive(fullPath);
+        } else {
+            fs.unlinkSync(fullPath);
+        }
+    });
+
+    fs.rmdirSync(folderPath);
 }
 
 function removeFile(fileId, deleteFromDisk = false) {
@@ -192,7 +272,7 @@ function ensureDirectoryExists(directoryPath) {
 
 function saveFileUrl(fileId) {
     const file = files.find(f => f.id === fileId);
-    if (!file || !file.path) {
+    if (!file?.path) {
         return;
     }
 
@@ -204,6 +284,68 @@ function saveFileUrl(fileId) {
             fs.writeFileSync(file.path, url, 'utf8');
         }
     }
+}
+
+function populateFolderSelect(selectedValue = '') {
+    newFileFolderSelect.innerHTML = '';
+    const rootOption = document.createElement('option');
+    rootOption.value = '';
+    rootOption.textContent = 'Root';
+    newFileFolderSelect.appendChild(rootOption);
+
+    const sortedFolders = [...folders].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    sortedFolders.forEach(folderPath => {
+        const option = document.createElement('option');
+        option.value = folderPath;
+        option.textContent = folderPath;
+        if (folderPath === selectedValue) {
+            option.selected = true;
+        }
+        newFileFolderSelect.appendChild(option);
+    });
+}
+
+function getSelectedFolder() {
+    return newFileFolderSelect.value || '';
+}
+
+function openMoveFileModal(file) {
+    modalMode = 'move';
+    modalTargetFileId = file.id;
+    newFileModalLabel.textContent = `Move "${file.name.split('/').pop()}" to folder`;
+    newFileModalInput.value = file.name.split('/').pop();
+    newFileModalInput.disabled = true;
+    populateFolderSelect(getFileFolder(file.name));
+    showNewFileModal();
+}
+
+function getFileFolder(fileName) {
+    const lastSlash = fileName.lastIndexOf('/');
+    return lastSlash === -1 ? '' : fileName.slice(0, lastSlash);
+}
+
+function moveFile(fileId, targetFolder) {
+    const file = files.find(f => f.id === fileId);
+    if (!file) {
+        return;
+    }
+
+    const fileName = file.name.split('/').pop();
+    const newRelativeName = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+    const newPath = getProjectFilePath(newRelativeName);
+    const oldPath = file.path;
+
+    if (newPath === oldPath) {
+        return;
+    }
+
+    ensureDirectoryExists(path.dirname(newPath));
+    fs.renameSync(oldPath, newPath);
+    file.name = newRelativeName;
+    file.path = newPath;
+    const movedParent = getFileFolder(newRelativeName);
+    if (movedParent) addFolderForPath(movedParent);
+    updateExplorer();
 }
 
 async function createNewProject() {
@@ -240,14 +382,17 @@ function loadProject(projectPath) {
     updateProjectDisplay();
 
     files = [];
+    folders = [];
     fileMru = [];
     activeFileId = null;
     clearOpenTabs();
 
+    folders = scanProjectFolders(projectPath);
+
     const filePaths = scanProjectFiles(projectPath);
     filePaths.forEach(filePath => {
         const url = fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL;
-        const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '');
+        const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
         files.push({ id: `splunk-view-${Date.now()}-${Math.random()}`, name, path: filePath, url });
     });
 
@@ -267,6 +412,19 @@ function scanProjectFiles(directory) {
     return results;
 }
 
+function scanProjectFolders(directory) {
+    let results = [];
+    fs.readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
+        const fullPath = path.join(directory, dirent.name);
+        if (dirent.isDirectory()) {
+            const relativePath = path.relative(currentProjectPath, fullPath).split(path.sep).join('/');
+            results.push(relativePath);
+            results = results.concat(scanProjectFolders(fullPath));
+        }
+    });
+    return results;
+}
+
 function clearOpenTabs() {
     while (tabBar.firstChild) {
         tabBar.firstChild.remove();
@@ -277,7 +435,9 @@ function clearOpenTabs() {
 function updateProjectDisplay() {
     projectNameLabel.textContent = currentProjectPath ? currentProjectName : 'No project loaded';
     projectNameLabel.title = currentProjectPath || '';
-    newFileBtn.disabled = !currentProjectPath;
+    const disabled = !currentProjectPath;
+    newFileBtn.disabled = disabled;
+    newFolderBtn.disabled = disabled;
 }
 
 function openNewFileModal() {
@@ -285,6 +445,14 @@ function openNewFileModal() {
     modalTargetFileId = null;
     newFileModalLabel.textContent = 'New Search File Name';
     newFileModalInput.value = `Search ${fileCounter}`;
+    showNewFileModal();
+}
+
+function openNewFolderModal() {
+    modalMode = 'folder';
+    modalTargetFileId = null;
+    newFileModalLabel.textContent = 'New Folder Name';
+    newFileModalInput.value = '';
     showNewFileModal();
 }
 
@@ -297,10 +465,36 @@ function openRenameModal(file) {
 }
 
 function showNewFileModal() {
-    newFileModalLabel.textContent = modalMode === 'rename'
-        ? `Rename "${files.find(f => f.id === modalTargetFileId)?.name.split('/').pop() || ''}"`
-        : 'New Search File Name';
-    newFileCreateBtn.textContent = modalMode === 'rename' ? 'Rename' : 'Create';
+    if (modalMode === 'rename') {
+        newFileModalLabel.textContent = `Rename "${files.find(f => f.id === modalTargetFileId)?.name.split('/').pop() || ''}"`;
+        newFileFolderRow.style.display = 'none';
+        newFileModalInput.disabled = false;
+    } else if (modalMode === 'folder') {
+        newFileModalLabel.textContent = 'New Folder Name';
+        newFileFolderRow.style.display = 'block';
+        newFileModalInput.disabled = false;
+        populateFolderSelect('');
+    } else if (modalMode === 'move') {
+        newFileModalLabel.textContent = `Move "${files.find(f => f.id === modalTargetFileId)?.name.split('/').pop() || ''}" to folder`;
+        newFileFolderRow.style.display = 'block';
+        newFileModalInput.disabled = true;
+    } else {
+        newFileModalLabel.textContent = 'New Search File Name';
+        newFileFolderRow.style.display = 'block';
+        newFileModalInput.disabled = false;
+        populateFolderSelect('');
+    }
+
+    if (modalMode === 'rename') {
+        newFileCreateBtn.textContent = 'Rename';
+    } else if (modalMode === 'move') {
+        newFileCreateBtn.textContent = 'Move';
+    } else if (modalMode === 'folder') {
+        newFileCreateBtn.textContent = 'Create Folder';
+    } else {
+        newFileCreateBtn.textContent = 'Create';
+    }
+    newFileModalInput.placeholder = modalMode === 'folder' ? 'Folder name or path' : 'Enter file name or path';
     newFileModal.classList.add('visible');
     setTimeout(() => {
         newFileModalInput.select();
@@ -316,10 +510,15 @@ function closeNewFileModal() {
 
 function confirmNewFileCreation() {
     const name = newFileModalInput.value;
+    const selectedFolder = getSelectedFolder();
     if (modalMode === 'rename' && modalTargetFileId) {
         renameFile(modalTargetFileId, name);
+    } else if (modalMode === 'folder') {
+        createNewFolder(name, selectedFolder);
+    } else if (modalMode === 'move' && modalTargetFileId) {
+        moveFile(modalTargetFileId, selectedFolder);
     } else {
-        createNewFile(name);
+        createNewFile(name, selectedFolder);
     }
     closeNewFileModal();
 }
@@ -431,15 +630,15 @@ function switchToFile(targetId) {
 function updateExplorer() {
     explorer.innerHTML = '';
 
-    if (files.length === 0) {
+    if (files.length === 0 && folders.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'explorer-item';
-        empty.textContent = 'No files yet. Create a new search file.';
+        empty.textContent = 'No files yet. Create a new search file or folder.';
         explorer.appendChild(empty);
         return;
     }
 
-    const root = buildFileTree(files);
+    const root = buildFileTree(files, folders);
     const rootLabel = document.createElement('div');
     rootLabel.className = 'folder-root';
     rootLabel.textContent = 'Search Files';
@@ -454,9 +653,38 @@ function updateExplorer() {
     });
 }
 
-function buildFileTree(fileList) {
+function buildFileTree(fileList, folderList) {
     const root = { children: [], files: [] };
     const map = new Map();
+
+    function ensureFolderNode(pathSegments) {
+        let current = root;
+        let accumulatedPath = '';
+
+        for (let segment of pathSegments) {
+            accumulatedPath = accumulatedPath ? `${accumulatedPath}/${segment}` : segment;
+            let folder = map.get(accumulatedPath);
+            if (!folder) {
+                folder = { name: segment, path: accumulatedPath, children: [], files: [] };
+                map.set(accumulatedPath, folder);
+                if (current === root) {
+                    root.children.push(folder);
+                } else {
+                    current.children.push(folder);
+                }
+            }
+            current = folder;
+        }
+
+        return current;
+    }
+
+    folderList.forEach(folderPath => {
+        const segments = folderPath.split('/').map(segment => segment.trim()).filter(Boolean);
+        if (segments.length > 0) {
+            ensureFolderNode(segments);
+        }
+    });
 
     fileList.forEach(file => {
         const segments = file.name.split('/').map(segment => segment.trim()).filter(Boolean);
@@ -470,26 +698,8 @@ function buildFileTree(fileList) {
             return;
         }
 
-        let currentFolder = root;
-        for (let i = 0; i < segments.length - 1; i++) {
-            const segment = segments[i];
-            const path = segments.slice(0, i + 1).join('/');
-            let folder = map.get(path);
-            if (!folder) {
-                folder = { name: segment, path, children: [], files: [] };
-                map.set(path, folder);
-                if (i === 0) {
-                    root.children.push(folder);
-                } else {
-                    const parentPath = segments.slice(0, i).join('/');
-                    const parentFolder = map.get(parentPath);
-                    parentFolder.children.push(folder);
-                }
-            }
-            currentFolder = folder;
-        }
-
-        currentFolder.files.push({ ...file, displayName: segments[segments.length - 1] });
+        const parentFolder = ensureFolderNode(segments.slice(0, -1));
+        parentFolder.files.push({ ...file, displayName: segments[segments.length - 1] });
     });
 
     return root;
@@ -501,7 +711,24 @@ function renderFolderNode(folder) {
     details.open = true;
 
     const summary = document.createElement('summary');
-    summary.textContent = folder.name;
+
+    const title = document.createElement('span');
+    title.textContent = folder.name;
+    summary.appendChild(title);
+
+    const folderActions = document.createElement('span');
+    folderActions.className = 'folder-actions';
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.textContent = 'Delete';
+    deleteButton.addEventListener('click', event => {
+        event.stopPropagation();
+        deleteFolder(folder.path);
+    });
+
+    folderActions.appendChild(deleteButton);
+    summary.appendChild(folderActions);
     details.appendChild(summary);
 
     const folderContents = document.createElement('div');
@@ -531,6 +758,15 @@ function renderFileNode(file) {
     const actions = document.createElement('span');
     actions.className = 'file-actions';
 
+    const moveButton = document.createElement('button');
+    moveButton.className = 'file-action file-move';
+    moveButton.type = 'button';
+    moveButton.textContent = 'Move';
+    moveButton.addEventListener('click', event => {
+        event.stopPropagation();
+        openMoveFileModal(file);
+    });
+
     const deleteButton = document.createElement('button');
     deleteButton.className = 'file-action file-delete';
     deleteButton.type = 'button';
@@ -540,6 +776,7 @@ function renderFileNode(file) {
         deleteFile(file.id);
     });
 
+    actions.appendChild(moveButton);
     actions.appendChild(deleteButton);
 
     item.appendChild(label);
