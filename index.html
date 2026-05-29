@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Splunk IDE</title>
+    <style>
+        /* Dark theme IDE styling */
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e1e;
+            color: #cccccc;
+        }
+
+        #app-shell {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 260px;
+            background: #252526;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #sidebar-header {
+            padding: 14px 16px;
+            font-weight: bold;
+            color: #f3f3f3;
+            border-bottom: 1px solid #333;
+        }
+
+        #explorer {
+            flex: 1;
+            overflow: auto;
+            padding: 10px 12px;
+        }
+
+        #explorer-footer {
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            color: #8a8a8a;
+            border-top: 1px solid #333;
+        }
+
+        .folder-root {
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+            color: #9cdcfe;
+        }
+
+        details.folder {
+            margin-bottom: 6px;
+        }
+
+        details.folder > summary {
+            cursor: pointer;
+            color: #9cdcfe;
+            list-style: none;
+            padding: 4px 0;
+            user-select: none;
+        }
+
+        .folder-contents {
+            padding-left: 14px;
+        }
+
+        .explorer-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #d4d4d4;
+            margin: 2px 0;
+            font-size: 0.95rem;
+        }
+
+        .explorer-item.active,
+        .explorer-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            color: #ffffff;
+        }
+
+        .explorer-item .file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .explorer-item .file-actions {
+            display: inline-flex;
+            gap: 4px;
+            margin-left: 12px;
+        }
+
+        .explorer-item .file-action {
+            background: transparent;
+            border: none;
+            color: #9d9d9d;
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 4px 6px;
+            border-radius: 4px;
+        }
+
+        .explorer-item .file-action:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        #main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #header {
+            display: flex;
+            background: #252526;
+            padding: 8px;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+
+        button.project-action,
+        #new-file-btn {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-right: 8px;
+            font-weight: bold;
+        }
+
+        button.project-action:hover,
+        #new-file-btn:hover {
+            background: #0098ff;
+        }
+
+        #new-file-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        #project-name {
+            margin-left: 12px;
+            color: #9cdcfe;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 320px;
+        }
+
+        #tab-bar {
+            display: flex;
+            gap: 2px;
+            overflow-x: auto;
+            flex: 1;
+        }
+
+        .tab {
+            display: inline-flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 12px;
+            background: #2d2d2d;
+            cursor: pointer;
+            border: none;
+            color: #969696;
+            min-width: 120px;
+            text-align: left;
+            border-right: 1px solid #1e1e1e;
+        }
+
+        .tab.active {
+            background: #1e1e1e;
+            color: white;
+        }
+
+        .tab-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            color: inherit;
+        }
+
+        .tab-close {
+            border: none;
+            background: transparent;
+            color: #9d9d9d;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+
+        .tab-close:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        #views-container {
+            flex: 1;
+            position: relative;
+        }
+
+        webview {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        webview.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #quick-search-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 20, 20, 0.94);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease;
+        }
+
+        #quick-search-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #quick-search-modal {
+            width: min(560px, calc(100% - 40px));
+            border-radius: 10px;
+            padding: 20px;
+            background: #1d1f21;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+        }
+
+        #quick-search-hint {
+            margin-bottom: 12px;
+            color: #9a9a9a;
+            font-size: 0.95rem;
+        }
+
+        #quick-search-input {
+            width: 100%;
+            padding: 12px 14px;
+            border: none;
+            border-radius: 6px;
+            background: #101214;
+            color: #ffffff;
+            font-size: 1rem;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+            outline: none;
+        }
+
+        #quick-search-results {
+            max-height: 250px;
+            overflow: auto;
+            margin-top: 10px;
+            background: #161719;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+
+        .quick-search-item {
+            padding: 11px 14px;
+            cursor: pointer;
+            color: #d4d4d4;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        #new-file-modal {
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 20, 20, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease;
+        }
+
+        #new-file-modal.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #new-file-modal-box {
+            width: min(480px, calc(100% - 40px));
+            background: #1f2124;
+            border-radius: 12px;
+            border: 1px solid #333;
+            padding: 22px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        #new-file-modal-box label {
+            display: block;
+            margin-bottom: 10px;
+            color: #c9d1d9;
+            font-size: 0.95rem;
+        }
+
+        #new-file-modal-input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #101214;
+            color: #ffffff;
+            outline: none;
+            font-size: 1rem;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .modal-button {
+            padding: 9px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #ffffff;
+            background: #2d2d2d;
+        }
+
+        .modal-button.primary {
+            background: #007acc;
+        }
+
+        .modal-button:hover {
+            opacity: 0.95;
+        }
+
+        .modal-button.primary:hover {
+            background: #0098ff;
+        }
+
+        .quick-search-item:last-child {
+            border-bottom: none;
+        }
+
+        .quick-search-item.selected,
+        .quick-search-item:hover {
+            background: #094771;
+            color: #ffffff;
+        }
+
+        #quick-search-empty {
+            padding: 14px;
+            color: #7a7a7a;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app-shell">
+        <aside id="sidebar">
+            <div id="sidebar-header">File Explorer</div>
+            <div id="explorer"></div>
+            <div id="explorer-footer">Press Shift twice to search files.</div>
+        </aside>
+
+        <div id="main-area">
+            <div id="header">
+                <button id="new-project-btn" class="project-action">New Project</button>
+            <button id="open-project-btn" class="project-action">Open Project</button>
+            <button id="new-file-btn" disabled>+ New Search</button>
+            <div id="project-name">No project loaded</div>
+            
+        </div>
+        <div>
+            <div id="tab-bar"></div>
+        </div>
+
+        <div id="views-container"></div>
+        </div>
+    </div>
+
+    <div id="quick-search-overlay" class="">
+        <div id="quick-search-modal">
+            <div id="quick-search-hint">Type to search open files. Use arrow keys and Enter to open.</div>
+            <input id="quick-search-input" type="text" placeholder="Search files..." autocomplete="off" spellcheck="false" />
+            <div id="quick-search-results"></div>
+        </div>
+    </div>
+
+    <div id="new-file-modal" class="">
+        <div id="new-file-modal-box">
+            <label id="new-file-modal-label" for="new-file-modal-input">New Search File Name</label>
+            <input id="new-file-modal-input" type="text" placeholder="Enter file name or path" autocomplete="off" spellcheck="false" />
+            <div class="modal-buttons">
+                <button id="new-file-cancel" class="modal-button">Cancel</button>
+                <button id="new-file-create" class="modal-button primary">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./renderer.js"></script>
+</body>
+
+</html>
