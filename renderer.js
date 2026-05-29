@@ -541,6 +541,7 @@ function createTab(file) {
     const tab = document.createElement('div');
     tab.className = 'tab';
     tab.dataset.targetId = file.id;
+    tab.draggable = true;
 
     const title = document.createElement('span');
     title.className = 'tab-title';
@@ -558,6 +559,46 @@ function createTab(file) {
     tab.appendChild(title);
     tab.appendChild(closeButton);
     tab.addEventListener('click', () => switchToFile(file.id));
+
+    // Drag and drop handlers
+    tab.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', file.id);
+        tab.classList.add('dragging');
+    });
+
+    tab.addEventListener('dragend', () => {
+        tab.classList.remove('dragging');
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('drag-over'));
+    });
+
+    tab.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const draggedTab = tabBar.querySelector('.tab.dragging');
+        if (draggedTab && draggedTab !== tab) {
+            const rect = tab.getBoundingClientRect();
+            const midpoint = rect.left + rect.width / 2;
+            if (e.clientX < midpoint) {
+                tab.classList.add('drag-over');
+            } else {
+                tab.classList.remove('drag-over');
+            }
+        }
+    });
+
+    tab.addEventListener('dragleave', () => {
+        tab.classList.remove('drag-over');
+    });
+
+    tab.addEventListener('drop', (dropEvent) => {
+        dropEvent.preventDefault();
+        const draggedFileId = dropEvent.dataTransfer.getData('text/plain');
+        if (draggedFileId && draggedFileId !== file.id) {
+            reorderTabs(draggedFileId, file.id, dropEvent);
+        }
+    });
+
     tabBar.appendChild(tab);
 }
 
@@ -592,6 +633,29 @@ function createView(file) {
                 console.error('Failed to inject injector.js into webview', file.id, err);
             });
     });
+}
+
+function reorderTabs(draggedFileId, targetFileId, dropEvent) {
+    const draggedTab = tabBar.querySelector(`.tab[data-target-id="${draggedFileId}"]`);
+    const targetTab = tabBar.querySelector(`.tab[data-target-id="${targetFileId}"]`);
+
+    if (!draggedTab || !targetTab) {
+        return;
+    }
+
+    // Determine if we should insert before or after the target
+    const rect = targetTab.getBoundingClientRect();
+    const midpoint = rect.left + rect.width / 2;
+    const clientX = dropEvent.clientX;
+
+    // Simple reorder: insert before or after based on cursor position
+    if (clientX < midpoint) {
+        // Insert before target
+        targetTab.parentNode.insertBefore(draggedTab, targetTab);
+    } else {
+        // Insert after target
+        targetTab.parentNode.insertBefore(draggedTab, targetTab.nextSibling);
+    }
 }
 
 function switchToFile(targetId) {

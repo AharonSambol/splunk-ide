@@ -229,11 +229,22 @@
             min-width: 120px;
             text-align: left;
             border-right: 1px solid #1e1e1e;
+            user-select: none;
+            transition: opacity 0.1s;
         }
 
         .tab.active {
             background: #1e1e1e;
             color: white;
+        }
+
+        .tab.dragging {
+            opacity: 0.5;
+            background: #3d3d3d;
+        }
+
+        .tab.drag-over {
+            border-left: 2px solid #0e639c;
         }
 
         .tab-title {
