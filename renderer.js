@@ -578,7 +578,49 @@ function createView(file) {
     view.src = file.url || SPLUNK_URL;
     view.id = file.id;
     view.setAttribute('allowpopups', '');
+    // use a preload script so we can capture keys inside the guest page
+    try {
+        const preloadPath = path.join(__dirname, 'webview-preload.js');
+        view.setAttribute('preload', preloadPath);
+    } catch (err) {
+        console.warn('Failed to set webview preload:', err);
+    }
     viewsContainer.appendChild(view);
+
+    // Listen for key events forwarded from the webview preload
+    view.addEventListener('ipc-message', (event) => {
+        if (event.channel === 'webview-keydown') {
+            const d = event.args[0] || {};
+            const ctrlOrMeta = !!(d.ctrl || d.meta);
+            const key = (d.key || '').toLowerCase();
+
+            // handle double-Shift (shift-shift) forwarded from webview
+            if (key === 'shift') {
+                shiftTapCount += 1;
+
+                if (shiftTapCount === 1) {
+                    shiftTimer = globalThis.setTimeout(() => {
+                        shiftTapCount = 0;
+                    }, 400);
+                } else if (shiftTapCount === 2) {
+                    globalThis.clearTimeout(shiftTimer);
+                    shiftTapCount = 0;
+                    openQuickSearch();
+                }
+                return;
+            }
+
+            if (ctrlOrMeta && key === 'tab') {
+                handleWebviewShortcut('ctrl-tab');
+            } else if (ctrlOrMeta && key === 'n') {
+                handleWebviewShortcut('ctrl-n');
+            } else if (ctrlOrMeta && (d.code === 'ArrowLeft' || key === 'arrowleft')) {
+                handleWebviewShortcut('ctrl-left');
+            } else if (ctrlOrMeta && (d.code === 'ArrowRight' || key === 'arrowright')) {
+                handleWebviewShortcut('ctrl-right');
+            }
+        }
+    });
 
     view.addEventListener('before-input-event', (event) => {
         const inputEvent = event.inputEvent;
