@@ -19,6 +19,7 @@ function createWindow() {
     mainWindow.maximize();
     mainWindow.removeMenu();
     mainWindow.loadFile('index.html');
+    mainWindow.webContents.openDevTools()
 }
 
 app.whenReady().then(() => {

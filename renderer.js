@@ -60,18 +60,6 @@ window.onload = () => {
     updateProjectDisplay();
 };
 
-function handleWebviewShortcut(shortcut) {
-    if (shortcut === 'ctrl-tab') {
-        openMostRecentTab();
-    } else if (shortcut === 'ctrl-left') {
-        switchToPreviousTab();
-    } else if (shortcut === 'ctrl-right') {
-        switchToNextTab();
-    } else if (shortcut === 'ctrl-n') {
-        openNewFileModal();
-    }
-}
-
 function createNewFile(name, parentFolder = '') {
     if (!currentProjectPath) {
         alert('Please create or open a project before creating files.');
@@ -590,28 +578,19 @@ function createView(file) {
     // Listen for key events forwarded from the webview preload
     view.addEventListener('ipc-message', (event) => {
         if (event.channel === 'webview-keydown') {
-            handleWebviewKeydown(event.args[0] || {});
+            handleKeyboardShortcut(event.args[0] || {});
         }
     });
 
-    view.addEventListener('before-input-event', (event) => {
-        const inputEvent = event.inputEvent;
-        if (inputEvent.control && inputEvent.key.toLowerCase() === 'tab') {
-            event.preventDefault();
-            handleWebviewShortcut('ctrl-tab');
-        }
-        if (inputEvent.control && inputEvent.key.toLowerCase() === 'n') {
-            event.preventDefault();
-            handleWebviewShortcut('ctrl-n');
-        }
-        if (inputEvent.control && inputEvent.key === 'ArrowLeft') {
-            event.preventDefault();
-            handleWebviewShortcut('ctrl-left');
-        }
-        if (inputEvent.control && inputEvent.key === 'ArrowRight') {
-            event.preventDefault();
-            handleWebviewShortcut('ctrl-right');
-        }
+    const injectorCode = fs.readFileSync(path.join(__dirname, 'injector.js'), 'utf8');
+    view.addEventListener('dom-ready', () => {
+        view.executeJavaScript(injectorCode)
+            .then(() => {
+                console.log('injector.js injected into webview', file.id);
+            })
+            .catch(err => {
+                console.error('Failed to inject injector.js into webview', file.id, err);
+            });
     });
 }
 
@@ -641,14 +620,20 @@ function switchToFile(targetId) {
     });
 }
 
-function handleWebviewKeydown(d) {
+function handleKeyboardShortcut(d) {
     if (!d || typeof d.key !== 'string') {
+        return;
+    }
+
+    // Skip if modal or quick search is open
+    if (quickSearchOverlay.classList.contains('visible') || newFileModal.classList.contains('visible')) {
         return;
     }
 
     const key = d.key.toLowerCase();
     const ctrlOrMeta = !!(d.ctrl || d.meta);
 
+    // Handle Shift-Shift for quick search
     if (key === 'shift') {
         shiftTapCount += 1;
 
@@ -661,22 +646,25 @@ function handleWebviewKeydown(d) {
             shiftTapCount = 0;
             openQuickSearch();
         }
-
         return;
     }
 
-    if (!ctrlOrMeta) {
-        return;
+    // Handle modifed shortcuts
+    if (ctrlOrMeta) {
+        if (key === 'tab') {
+            openMostRecentTab();
+        } else if (key === 'n') {
+            openNewFileModal();
+        }
     }
 
-    if (key === 'tab') {
-        handleWebviewShortcut('ctrl-tab');
-    } else if (key === 'n') {
-        handleWebviewShortcut('ctrl-n');
-    } else if (d.code === 'ArrowLeft' || key === 'arrowleft') {
-        handleWebviewShortcut('ctrl-left');
-    } else if (d.code === 'ArrowRight' || key === 'arrowright') {
-        handleWebviewShortcut('ctrl-right');
+    // Handle Alt+Left/Right for tab navigation
+    if (d.alt) {
+        if (d.code === 'ArrowLeft' || key === 'arrowleft') {
+            switchToPreviousTab();
+        } else if (d.code === 'ArrowRight' || key === 'arrowright') {
+            switchToNextTab();
+        }
     }
 }
 
@@ -843,48 +831,31 @@ function renderFileNode(file) {
 }
 
 function handleGlobalKeydown(event) {
-    if (quickSearchOverlay.classList.contains('visible') || newFileModal.classList.contains('visible')) {
-        return;
-    }
+    handleKeyboardShortcut({
+        key: event.key,
+        code: event.code,
+        ctrl: event.ctrlKey,
+        meta: event.metaKey,
+        alt: event.altKey,
+        shift: event.shiftKey
+    });
 
-    if (event.key === 'Shift') {
-        shiftTapCount += 1;
-
-        if (shiftTapCount === 1) {
-            shiftTimer = globalThis.setTimeout(() => {
-                shiftTapCount = 0;
-            }, 400);
-            return;
-        }
-
+    // Prevent default for known shortcuts
+    const key = event.key.toLowerCase();
+    if (event.shiftKey && key === 'shift') {
+        // Shift-Shift handled above
         if (shiftTapCount === 2) {
-            globalThis.clearTimeout(shiftTimer);
-            shiftTapCount = 0;
-            openQuickSearch();
+            event.preventDefault();
         }
     }
-
     if (event.ctrlKey && event.key === 'Tab') {
         event.preventDefault();
-        openMostRecentTab();
-        return;
     }
-
-    if (event.ctrlKey && event.key === 'ArrowLeft') {
+    if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault();
-        switchToPreviousTab();
-        return;
     }
-
-    if (event.ctrlKey && event.key === 'ArrowRight') {
-        event.preventDefault();
-        switchToNextTab();
-        return;
-    }
-
     if (event.ctrlKey && (event.key === 'n' || event.key === 'N')) {
         event.preventDefault();
-        openNewFileModal();
     }
 }
 
