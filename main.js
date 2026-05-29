@@ -13,9 +13,11 @@ function createWindow() {
             webviewTag: true,
             nodeIntegration: true,
             contextIsolation: false
-        }
+        },
+        icon: path.join(__dirname, "build", "icon.ico"),
     });
     mainWindow.maximize();
+    mainWindow.removeMenu();
     mainWindow.loadFile('index.html');
 }
 

@@ -390,7 +390,11 @@
 <body>
     <div id="app-shell">
         <aside id="sidebar">
-            <div id="sidebar-header">File Explorer</div>
+            <div id="sidebar-header">
+                File Explorer
+                <button id="new-file-btn" disabled>+ New Search</button>
+
+            </div>
             <div id="explorer"></div>
             <div id="explorer-footer">Press Shift twice to search files.</div>
         </aside>
@@ -399,7 +403,6 @@
             <div id="header">
                 <button id="new-project-btn" class="project-action">New Project</button>
             <button id="open-project-btn" class="project-action">Open Project</button>
-            <button id="new-file-btn" disabled>+ New Search</button>
             <div id="project-name">No project loaded</div>
             
         </div>
@@ -407,7 +410,9 @@
             <div id="tab-bar"></div>
         </div>
 
-        <div id="views-container"></div>
+        <div id="views-container">
+
+        </div>
         </div>
     </div>
 
