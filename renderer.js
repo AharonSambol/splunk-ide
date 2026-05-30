@@ -21,6 +21,7 @@ const tabBar = document.getElementById('tab-bar');
 const viewsContainer = document.getElementById('views-container');
 const explorer = document.getElementById('explorer');
 const quickSearchOverlay = document.getElementById('quick-search-overlay');
+const quickSearchHint = document.getElementById('quick-search-hint');
 const quickSearchInput = document.getElementById('quick-search-input');
 const quickSearchResults = document.getElementById('quick-search-results');
 const newFileModal = document.getElementById('new-file-modal');
@@ -52,6 +53,7 @@ let currentProjectName = 'No project loaded';
 let shiftTapCount = 0;
 let shiftTimer = null;
 let quickSearchSelectedIndex = 0;
+let quickSearchMode = 'file';
 let modalMode = 'create';
 let modalTargetFileId = null;
 let currentGit = null;
@@ -763,6 +765,10 @@ function handleKeyboardShortcut(d) {
 
     // Handle modifed shortcuts
     if (ctrlOrMeta) {
+        if (d.shift && key === 'f') {
+            openQuickSearch('content');
+            return;
+        }
         if (key === 'tab') {
             openMostRecentTab();
         } else if (key === 'n') {
@@ -960,6 +966,9 @@ function handleGlobalKeydown(event) {
             event.preventDefault();
         }
     }
+    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+    }
     if (event.ctrlKey && event.key === 'Tab') {
         event.preventDefault();
     }
@@ -1000,12 +1009,50 @@ function switchToNextTab() {
     }
 }
 
-function openQuickSearch() {
+function openQuickSearch(mode = 'file') {
+    quickSearchMode = mode;
     quickSearchOverlay.classList.add('visible');
     quickSearchInput.value = '';
     quickSearchSelectedIndex = 0;
+    quickSearchInput.placeholder = mode === 'content' ? 'Search file contents...' : 'Search files...';
+    quickSearchHint.textContent = mode === 'content'
+        ? 'Type to search all file contents. Use arrow keys and Enter to open.'
+        : 'Type to search open files. Use arrow keys and Enter to open.';
     updateQuickSearchResults();
     quickSearchInput.focus();
+}
+
+function decodeSearchText(rawText) {
+    const normalized = rawText.replaceAll('+', ' ');
+    try {
+        return decodeURIComponent(normalized);
+    } catch {
+        return normalized;
+    }
+}
+
+function extractQueryFromUrl(rawText) {
+    const cleaned = rawText.trim();
+    if (!cleaned) {
+        return '';
+    }
+
+    try {
+        const parsed = new URL(cleaned);
+        const q = parsed.searchParams.get('q');
+        if (q !== null) {
+            return decodeSearchText(q).replace(/^search /, "");
+        }
+    } catch {
+        // Fallback for non-absolute or malformed URLs
+    }
+
+    const queryMatch = cleaned.match(/[?&]q=([^&]+)/);
+    if (queryMatch) {
+        return decodeSearchText(queryMatch[1]).replace(/^search /, "");
+    }
+
+    return decodeSearchText(cleaned).replace(/^search /, "");
 }
 
 function closeQuickSearch() {
@@ -1014,19 +1061,51 @@ function closeQuickSearch() {
 
 function updateQuickSearchResults() {
     const query = quickSearchInput.value.trim().toLowerCase();
-    const results = files
-        .map(file => ({
-            ...file,
-            searchLabel: file.name.split('/').pop()
-        }))
-        .filter(file => file.name.toLowerCase().includes(query) || file.searchLabel.toLowerCase().includes(query));
+    let results = [];
+
+    if (quickSearchMode === 'content') {
+        if (!query) {
+            quickSearchResults.innerHTML = '';
+            const empty = document.createElement('div');
+            empty.id = 'quick-search-empty';
+            empty.textContent = 'Start typing to search file contents.';
+            quickSearchResults.appendChild(empty);
+            return;
+        }
+
+        results = files.map(file => {
+            try {
+                const rawText = fs.readFileSync(file.path, 'utf8');
+                const queryText = extractQueryFromUrl(rawText);
+                const lowerQueryText = queryText.toLowerCase();
+                const index = lowerQueryText.indexOf(query);
+                if (index === -1) {
+                    return null;
+                }
+
+                const snippet = queryText.replace(/\s+/g, ' ');
+                return { ...file, snippet };
+            } catch {
+                return null;
+            }
+        }).filter(Boolean);
+    } else {
+        results = files
+            .map(file => ({
+                ...file,
+                searchLabel: file.name.split('/').pop()
+            }))
+            .filter(file => file.name.toLowerCase().includes(query) || file.searchLabel.toLowerCase().includes(query));
+    }
 
     quickSearchResults.innerHTML = '';
 
     if (results.length === 0) {
         const empty = document.createElement('div');
         empty.id = 'quick-search-empty';
-        empty.textContent = 'No matching files.';
+        empty.textContent = quickSearchMode === 'content'
+            ? 'No matching text found.'
+            : 'No matching files.';
         quickSearchResults.appendChild(empty);
         return;
     }
@@ -1034,8 +1113,18 @@ function updateQuickSearchResults() {
     results.forEach((file, index) => {
         const item = document.createElement('div');
         item.className = 'quick-search-item';
-        item.textContent = file.name;
         item.dataset.fileId = file.id;
+
+        const title = document.createElement('div');
+        title.textContent = file.name;
+        item.appendChild(title);
+
+        if (quickSearchMode === 'content' && file.snippet) {
+            const snippet = document.createElement('div');
+            snippet.className = 'quick-search-snippet';
+            snippet.textContent = file.snippet;
+            item.appendChild(snippet);
+        }
 
         if (index === quickSearchSelectedIndex) {
             item.classList.add('selected');
