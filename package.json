@@ -20,5 +20,8 @@
     "mac": {
       "icon": "build/icon.icns"
     }
+  },
+  "dependencies": {
+    "simple-git": "^3.36.0"
   }
 }

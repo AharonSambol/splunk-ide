@@ -1,9 +1,16 @@
 let fileCounter = 1;
-const SPLUNK_URL = 'http://localhost:8010/en-US/app/search/search';
+let splunk_url;
+try {
+    splunk_url = fs.readFileSync(String.raw`C:\Users\.splunk`, 'utf8');
+} catch {
+    splunk_url = 'http://localhost:8010/en-US/app/search/search';
+}
+const SPLUNK_URL = splunk_url;
 
 const fs = require('node:fs');
 const path = require('node:path');
 const { ipcRenderer } = require('electron');
+const { simpleGit } = require('simple-git');
 
 const newFileBtn = document.getElementById('new-file-btn');
 const newFolderBtn = document.getElementById('new-folder-btn');
@@ -24,6 +31,18 @@ const newFileFolderSelect = document.getElementById('new-file-folder-select');
 const newFileCreateBtn = document.getElementById('new-file-create');
 const newFileCancelBtn = document.getElementById('new-file-cancel');
 
+// Git elements
+const sidebarTabs = document.querySelectorAll('.sidebar-tab');
+const gitView = document.getElementById('git-view');
+const gitStatus = document.getElementById('git-status');
+const gitBranch = document.getElementById('git-branch');
+const gitMessage = document.getElementById('git-message');
+const gitCommitBtn = document.getElementById('git-commit');
+const gitPushBtn = document.getElementById('git-push');
+const gitPullBtn = document.getElementById('git-pull');
+const gitHistory = document.getElementById('git-history');
+const gitTabs = document.querySelectorAll('.git-tab-btn');
+
 let files = [];
 let folders = [];
 let activeFileId = null;
@@ -35,6 +54,9 @@ let shiftTimer = null;
 let quickSearchSelectedIndex = 0;
 let modalMode = 'create';
 let modalTargetFileId = null;
+let currentGit = null;
+let gitChanges = {};
+let gitCommits = [];
 
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
@@ -42,6 +64,21 @@ newFileBtn.addEventListener('click', openNewFileModal);
 newFolderBtn.addEventListener('click', openNewFolderModal);
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
+
+// Sidebar tabs
+sidebarTabs.forEach(tab => {
+    tab.addEventListener('click', () => switchSidebarView(tab.dataset.view));
+});
+
+// Git tabs (Changes/History)
+gitTabs.forEach(tab => {
+    tab.addEventListener('click', () => switchGitTab(tab.dataset.tab));
+});
+
+// Git buttons
+gitCommitBtn.addEventListener('click', commitChanges);
+gitPushBtn.addEventListener('click', pushChanges);
+gitPullBtn.addEventListener('click', pullChanges);
 newFileModalInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
         event.preventDefault();
@@ -347,7 +384,7 @@ async function createNewProject() {
         return;
     }
 
-    loadProject(result.filePaths[0]);
+    await loadProject(result.filePaths[0]);
 }
 
 async function openProject() {
@@ -361,13 +398,14 @@ async function openProject() {
         return;
     }
 
-    loadProject(result.filePaths[0]);
+    await loadProject(result.filePaths[0]);
 }
 
-function loadProject(projectPath) {
+async function loadProject(projectPath) {
     currentProjectPath = projectPath;
     currentProjectName = path.basename(projectPath);
     updateProjectDisplay();
+    await initializeGit();
 
     files = [];
     folders = [];
@@ -390,6 +428,9 @@ function loadProject(projectPath) {
 function scanProjectFiles(directory) {
     let results = [];
     fs.readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
+        if (dirent.name === '.git') {
+            return;
+        }
         const fullPath = path.join(directory, dirent.name);
         if (dirent.isDirectory()) {
             results = results.concat(scanProjectFiles(fullPath));
@@ -404,7 +445,7 @@ function scanProjectFolders(directory) {
     let results = [];
     fs.readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
         const fullPath = path.join(directory, dirent.name);
-        if (dirent.isDirectory()) {
+        if (dirent.isDirectory() && dirent.name !== '.git') {
             const relativePath = path.relative(currentProjectPath, fullPath).split(path.sep).join('/');
             results.push(relativePath);
             results = results.concat(scanProjectFolders(fullPath));
@@ -620,6 +661,13 @@ function createView(file) {
     view.addEventListener('ipc-message', (event) => {
         if (event.channel === 'webview-keydown') {
             handleKeyboardShortcut(event.args[0] || {});
+        } else if (event.channel === 'save-file') {
+            // Save file when Enter is pressed in search interface
+            saveFileUrl(file.id);
+            // Update git status
+            if (currentGit) {
+                refreshGitStatus();
+            }
         }
     });
 
@@ -1032,4 +1080,301 @@ function handleQuickSearchKeydown(event) {
 function activateFileFromQuickSearch(fileId) {
     closeQuickSearch();
     openFile(fileId);
+}
+// Git functions
+function switchSidebarView(view) {
+    // Update tabs
+    sidebarTabs.forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.view === view);
+    });
+
+    // Update views
+    const showExplorer = view === 'explorer';
+    document.getElementById('sidebar-header').style.display = showExplorer ? 'flex' : 'none';
+    explorer.classList.toggle('hidden', !showExplorer);
+    document.getElementById('explorer-footer').style.display = showExplorer ? 'block' : 'none';
+    gitView.classList.toggle('active', !showExplorer);
+
+    if (view === 'git') {
+        refreshGitStatus();
+    }
+}
+
+async function initializeGit() {
+    if (!currentProjectPath) {
+        return;
+    }
+
+    currentGit = simpleGit(currentProjectPath);
+    const isRepo = await currentGit.checkIsRepo();
+    if (!isRepo) {
+        await currentGit.init();
+    }
+}
+
+async function refreshGitStatus() {
+    if (!currentGit) {
+        gitStatus.innerHTML = '<div style="padding: 12px; color: #888;">No project loaded or not a git repo</div>';
+        return;
+    }
+
+    try {
+        // Get current branch
+        const branch = await currentGit.branch();
+        gitBranch.textContent = `Branch: ${branch.current}`;
+
+        // Get status
+        const status = await currentGit.status();
+        gitChanges = {};
+
+        // Collect changed files
+        status.not_added.forEach(file => {
+            gitChanges[file] = 'untracked';
+        });
+        status.modified.forEach(file => {
+            gitChanges[file] = 'modified';
+        });
+        status.created.forEach(file => {
+            gitChanges[file] = 'added';
+        });
+        status.deleted.forEach(file => {
+            gitChanges[file] = 'deleted';
+        });
+        status.staged.forEach(file => {
+            if (gitChanges[file]) {
+                gitChanges[file] = 'staged';
+            }
+        });
+
+        renderGitStatus();
+    } catch (err) {
+        gitStatus.innerHTML = `<div style="padding: 12px; color: #f48771;">Error: ${err.message}</div>`;
+    }
+}
+
+function renderGitStatus() {
+    gitStatus.innerHTML = '';
+
+    if (Object.keys(gitChanges).length === 0) {
+        const empty = document.createElement('div');
+        empty.style.padding = '12px';
+        empty.style.color = '#888';
+        empty.textContent = 'No changes';
+        gitStatus.appendChild(empty);
+        return;
+    }
+
+    Object.entries(gitChanges).forEach(([file, status]) => {
+        const item = document.createElement('div');
+        item.className = 'git-file-item';
+
+        const statusBadge = document.createElement('div');
+        statusBadge.className = `git-file-status ${status}`;
+        statusBadge.textContent = status.charAt(0).toUpperCase();
+
+        const fileName = document.createElement('div');
+        fileName.className = 'git-file-name';
+        fileName.textContent = file;
+        fileName.title = file;
+
+        const actions = document.createElement('div');
+        actions.className = 'git-actions';
+
+        const stageBtn = document.createElement('button');
+        stageBtn.className = 'git-button-small';
+        stageBtn.textContent = status === 'staged' ? 'Unstage' : 'Stage';
+        stageBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleStageFile(file, status === 'staged');
+        });
+
+        actions.appendChild(stageBtn);
+        item.appendChild(statusBadge);
+        item.appendChild(fileName);
+        item.appendChild(actions);
+        gitStatus.appendChild(item);
+    });
+}
+
+async function toggleStageFile(file, isStaged) {
+    if (!currentGit) {
+        return;
+    }
+
+    try {
+        if (isStaged) {
+            await currentGit.reset(['HEAD', file]);
+        } else {
+            await currentGit.add(file);
+        }
+        refreshGitStatus();
+    } catch (err) {
+        console.error('Stage/unstage error:', err);
+    }
+}
+
+async function commitChanges() {
+    if (!currentGit || !gitMessage.value.trim()) {
+        alert('Please enter a commit message');
+        return;
+    }
+
+    try {
+        await currentGit.commit(gitMessage.value);
+        gitMessage.value = '';
+        refreshGitStatus();
+        alert('Committed successfully');
+    } catch (err) {
+        alert(`Commit error: ${err.message}`);
+    }
+}
+
+async function pushChanges() {
+    if (!currentGit) {
+        alert('No git repository');
+        return;
+    }
+
+    try {
+        await currentGit.push();
+        alert('Pushed successfully');
+        refreshGitStatus();
+    } catch (err) {
+        alert(`Push error: ${err.message}`);
+    }
+}
+
+async function pullChanges() {
+    if (!currentGit) {
+        alert('No git repository');
+        return;
+    }
+
+    try {
+        await currentGit.pull();
+        alert('Pulled successfully');
+        refreshGitStatus();
+    } catch (err) {
+        alert(`Pull error: ${err.message}`);
+    }
+}
+
+function switchGitTab(tab) {
+    // Update tab buttons
+    gitTabs.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+
+    // Update tab content
+    document.querySelectorAll('.git-tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `git-${tab}-tab`);
+    });
+
+    if (tab === 'history') {
+        refreshGitHistory();
+    }
+}
+
+async function refreshGitHistory() {
+    if (!currentGit) {
+        gitHistory.innerHTML = '<div style="padding: 12px; color: #888;">No project loaded or not a git repo</div>';
+        return;
+    }
+
+    try {
+        // Get commit log
+        const log = await currentGit.log(['-20']);
+        gitCommits = log.all;
+        renderGitHistory();
+    } catch (err) {
+        gitHistory.innerHTML = `<div style="padding: 12px; color: #f48771;">Error: ${err.message}</div>`;
+    }
+}
+
+function renderGitHistory() {
+    gitHistory.innerHTML = '';
+
+    if (gitCommits.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.padding = '12px';
+        empty.style.color = '#888';
+        empty.textContent = 'No commits found';
+        gitHistory.appendChild(empty);
+        return;
+    }
+
+    gitCommits.forEach((commit, index) => {
+        const item = document.createElement('div');
+        item.className = 'git-commit-item';
+
+        const hash = document.createElement('div');
+        hash.className = 'git-commit-hash';
+        hash.textContent = commit.hash.substring(0, 7);
+
+        const message = document.createElement('div');
+        message.className = 'git-commit-message';
+        message.textContent = commit.message;
+
+        const meta = document.createElement('div');
+        meta.className = 'git-commit-meta';
+        const authorDate = new Date(commit.date).toLocaleString();
+        meta.textContent = `${commit.author_name} on ${authorDate}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'git-commit-actions';
+
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'git-commit-btn danger';
+        resetBtn.textContent = 'Reset to this commit';
+        resetBtn.addEventListener('click', () => {
+            if (confirm(`Reset to commit ${commit.hash.substring(0, 7)}: "${commit.message}"?\n\nThis will discard all changes after this commit.`)) {
+                resetToCommit(commit.hash);
+            }
+        });
+
+        actions.appendChild(resetBtn);
+        item.appendChild(hash);
+        item.appendChild(message);
+        item.appendChild(meta);
+        item.appendChild(actions);
+        gitHistory.appendChild(item);
+    });
+}
+
+async function resetToCommit(hash) {
+    if (!currentGit) {
+        alert('No git repository');
+        return;
+    }
+
+    const activeFilePath = files.find(f => f.id === activeFileId)?.path;
+
+    try {
+        await currentGit.reset(['--hard', hash]);
+        alert(`Reset to commit ${hash.substring(0, 7)} successfully`);
+        
+        // Reload files from disk after reset
+        files = [];
+        const filePaths = scanProjectFiles(currentProjectPath);
+        filePaths.forEach(filePath => {
+            const url = fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL;
+            const name = path.relative(currentProjectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
+            files.push({ id: `splunk-view-${Date.now()}-${Math.random()}`, name, path: filePath, url });
+        });
+
+        // Refresh UI and restore active file if available
+        clearOpenTabs();
+        updateExplorer();
+        refreshGitStatus();
+        refreshGitHistory();
+
+        if (activeFilePath) {
+            const reopened = files.find(f => f.path === activeFilePath);
+            if (reopened) {
+                openFile(reopened.id);
+            }
+        }
+    } catch (err) {
+        alert(`Reset error: ${err.message}`);
+    }
 }

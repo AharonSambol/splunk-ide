@@ -30,6 +30,34 @@
             flex-direction: column;
         }
 
+        #sidebar-tabs {
+            display: flex;
+            border-bottom: 1px solid #333;
+            background: #2d2d30;
+        }
+
+        .sidebar-tab {
+            flex: 1;
+            padding: 12px 16px;
+            background: transparent;
+            border: none;
+            color: #8a8a8a;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-bottom: 2px solid transparent;
+            transition: all 0.15s ease;
+        }
+
+        .sidebar-tab.active {
+            color: #ffffff;
+            border-bottom-color: #007acc;
+        }
+
+        .sidebar-tab:hover {
+            color: #cccccc;
+        }
+
         #sidebar-header {
             padding: 14px 16px;
             display: flex;
@@ -45,10 +73,278 @@
             margin: 0;
         }
 
+        #git-view {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #git-view.active {
+            display: flex;
+        }
+
+        #git-view-content {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: auto;
+        }
+
+        #git-status {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .git-file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            background: #2d2d2d;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            user-select: none;
+        }
+
+        .git-file-item:hover {
+            background: #3d3d3d;
+        }
+
+        .git-file-status {
+            min-width: 20px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+        }
+
+        .git-file-status.modified {
+            background: #ffa500;
+            color: #000;
+        }
+
+        .git-file-status.added {
+            background: #22863a;
+            color: #fff;
+        }
+
+        .git-file-status.untracked {
+            background: #6c757d;
+            color: #fff;
+        }
+
+        .git-file-status.deleted {
+            background: #cb2431;
+            color: #fff;
+        }
+
+        .git-file-status.staged {
+            background: #28a745;
+            color: #fff;
+        }
+
+        .git-file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .git-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .git-button-small {
+            padding: 4px 8px;
+            background: #0e639c;
+            border: none;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .git-button-small:hover {
+            background: #1177bb;
+        }
+
+        #git-controls {
+            padding: 12px;
+            border-top: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #git-message {
+            width: 100%;
+            padding: 8px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #cccccc;
+            font-family: monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            box-sizing: border-box;
+            min-height: 80px;
+        }
+
+        #git-message::placeholder {
+            color: #666;
+        }
+
+        #git-controls-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .git-button {
+            flex: 1;
+            padding: 10px;
+            background: #0e639c;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .git-button:hover {
+            background: #1177bb;
+        }
+
+        .git-button.secondary {
+            background: #2d2d2d;
+            color: #cccccc;
+        }
+
+        .git-button.secondary:hover {
+            background: #3d3d3d;
+        }
+
+        .git-branch {
+            padding: 8px 12px;
+            background: #2d2d2d;
+            border-radius: 4px;
+            color: #cccccc;
+            font-size: 0.85rem;
+        }
+
+        #git-tabs {
+            display: flex;
+            gap: 8px;
+            padding: 12px;
+            border-bottom: 1px solid #333;
+        }
+
+        .git-tab-btn {
+            padding: 6px 12px;
+            background: #2d2d2d;
+            border: none;
+            color: #8a8a8a;
+            cursor: pointer;
+            font-size: 0.85rem;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .git-tab-btn.active {
+            background: #0e639c;
+            color: white;
+        }
+
+        .git-tab-btn:hover {
+            background: #3d3d3d;
+        }
+
+        .git-tab-content {
+            display: none;
+            flex: 1;
+            overflow: hidden;
+            flex-direction: column;
+        }
+
+        .git-tab-content.active {
+            display: flex;
+        }
+
+        #git-history {
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .git-commit-item {
+            padding: 12px;
+            border-bottom: 1px solid #333;
+            background: #2d2d2d;
+            margin: 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .git-commit-hash {
+            font-family: monospace;
+            color: #7ec699;
+            font-size: 0.75rem;
+        }
+
+        .git-commit-message {
+            color: #cccccc;
+            margin: 4px 0;
+            font-weight: 600;
+        }
+
+        .git-commit-meta {
+            color: #888;
+            font-size: 0.8rem;
+            margin: 4px 0;
+        }
+
+        .git-commit-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .git-commit-btn {
+            padding: 4px 10px;
+            background: #0e639c;
+            border: none;
+            color: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .git-commit-btn:hover {
+            background: #1177bb;
+        }
+
+        .git-commit-btn.danger {
+            background: #cb2431;
+        }
+
+        .git-commit-btn.danger:hover {
+            background: #d9393c;
+        }
+
         #explorer {
             flex: 1;
             overflow: auto;
             padding: 10px 12px;
+        }
+
+        #explorer.hidden {
+            display: none;
         }
 
         #explorer-footer {
@@ -474,6 +770,12 @@
 <body>
     <div id="app-shell">
         <aside id="sidebar">
+            <div id="sidebar-tabs">
+                <button class="sidebar-tab active" data-view="explorer">Explorer</button>
+                <button class="sidebar-tab" data-view="git">Source Control</button>
+            </div>
+
+            <!-- Explorer View -->
             <div id="sidebar-header">
                 <span>File Explorer</span>
                 <span>
@@ -495,6 +797,31 @@
             </div>
             <div id="explorer"></div>
             <div id="explorer-footer">Press Shift twice to search files.</div>
+
+            <!-- Git View -->
+            <div id="git-view">
+                <div id="git-view-content">
+                    <div id="git-branch" class="git-branch"></div>
+                    <div id="git-tabs">
+                        <button class="git-tab-btn active" data-tab="changes">Changes</button>
+                        <button class="git-tab-btn" data-tab="history">History</button>
+                    </div>
+                    <div id="git-changes-tab" class="git-tab-content active">
+                        <div id="git-status"></div>
+                    </div>
+                    <div id="git-history-tab" class="git-tab-content">
+                        <div id="git-history"></div>
+                    </div>
+                </div>
+                <div id="git-controls">
+                    <textarea id="git-message" placeholder="Commit message..."></textarea>
+                    <div id="git-controls-buttons">
+                        <button id="git-commit" class="git-button">Commit</button>
+                        <button id="git-push" class="git-button">Push</button>
+                        <button id="git-pull" class="git-button secondary">Pull</button>
+                    </div>
+                </div>
+            </div>
         </aside>
 
         <div id="main-area">
