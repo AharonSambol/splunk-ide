@@ -1,7 +1,7 @@
 let fileCounter = 1;
 let splunk_url;
 try {
-    splunk_url = fs.readFileSync(String.raw`C:\Users\.splunk`, 'utf8');
+    splunk_url = fs.readFileSync(String.raw`%userprofile%\.splunk`, 'utf8');
 } catch {
     splunk_url = 'http://localhost:8010/en-US/app/search/search';
 }
