@@ -16,6 +16,7 @@ const newFileBtn = document.getElementById('new-file-btn');
 const newFolderBtn = document.getElementById('new-folder-btn');
 const newProjectBtn = document.getElementById('new-project-btn');
 const openProjectBtn = document.getElementById('open-project-btn');
+const copyUrlBtn = document.getElementById('copy-url-btn');
 const projectNameLabel = document.getElementById('project-name');
 const tabBar = document.getElementById('tab-bar');
 const viewsContainer = document.getElementById('views-container');
@@ -62,6 +63,7 @@ let gitCommits = [];
 
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
+copyUrlBtn.addEventListener('click', copyActiveFileUrl);
 newFileBtn.addEventListener('click', openNewFileModal);
 newFolderBtn.addEventListener('click', openNewFolderModal);
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
@@ -98,6 +100,74 @@ quickSearchInput.addEventListener('keydown', handleQuickSearchKeydown);
 window.onload = () => {
     updateProjectDisplay();
 };
+
+function copyActiveFileUrl() {
+    if (!activeFileId) {
+        alert('No file open');
+        return;
+    }
+
+    const file = files.find(f => f.id === activeFileId);
+    if (!file?.url) {
+        alert('No URL available');
+        return;
+    }
+
+    navigator.clipboard.writeText(file.url).then(() => {
+        copyUrlBtn.textContent = 'Copied!';
+        setTimeout(() => {
+            copyUrlBtn.textContent = 'Copy URL';
+        }, 2000);
+    }).catch(err => {
+        alert('Failed to copy: ' + err);
+    });
+}
+
+function duplicateCurrentTab() {
+    if (!activeFileId) {
+        alert('No file open to duplicate');
+        return;
+    }
+
+    const activeFile = files.find(f => f.id === activeFileId);
+    if (!activeFile) {
+        return;
+    }
+
+    const baseName = activeFile.name.split('/').pop();
+    const folder = getFileFolder(activeFile.name);
+    const newName = `${baseName} (2)`;
+    createFileWithUrl(newName, activeFile.url, folder);
+}
+
+function createFileWithUrl(name, url, parentFolder = '') {
+    if (!currentProjectPath) {
+        alert('Please create or open a project before creating files.');
+        return;
+    }
+
+    const normalizedFileName = name.replaceAll('\\', '/').trim();
+    const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
+    fileCounter++;
+
+    const relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
+    const filePath = getProjectFilePath(relativeFileName);
+    ensureDirectoryExists(path.dirname(filePath));
+    fs.writeFileSync(filePath, url, 'utf8');
+
+    const file = { id: fileId, name: relativeFileName, path: filePath, url };
+    files.push(file);
+    fileMru.unshift(fileId);
+
+    const fileParentFolder = getFileFolder(relativeFileName);
+    if (fileParentFolder) {
+        addFolderForPath(fileParentFolder);
+    }
+    createTab(file);
+    createView(file);
+    updateExplorer();
+    switchToFile(fileId);
+}
 
 function createNewFile(name, parentFolder = '') {
     if (!currentProjectPath) {
@@ -769,6 +839,10 @@ function handleKeyboardShortcut(d) {
             openQuickSearch('content');
             return;
         }
+        if (d.shift && key === 'n') {
+            duplicateCurrentTab();
+            return;
+        }
         if (key === 'tab') {
             openMostRecentTab();
         } else if (key === 'n') {
@@ -967,6 +1041,9 @@ function handleGlobalKeydown(event) {
         }
     }
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+    }
+    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault();
     }
     if (event.ctrlKey && event.key === 'Tab') {
