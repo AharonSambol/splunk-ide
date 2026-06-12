@@ -108,6 +108,9 @@ function copyActiveFileUrl() {
     }
 
     const file = files.find(f => f.id === activeFileId);
+    
+    saveFileUrl(file.id);
+    
     if (!file?.url) {
         alert('No URL available');
         return;
@@ -717,16 +720,19 @@ function createTab(file) {
 
 function createView(file) {
     const view = document.createElement('webview');
-    view.src = file.url || SPLUNK_URL;
     view.id = file.id;
     view.setAttribute('allowpopups', '');
+
     // use a preload script so we can capture keys inside the guest page
     try {
         const preloadPath = path.join(__dirname, 'webview-preload.js');
-        view.setAttribute('preload', preloadPath);
-    } catch (err) {
-        console.warn('Failed to set webview preload:', err);
+        // Preload must be an absolute file:// URL and set before src
+        view.setAttribute('preload', `file://${preloadPath}`);
+    } catch (err) { 
+        
     }
+    // set src after preload so the preload script is injected
+    view.src = file.url || SPLUNK_URL;
     viewsContainer.appendChild(view);
 
     // Listen for key events forwarded from the webview preload
@@ -742,7 +748,6 @@ function createView(file) {
             }
         }
     });
-
     const injectorCode = fs.readFileSync(path.join(__dirname, 'injector.js'), 'utf8');
     view.addEventListener('dom-ready', () => {
         view.executeJavaScript(injectorCode)

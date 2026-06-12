@@ -16,10 +16,53 @@ window.addEventListener('keydown', (e) => {
             const target = e.target;
             const isTextField = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable;
             if (isTextField) {
-                ipcRenderer.sendToHost('save-file');
+                // Wait for the page to update its URL (Splunk reacts to Enter) before telling the host to save.
+                // We'll listen for history/hash events and poll as a fallback with a timeout.
+                try {
+                    const prevHref = window.location.href;
+                    let sent = false;
+                    const sendSave = () => {
+                        if (sent) return;
+                        sent = true;
+                        try { 
+                            ipcRenderer.sendToHost('save-file'); 
+                        } catch (err) { /* ignore */ }
+                        window.removeEventListener('popstate', onLoc);
+                        window.removeEventListener('hashchange', onLoc);
+                        clearInterval(pollId);
+                    };
+
+                    const onLoc = () => {
+                        if (window.location.href !== prevHref) {
+                            sendSave();
+                        }
+                    };
+
+                    window.addEventListener('popstate', onLoc);
+                    window.addEventListener('hashchange', onLoc);
+
+                    const pollInterval = 50;
+                    const maxWait = 1000;
+                    let waited = 0;
+                    const pollId = setInterval(() => {
+                        if (window.location.href !== prevHref) {
+                            sendSave();
+                            return;
+                        }
+                        waited += pollInterval;
+                        if (waited >= maxWait) {
+                            // give up waiting and send save anyway
+                            sendSave();
+                        }
+                    }, pollInterval);
+                } catch (err) {
+                    // fallback: send immediately
+                    try { ipcRenderer.sendToHost('save-file'); } catch (e) { /* ignore */ }
+                }
             }
         }
     } catch (err) {
+        console.error('Error sending keydown event to host:', err);
         // ignore
     }
 }, true);
