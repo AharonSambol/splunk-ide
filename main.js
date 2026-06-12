@@ -114,7 +114,7 @@ function createWindow() {
         },
         icon: path.join(__dirname, "build", "icon.ico"),
     });
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
     mainWindow.maximize();
     mainWindow.removeMenu();
     mainWindow.loadFile('index.html');

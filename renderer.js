@@ -17,6 +17,8 @@ const newFolderBtn = document.getElementById('new-folder-btn');
 const newProjectBtn = document.getElementById('new-project-btn');
 const openProjectBtn = document.getElementById('open-project-btn');
 const copyUrlBtn = document.getElementById('copy-url-btn');
+const prevPageBtn = document.getElementById('prev-page-btn');
+const nextPageBtn = document.getElementById('next-page-btn');
 const projectNameLabel = document.getElementById('project-name');
 const tabBar = document.getElementById('tab-bar');
 const viewsContainer = document.getElementById('views-container');
@@ -768,6 +770,31 @@ function createView(file) {
             }
         }
     });
+    // Update navigation button state on navigation events
+    const updateNavState = () => {
+        try {
+            const active = document.querySelector('webview.active');
+            if (!active) {
+                prevPageBtn.disabled = true;
+                nextPageBtn.disabled = true;
+                return;
+            }
+            try {
+                prevPageBtn.disabled = !(typeof active.canGoBack === 'function' ? active.canGoBack() : false);
+            } catch (e) { prevPageBtn.disabled = true; }
+            try {
+                nextPageBtn.disabled = !(typeof active.canGoForward === 'function' ? active.canGoForward() : false);
+            } catch (e) { nextPageBtn.disabled = true; }
+        } catch (e) {
+            prevPageBtn.disabled = true;
+            nextPageBtn.disabled = true;
+        }
+    };
+
+    view.addEventListener('did-navigate', updateNavState);
+    view.addEventListener('did-navigate-in-page', updateNavState);
+    view.addEventListener('did-stop-loading', updateNavState);
+    view.addEventListener('dom-ready', updateNavState);
     const injectorCode = fs.readFileSync(path.join(__dirname, 'injector.js'), 'utf8');
     view.addEventListener('dom-ready', () => {
         view.executeJavaScript(injectorCode)
@@ -778,7 +805,66 @@ function createView(file) {
                 console.error('Failed to inject injector.js into webview', file.id, err);
             });
     });
+
+    // Ensure nav state is updated when this view becomes active
+    view.addEventListener('focus', () => {
+        try { updateNavState(); } catch (e) {}
+    });
 }
+
+// Navigation controls
+function navigateBack() {
+    const view = document.querySelector('webview.active');
+    if (!view) return;
+    try {
+        if (typeof view.canGoBack === 'function') {
+            if (view.canGoBack()) return view.goBack();
+        }
+        // fallback: execute history.back in webview
+        view.executeJavaScript('history.back()').catch(() => {});
+    } catch (e) {
+        // ignore
+    }
+}
+
+function navigateForward() {
+    const view = document.querySelector('webview.active');
+    if (!view) return;
+    try {
+        if (typeof view.canGoForward === 'function') {
+            if (view.canGoForward()) return view.goForward();
+        }
+        view.executeJavaScript('history.forward()').catch(() => {});
+    } catch (e) {
+        // ignore
+    }
+}
+
+prevPageBtn.addEventListener('click', navigateBack);
+nextPageBtn.addEventListener('click', navigateForward);
+
+function updateNavButtons() {
+    try {
+        const view = document.querySelector('webview.active');
+        if (!view) {
+            prevPageBtn.disabled = true;
+            nextPageBtn.disabled = true;
+            return;
+        }
+        try { prevPageBtn.disabled = !(typeof view.canGoBack === 'function' ? view.canGoBack() : false); } catch (e) { prevPageBtn.disabled = true; }
+        try { nextPageBtn.disabled = !(typeof view.canGoForward === 'function' ? view.canGoForward() : false); } catch (e) { nextPageBtn.disabled = true; }
+    } catch (e) {
+        prevPageBtn.disabled = true;
+        nextPageBtn.disabled = true;
+    }
+}
+
+// Update nav buttons whenever active tab changes
+const originalSwitchToFile = switchToFile;
+switchToFile = function(targetId) {
+    originalSwitchToFile(targetId);
+    try { setTimeout(updateNavButtons, 50); } catch (e) {}
+};
 
 function reorderTabs(draggedFileId, targetFileId, dropEvent) {
     const draggedTab = tabBar.querySelector(`.tab[data-target-id="${draggedFileId}"]`);
