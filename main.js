@@ -1,8 +1,75 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard } = require('electron');
 const path = require('node:path');
 
 ipcMain.handle('select-project-folder', async (event, options) => {
     return dialog.showOpenDialog(options);
+});
+
+ipcMain.handle('show-context-menu', async (event, info) => {
+    const template = [];
+    if (info.selection && info.selection.length > 0) {
+        template.push({
+            label: 'Copy',
+            click: () => {
+                try { 
+                    
+                    console.log('Copying to clipboard:', info.selection, info.selection.length);
+                    clipboard.writeText(info.selection);
+                } catch (err) {
+                    console.error('Copy error', err);
+                }
+            }
+        });
+    }
+
+    // Paste option (only if clipboard has text)
+    try {
+        const clipText = clipboard.readText();
+        if (clipText && clipText.length > 0) {
+            template.push({
+                label: 'Paste',
+                click: () => {
+                    try {
+                        if (info && info.webContentsId) {
+                            const wc = require('electron').webContents.fromId(info.webContentsId);
+                            if (wc && typeof wc.paste === 'function') {
+                                wc.paste();
+                                return;
+                            }
+                        }
+                        // Fallback: ask renderer to paste provided text into active webview
+                        event.sender.send('context-menu-command', { command: 'paste', text: clipText });
+                    } catch (err) {
+                        console.error('Paste error', err);
+                    }
+                }
+            });
+        }
+    } catch (err) {
+        // ignore clipboard read errors
+    }
+
+    template.push({
+        label: 'Select All',
+        click: () => {
+            try {
+                if (info && info.webContentsId) {
+                    const wc = require('electron').webContents.fromId(info.webContentsId);
+                    if (wc && typeof wc.selectAll === 'function') {
+                        wc.selectAll();
+                        return;
+                    }
+                }
+                event.sender.send('context-menu-command', { command: 'selectAll' });
+            } catch (err) {
+                console.error('Select All error', err);
+            }
+        }
+    });
+    
+    const menu = Menu.buildFromTemplate(template);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    menu.popup({ window: win });
 });
 
 function createWindow() {
@@ -16,6 +83,7 @@ function createWindow() {
         },
         icon: path.join(__dirname, "build", "icon.ico"),
     });
+    // mainWindow.webContents.openDevTools();
     mainWindow.maximize();
     mainWindow.removeMenu();
     mainWindow.loadFile('index.html');

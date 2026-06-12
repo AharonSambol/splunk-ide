@@ -73,3 +73,13 @@ window.addEventListener('beforeinput', (e) => {
         ipcRenderer.sendToHost('webview-beforeinput', { inputType: e.inputType });
     } catch (err) {}
 }, true);
+
+// Forward contextmenu events (right-click) to the host so the native menu can be shown.
+window.addEventListener('contextmenu', async (e) => {
+    try {
+        let selection = window.getSelection().toString();
+        ipcRenderer.sendToHost('webview-contextmenu', { x: e.clientX, y: e.clientY, selection });
+    } catch (err) {
+        // ignore
+    }
+}, true);

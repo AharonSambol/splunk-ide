@@ -3,18 +3,11 @@
         document.addEventListener('keyup', function (event) {
             if (event.ctrlKey && event.key === '/') {
                 event.preventDefault();
-
                 try {
-
-
-
-
                     const el = document.querySelector('.ace_editor');
-                    console.log("1");
                     if (!el || !el.env || !el.env.editor) {
                         return;
                     }
-                    console.log("2");
 
                     const editor = el.env.editor;
 

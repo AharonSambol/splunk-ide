@@ -736,7 +736,7 @@ function createView(file) {
     viewsContainer.appendChild(view);
 
     // Listen for key events forwarded from the webview preload
-    view.addEventListener('ipc-message', (event) => {
+    view.addEventListener('ipc-message', async (event) => {
         if (event.channel === 'webview-keydown') {
             handleKeyboardShortcut(event.args[0] || {});
         } else if (event.channel === 'save-file') {
@@ -745,6 +745,26 @@ function createView(file) {
             // Update git status
             if (currentGit) {
                 refreshGitStatus();
+            }
+        } else if (event.channel === 'webview-contextmenu') {
+            // Forward to main process to show native menu
+            try {
+                const info = event.args[0] || {};
+                // include webContentsId so main can target the webview's webContents
+                try { info.webContentsId = view.getWebContentsId(); } catch (e) {}
+                // try and get the selection from the .ace_editor
+                let selection = await view.executeJavaScript(`
+                (() => {
+                    const el = document.querySelector('.ace_editor');
+                    return el?.env?.editor?.getSelectedText() ?? '';
+                })()
+                `);
+                if(selection) {
+                    info.selection = selection;
+                }
+                ipcRenderer.invoke('show-context-menu', info);
+            } catch (err) {
+                console.error('Failed to invoke show-context-menu', err);
             }
         }
     });
@@ -1549,3 +1569,36 @@ async function resetToCommit(hash) {
         alert(`Reset error: ${err.message}`);
     }
 }
+
+// Handle commands from main process context menu (Select All, etc.)
+ipcRenderer.on('context-menu-command', (event, arg) => {
+    try {
+        const cmd = arg && arg.command;
+        const view = document.querySelector('webview.active');
+        if (!view) return;
+
+        if (cmd === 'selectAll') {
+            try {
+                view.executeJavaScript('document.execCommand("selectAll");').catch(() => {});
+            } catch (err) {
+                // ignore
+            }
+        }
+        if (cmd === 'paste') {
+            const text = arg && arg.text ? arg.text : '';
+            if (!text) return;
+            try {
+                // Insert text at the current selection/caret inside the webview
+                const safeText = JSON.stringify(text);
+                const js = `(function(){ try{ if(window.getSelection && window.getSelection().rangeCount>0){ const sel=window.getSelection(); const range=sel.getRangeAt(0); range.deleteContents(); const node=document.createTextNode(${safeText}); range.insertNode(node); // move caret after inserted node
+                    range.setStartAfter(node); range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
+                } else { document.execCommand('insertText', false, ${safeText}); } } catch(e){} })();`;
+                view.executeJavaScript(js).catch(() => {});
+            } catch (err) {
+                // ignore
+            }
+        }
+    } catch (err) {
+        console.error('context-menu-command handler error', err);
+    }
+});
