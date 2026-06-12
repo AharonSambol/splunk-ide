@@ -72,6 +72,37 @@ ipcMain.handle('show-context-menu', async (event, info) => {
     menu.popup({ window: win });
 });
 
+// Find in page for webview (renderer will pass webContentsId)
+ipcMain.handle('find-in-page', (event, args) => {
+    try {
+        const { webContentsId, text, options } = args || {};
+        const targetId = webContentsId || event.sender.id;
+        const wc = require('electron').webContents.fromId(targetId);
+        if (wc) {
+            wc.findInPage(text || '', options || {});
+            return { ok: true };
+        }
+    } catch (err) {
+        console.error('find-in-page error', err);
+    }
+    return { ok: false };
+});
+
+ipcMain.handle('stop-find-in-page', (event, args) => {
+    try {
+        const { webContentsId, action } = args || {};
+        const targetId = webContentsId || event.sender.id;
+        const wc = require('electron').webContents.fromId(targetId);
+        if (wc) {
+            wc.stopFindInPage(action || 'clearSelection');
+            return { ok: true };
+        }
+    } catch (err) {
+        console.error('stop-find-in-page error', err);
+    }
+    return { ok: false };
+});
+
 function createWindow() {
     const mainWindow = new BrowserWindow({
         width: 1200,
@@ -83,7 +114,7 @@ function createWindow() {
         },
         icon: path.join(__dirname, "build", "icon.ico"),
     });
-    // mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools();
     mainWindow.maximize();
     mainWindow.removeMenu();
     mainWindow.loadFile('index.html');
