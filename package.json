@@ -26,13 +26,20 @@
   "build": {
     "win": {
       "icon": "build/icon.ico"
-    },
-    "mac": {
-      "icon": "build/icon.icns"
     }
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
     "simple-git": "^3.36.0"
-  }
+  },
+  "makers": [
+    {
+      "name": "@electron-forge/maker-squirrel",
+      "config": {
+        "name": "splunk-ide",
+        "icon": "build/icon.ico",
+        "setupIcon": "build/icon.ico"
+      }
+    }
+  ]
 }
