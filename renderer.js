@@ -11,6 +11,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ipcRenderer } = require('electron');
 const { simpleGit } = require('simple-git');
+const { attachWebviewSelectionDragHandlers } = require('./lib/webview-selection-drag-handlers');
+const { attachParentSelectionCleanup } = require('./lib/parent-selection-cleanup');
+
+attachParentSelectionCleanup(document);
 
 const newFileBtn = document.getElementById('new-file-btn');
 const newFolderBtn = document.getElementById('new-folder-btn');
@@ -795,7 +799,10 @@ function createView(file) {
     view.addEventListener('did-navigate-in-page', updateNavState);
     view.addEventListener('did-stop-loading', updateNavState);
     view.addEventListener('dom-ready', updateNavState);
-    const injectorCode = fs.readFileSync(path.join(__dirname, 'injector.js'), 'utf8');
+    const injectorCode = [
+        fs.readFileSync(path.join(__dirname, 'injector.js'), 'utf8'),
+        fs.readFileSync(path.join(__dirname, 'injector-selection-cleanup.js'), 'utf8'),
+    ].join('\n');
     view.addEventListener('dom-ready', () => {
         view.executeJavaScript(injectorCode)
             .then(() => {
@@ -810,6 +817,8 @@ function createView(file) {
     view.addEventListener('focus', () => {
         try { updateNavState(); } catch (e) {}
     });
+
+    view.__endSelectionDrag = attachWebviewSelectionDragHandlers(view);
 }
 
 // Navigation controls
@@ -895,6 +904,8 @@ function switchToFile(targetId) {
     }
 
     if (activeFileId && activeFileId !== targetId) {
+        const outgoingView = document.getElementById(activeFileId);
+        try { outgoingView?.__endSelectionDrag?.(); } catch (e) {}
         saveFileUrl(activeFileId);
     }
 

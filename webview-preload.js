@@ -1,8 +1,40 @@
+const path = require('node:path');
 const { ipcRenderer } = require('electron');
+const {
+    deselectAceOnPointerExit,
+    endAceSelectionDrag,
+} = require(path.join(__dirname, 'lib', 'end-ace-selection-drag.js'));
+
+window.__splunkIdeDeselectAceOnPointerExit = deselectAceOnPointerExit;
+window.__splunkIdeEndSelectionDrag = endAceSelectionDrag;
+window.__splunkIdePointerExited = false;
+
+function markPointerExited() {
+    window.__splunkIdePointerExited = true;
+    deselectAceOnPointerExit();
+}
+
+function markPointerEntered() {
+    window.__splunkIdePointerExited = false;
+}
+
+for (const eventType of ['mouseup', 'pointerup']) {
+    window.addEventListener(eventType, () => {
+        window.__splunkIdePointerExited = false;
+        endAceSelectionDrag();
+    }, true);
+}
+
+window.addEventListener('blur', markPointerExited, true);
+document.addEventListener('mouseleave', markPointerExited, true);
+document.addEventListener('pointerleave', markPointerExited, true);
+document.addEventListener('mouseenter', markPointerEntered, true);
+document.addEventListener('pointerenter', markPointerEntered, true);
 
 // Capture keydown at the capture phase to observe events before page handlers.
 window.addEventListener('keydown', (e) => {
     try {
+        endAceSelectionDrag();
         ipcRenderer.sendToHost('webview-keydown', {
             key: e.key,
             code: e.code,
