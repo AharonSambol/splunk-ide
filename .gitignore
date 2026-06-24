@@ -138,7 +138,10 @@ dist
 !.yarn/sdks
 !.yarn/versions
 
-# Vite files
+# Playwright smoke test artifacts
+test-results/
+playwright-report/
+
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/

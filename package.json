@@ -5,6 +5,7 @@
   "scripts": {
     "start": "electron-forge start",
     "test": "node --test test/*.test.js test/integration/*.test.js",
+    "test:smoke": "playwright test",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
@@ -21,6 +22,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
     "@electron-forge/plugin-fuses": "^7.11.2",
     "@electron/fuses": "^1.8.0",
+    "@playwright/test": "^1.61.1",
     "electron": "^41.7.1",
     "jsdom": "^29.1.1"
   },
