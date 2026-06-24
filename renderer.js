@@ -11,6 +11,23 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ipcRenderer } = require('electron');
 const { simpleGit } = require('simple-git');
+const { buildFileTree } = require('./lib/file-tree');
+const {
+    normalizeRelativePath,
+    getProjectFilePath: buildProjectFilePath,
+    ensureDirectoryExists: ensureProjectDirectoryExists,
+    scanProjectFiles: scanProjectFilesOnDisk,
+    scanProjectFolders: scanProjectFoldersOnDisk,
+    getMoveTargetPath,
+} = require('./lib/project-files');
+const {
+    closeFileState,
+    reorderTabs: computeTabOrder,
+    getPreviousTab,
+    getNextTab,
+    createDuplicateFileName,
+} = require('./lib/tabs');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder } = require('./lib/url-utils');
 
 const newFileBtn = document.getElementById('new-file-btn');
 const newFolderBtn = document.getElementById('new-folder-btn');
@@ -141,7 +158,7 @@ function duplicateCurrentTab() {
 
     const baseName = activeFile.name.split('/').pop();
     const folder = getFileFolder(activeFile.name);
-    const newName = `${baseName} (2)`;
+    const newName = createDuplicateFileName(files, baseName);
     createFileWithUrl(newName, activeFile.url, folder);
 }
 
@@ -151,7 +168,7 @@ function createFileWithUrl(name, url, parentFolder = '') {
         return;
     }
 
-    const normalizedFileName = name.replaceAll('\\', '/').trim();
+    const normalizedFileName = normalizeRelativePath(name);
     const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
     fileCounter++;
 
@@ -182,7 +199,7 @@ function createNewFile(name, parentFolder = '') {
 
     const defaultName = `Search ${fileCounter}`;
     const fileName = name ? name.trim() || defaultName : defaultName;
-    const normalizedFileName = fileName.replaceAll('\\', '/').trim();
+    const normalizedFileName = normalizeRelativePath(fileName);
     const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
     fileCounter++;
 
@@ -216,7 +233,7 @@ function createNewFolder(name, parentFolder = '') {
         return;
     }
 
-    const normalizedFolder = folderNameRaw.replaceAll('\\', '/').trim();
+    const normalizedFolder = normalizeRelativePath(folderNameRaw);
     const relativeFolder = parentFolder ? `${parentFolder}/${normalizedFolder}` : normalizedFolder;
     const folderPath = path.join(currentProjectPath, ...relativeFolder.split('/'));
     ensureDirectoryExists(folderPath);
@@ -236,6 +253,10 @@ function addFolderForPath(folderPath) {
     });
 }
 
+function getOpenTabIds() {
+    return Array.from(tabBar.querySelectorAll('.tab')).map(tab => tab.dataset.targetId);
+}
+
 function closeTab(fileId) {
     const file = files.find(f => f.id === fileId);
     if (!file) {
@@ -243,6 +264,9 @@ function closeTab(fileId) {
     }
 
     saveFileUrl(fileId);
+
+    const openTabsBeforeClose = getOpenTabIds();
+    const wasActive = activeFileId === fileId;
 
     const tab = tabBar.querySelector(`.tab[data-target-id="${fileId}"]`);
     if (tab) {
@@ -254,12 +278,12 @@ function closeTab(fileId) {
         view.remove();
     }
 
-    fileMru = fileMru.filter(id => id !== fileId);
+    const tabState = closeFileState(files, openTabsBeforeClose, activeFileId, fileId, fileMru);
+    fileMru = tabState.fileMru;
 
-    if (activeFileId === fileId) {
-        const remainingTabs = Array.from(tabBar.querySelectorAll('.tab'));
-        if (remainingTabs.length > 0) {
-            switchToFile(remainingTabs[0].dataset.targetId);
+    if (wasActive) {
+        if (tabState.activeFileId) {
+            switchToFile(tabState.activeFileId);
         } else {
             activeFileId = null;
             document.querySelectorAll('webview').forEach(view => view.classList.remove('active'));
@@ -357,19 +381,19 @@ function openFile(fileId) {
 }
 
 function getProjectFilePath(fileName) {
-    const normalizedRelative = path.normalize(fileName).split(path.sep).filter(segment => segment && segment !== '..').map(segment => segment.replace(/[<>:"|?*]/g, '_')).join(path.sep);
-    let filePath = path.join(currentProjectPath, normalizedRelative);
-    if (!path.extname(filePath)) {
-        filePath += '.spl';
-    }
-    return filePath;
+    return buildProjectFilePath(currentProjectPath, fileName, path);
 }
 
 function ensureDirectoryExists(directoryPath) {
-    if (!fs.existsSync(directoryPath)) {
-        ensureDirectoryExists(path.dirname(directoryPath));
-        fs.mkdirSync(directoryPath);
-    }
+    ensureProjectDirectoryExists(fs, directoryPath, path);
+}
+
+function scanProjectFiles(directory) {
+    return scanProjectFilesOnDisk(fs, path, directory);
+}
+
+function scanProjectFolders(directory) {
+    return scanProjectFoldersOnDisk(fs, path, directory, currentProjectPath);
 }
 
 function saveFileUrl(fileId) {
@@ -421,20 +445,13 @@ function openMoveFileModal(file) {
     showNewFileModal();
 }
 
-function getFileFolder(fileName) {
-    const lastSlash = fileName.lastIndexOf('/');
-    return lastSlash === -1 ? '' : fileName.slice(0, lastSlash);
-}
-
 function moveFile(fileId, targetFolder) {
     const file = files.find(f => f.id === fileId);
     if (!file) {
         return;
     }
 
-    const fileName = file.name.split('/').pop();
-    const newRelativeName = targetFolder ? `${targetFolder}/${fileName}` : fileName;
-    const newPath = getProjectFilePath(newRelativeName);
+    const newPath = getMoveTargetPath(currentProjectPath, file.name, targetFolder, path);
     const oldPath = file.path;
 
     if (newPath === oldPath) {
@@ -443,9 +460,9 @@ function moveFile(fileId, targetFolder) {
 
     ensureDirectoryExists(path.dirname(newPath));
     fs.renameSync(oldPath, newPath);
-    file.name = newRelativeName;
+    file.name = path.relative(currentProjectPath, newPath).replace(/\.spl$/i, '').split(path.sep).join('/');
     file.path = newPath;
-    const movedParent = getFileFolder(newRelativeName);
+    const movedParent = getFileFolder(file.name);
     if (movedParent) addFolderForPath(movedParent);
     updateExplorer();
 }
@@ -492,7 +509,7 @@ async function loadProject(projectPath) {
 
     folders = scanProjectFolders(projectPath);
 
-    const filePaths = scanProjectFiles(projectPath);
+    const filePaths = scanProjectFiles(currentProjectPath);
     filePaths.forEach(filePath => {
         const url = fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL;
         const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
@@ -500,35 +517,6 @@ async function loadProject(projectPath) {
     });
 
     updateExplorer();
-}
-
-function scanProjectFiles(directory) {
-    let results = [];
-    fs.readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
-        if (dirent.name === '.git') {
-            return;
-        }
-        const fullPath = path.join(directory, dirent.name);
-        if (dirent.isDirectory()) {
-            results = results.concat(scanProjectFiles(fullPath));
-        } else if (dirent.isFile() && path.extname(dirent.name).toLowerCase() === '.spl') {
-            results.push(fullPath);
-        }
-    });
-    return results;
-}
-
-function scanProjectFolders(directory) {
-    let results = [];
-    fs.readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
-        const fullPath = path.join(directory, dirent.name);
-        if (dirent.isDirectory() && dirent.name !== '.git') {
-            const relativePath = path.relative(currentProjectPath, fullPath).split(path.sep).join('/');
-            results.push(relativePath);
-            results = results.concat(scanProjectFolders(fullPath));
-        }
-    });
-    return results;
 }
 
 function clearOpenTabs() {
@@ -866,27 +854,26 @@ switchToFile = function(targetId) {
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
 };
 
-function reorderTabs(draggedFileId, targetFileId, dropEvent) {
-    const draggedTab = tabBar.querySelector(`.tab[data-target-id="${draggedFileId}"]`);
-    const targetTab = tabBar.querySelector(`.tab[data-target-id="${targetFileId}"]`);
+function applyTabOrder(tabIds) {
+    tabIds.forEach(tabId => {
+        const tab = tabBar.querySelector(`.tab[data-target-id="${tabId}"]`);
+        if (tab) {
+            tabBar.appendChild(tab);
+        }
+    });
+}
 
-    if (!draggedTab || !targetTab) {
+function reorderTabs(draggedFileId, targetFileId, dropEvent) {
+    const targetTab = tabBar.querySelector(`.tab[data-target-id="${targetFileId}"]`);
+    if (!targetTab || !tabBar.querySelector(`.tab[data-target-id="${draggedFileId}"]`)) {
         return;
     }
 
-    // Determine if we should insert before or after the target
     const rect = targetTab.getBoundingClientRect();
     const midpoint = rect.left + rect.width / 2;
-    const clientX = dropEvent.clientX;
-
-    // Simple reorder: insert before or after based on cursor position
-    if (clientX < midpoint) {
-        // Insert before target
-        targetTab.parentNode.insertBefore(draggedTab, targetTab);
-    } else {
-        // Insert after target
-        targetTab.parentNode.insertBefore(draggedTab, targetTab.nextSibling);
-    }
+    const position = dropEvent.clientX < midpoint ? 'before' : 'after';
+    const newOrder = computeTabOrder(getOpenTabIds(), draggedFileId, targetFileId, position);
+    applyTabOrder(newOrder);
 }
 
 function switchToFile(targetId) {
@@ -1039,58 +1026,6 @@ function updateExplorer() {
     });
 }
 
-function buildFileTree(fileList, folderList) {
-    const root = { children: [], files: [] };
-    const map = new Map();
-
-    function ensureFolderNode(pathSegments) {
-        let current = root;
-        let accumulatedPath = '';
-
-        for (let segment of pathSegments) {
-            accumulatedPath = accumulatedPath ? `${accumulatedPath}/${segment}` : segment;
-            let folder = map.get(accumulatedPath);
-            if (!folder) {
-                folder = { name: segment, path: accumulatedPath, children: [], files: [] };
-                map.set(accumulatedPath, folder);
-                if (current === root) {
-                    root.children.push(folder);
-                } else {
-                    current.children.push(folder);
-                }
-            }
-            current = folder;
-        }
-
-        return current;
-    }
-
-    folderList.forEach(folderPath => {
-        const segments = folderPath.split('/').map(segment => segment.trim()).filter(Boolean);
-        if (segments.length > 0) {
-            ensureFolderNode(segments);
-        }
-    });
-
-    fileList.forEach(file => {
-        const segments = file.name.split('/').map(segment => segment.trim()).filter(Boolean);
-        if (segments.length === 0) {
-            root.files.push({ ...file, displayName: file.name });
-            return;
-        }
-
-        if (segments.length === 1) {
-            root.files.push({ ...file, displayName: segments[0] });
-            return;
-        }
-
-        const parentFolder = ensureFolderNode(segments.slice(0, -1));
-        parentFolder.files.push({ ...file, displayName: segments[segments.length - 1] });
-    });
-
-    return root;
-}
-
 function renderFolderNode(folder) {
     const details = document.createElement('details');
     details.className = 'folder';
@@ -1220,21 +1155,15 @@ function openMostRecentTab() {
 }
 
 function switchToPreviousTab() {
-    const tabs = Array.from(tabBar.querySelectorAll('.tab'));
-    const activeIndex = tabs.findIndex(tab => tab.dataset.targetId === activeFileId);
-
-    if (activeIndex > 0) {
-        const previousTabId = tabs[activeIndex - 1].dataset.targetId;
+    const previousTabId = getPreviousTab(getOpenTabIds(), activeFileId);
+    if (previousTabId) {
         switchToFile(previousTabId);
     }
 }
 
 function switchToNextTab() {
-    const tabs = Array.from(tabBar.querySelectorAll('.tab'));
-    const activeIndex = tabs.findIndex(tab => tab.dataset.targetId === activeFileId);
-
-    if (activeIndex < tabs.length - 1) {
-        const nextTabId = tabs[activeIndex + 1].dataset.targetId;
+    const nextTabId = getNextTab(getOpenTabIds(), activeFileId);
+    if (nextTabId) {
         switchToFile(nextTabId);
     }
 }
@@ -1380,39 +1309,6 @@ function doFind(text, forward = true, findNext = false) {
     } catch (err) {
         // ignore
     }
-}
-
-function decodeSearchText(rawText) {
-    const normalized = rawText.replaceAll('+', ' ');
-    try {
-        return decodeURIComponent(normalized);
-    } catch {
-        return normalized;
-    }
-}
-
-function extractQueryFromUrl(rawText) {
-    const cleaned = rawText.trim();
-    if (!cleaned) {
-        return '';
-    }
-
-    try {
-        const parsed = new URL(cleaned);
-        const q = parsed.searchParams.get('q');
-        if (q !== null) {
-            return decodeSearchText(q).replace(/^search /, "");
-        }
-    } catch {
-        // Fallback for non-absolute or malformed URLs
-    }
-
-    const queryMatch = cleaned.match(/[?&]q=([^&]+)/);
-    if (queryMatch) {
-        return decodeSearchText(queryMatch[1]).replace(/^search /, "");
-    }
-
-    return decodeSearchText(cleaned).replace(/^search /, "");
 }
 
 function closeQuickSearch() {
