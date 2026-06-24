@@ -43,6 +43,9 @@ const {
     formatResetConfirmMessage,
     isGitChangesEmpty,
 } = require('./lib/git-view-model');
+const { renderExplorer } = require('./lib/render-explorer');
+const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
+const { renderQuickSearchResults } = require('./lib/render-quick-search');
 
 const newFileBtn = document.getElementById('new-file-btn');
 const newFolderBtn = document.getElementById('new-folder-btn');
@@ -649,37 +652,14 @@ function renameFile(fileId, newName) {
 }
 
 function updateTabLabel(file) {
-    const tab = tabBar.querySelector(`.tab[data-target-id="${file.id}"]`);
-    if (tab) {
-        const title = tab.querySelector('.tab-title');
-        if (title) {
-            title.textContent = file.name.split('/').pop();
-        }
-    }
+    updateTabTitle(tabBar, file.id, file.name);
 }
 
 function createTab(file) {
-    const tab = document.createElement('div');
-    tab.className = 'tab';
-    tab.dataset.targetId = file.id;
-    tab.draggable = true;
-
-    const title = document.createElement('span');
-    title.className = 'tab-title';
-    title.textContent = file.name.split('/').pop();
-
-    const closeButton = document.createElement('button');
-    closeButton.className = 'tab-close';
-    closeButton.type = 'button';
-    closeButton.innerText = '×';
-    closeButton.addEventListener('click', event => {
-        event.stopPropagation();
-        closeTab(file.id);
+    const tab = createTabElement(document, file, activeFileId, {
+        onClose: closeTab,
+        onSwitch: switchToFile,
     });
-
-    tab.appendChild(title);
-    tab.appendChild(closeButton);
-    tab.addEventListener('click', () => switchToFile(file.id));
 
     // Drag and drop handlers
     tab.addEventListener('dragstart', (e) => {
@@ -904,9 +884,7 @@ function switchToFile(targetId) {
     fileMru = fileMru.filter(id => id !== targetId);
     fileMru.unshift(targetId);
 
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.targetId === targetId);
-    });
+    setActiveTab(tabBar, targetId);
 
     document.querySelectorAll('webview').forEach(view => {
         view.classList.toggle('active', view.id === targetId);
@@ -1016,113 +994,17 @@ function handleKeyboardShortcut(d) {
 }
 
 function updateExplorer() {
-    explorer.innerHTML = '';
-
-    if (files.length === 0 && folders.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'explorer-item';
-        empty.textContent = 'No files yet. Create a new search file or folder.';
-        explorer.appendChild(empty);
-        return;
-    }
-
     const root = buildFileTree(files, folders);
-    const rootLabel = document.createElement('div');
-    rootLabel.className = 'folder-root';
-    rootLabel.textContent = 'Search Files';
-    explorer.appendChild(rootLabel);
-
-    root.files.forEach(file => {
-        explorer.appendChild(renderFileNode(file));
+    renderExplorer(explorer, root, {
+        activeFileId,
+        isEmpty: files.length === 0 && folders.length === 0,
+    }, {
+        onFileClick: openFile,
+        onFileDblClick: openRenameModal,
+        onFileMove: openMoveFileModal,
+        onFileDelete: deleteFile,
+        onFolderDelete: deleteFolder,
     });
-
-    root.children.forEach(folder => {
-        explorer.appendChild(renderFolderNode(folder));
-    });
-}
-
-function renderFolderNode(folder) {
-    const details = document.createElement('details');
-    details.className = 'folder';
-    details.open = true;
-
-    const summary = document.createElement('summary');
-
-    const title = document.createElement('span');
-    title.textContent = folder.name;
-    summary.appendChild(title);
-
-    const folderActions = document.createElement('span');
-    folderActions.className = 'folder-actions';
-
-    const deleteButton = document.createElement('button');
-    deleteButton.type = 'button';
-    deleteButton.textContent = 'Delete';
-    deleteButton.addEventListener('click', event => {
-        event.stopPropagation();
-        deleteFolder(folder.path);
-    });
-
-    folderActions.appendChild(deleteButton);
-    summary.appendChild(folderActions);
-    details.appendChild(summary);
-
-    const folderContents = document.createElement('div');
-    folderContents.className = 'folder-contents';
-
-    folder.files.forEach(file => {
-        folderContents.appendChild(renderFileNode(file));
-    });
-
-    folder.children.forEach(child => {
-        folderContents.appendChild(renderFolderNode(child));
-    });
-
-    details.appendChild(folderContents);
-    return details;
-}
-
-function renderFileNode(file) {
-    const item = document.createElement('div');
-    item.className = 'explorer-item';
-    item.dataset.fileId = file.id;
-
-    const label = document.createElement('span');
-    label.className = 'file-name';
-    label.textContent = file.displayName || file.name;
-
-    const actions = document.createElement('span');
-    actions.className = 'file-actions';
-
-    const moveButton = document.createElement('button');
-    moveButton.className = 'file-action file-move';
-    moveButton.type = 'button';
-    moveButton.textContent = 'Move';
-    moveButton.addEventListener('click', event => {
-        event.stopPropagation();
-        openMoveFileModal(file);
-    });
-
-    const deleteButton = document.createElement('button');
-    deleteButton.className = 'file-action file-delete';
-    deleteButton.type = 'button';
-    deleteButton.textContent = 'Delete';
-    deleteButton.addEventListener('click', event => {
-        event.stopPropagation();
-        deleteFile(file.id);
-    });
-
-    actions.appendChild(moveButton);
-    actions.appendChild(deleteButton);
-
-    item.appendChild(label);
-    item.appendChild(actions);
-    item.addEventListener('click', () => openFile(file.id));
-    item.addEventListener('dblclick', () => openRenameModal(file));
-    if (file.id === activeFileId) {
-        item.classList.add('active');
-    }
-    return item;
 }
 
 function handleGlobalKeydown(event) {
@@ -1347,41 +1229,13 @@ function updateQuickSearchResults() {
         }
     );
 
-    quickSearchResults.innerHTML = '';
-
-    if (results.length === 0) {
-        const empty = document.createElement('div');
-        empty.id = 'quick-search-empty';
-        empty.textContent = getQuickSearchEmptyMessage(quickSearchMode, awaitingQuery);
-        quickSearchResults.appendChild(empty);
-        return;
-    }
-
-    results.forEach((file, index) => {
-        const item = document.createElement('div');
-        item.className = 'quick-search-item';
-        item.dataset.fileId = file.id;
-
-        const title = document.createElement('div');
-        title.textContent = file.name;
-        item.appendChild(title);
-
-        if (quickSearchMode === 'content' && file.snippet) {
-            const snippet = document.createElement('div');
-            snippet.className = 'quick-search-snippet';
-            snippet.textContent = file.snippet;
-            item.appendChild(snippet);
-        }
-
-        if (index === quickSearchSelectedIndex) {
-            item.classList.add('selected');
-        }
-
-        item.addEventListener('click', () => {
-            activateFileFromQuickSearch(file.id);
-        });
-
-        quickSearchResults.appendChild(item);
+    renderQuickSearchResults(quickSearchResults, {
+        results,
+        selectedIndex: quickSearchSelectedIndex,
+        mode: quickSearchMode,
+        emptyMessage: getQuickSearchEmptyMessage(quickSearchMode, awaitingQuery),
+    }, {
+        onSelect: activateFileFromQuickSearch,
     });
 }
 
