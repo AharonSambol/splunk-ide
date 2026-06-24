@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const {
     deselectAceOnPointerExit,
     endAceSelectionDrag,
+    recoverFromMissedDrag,
+    resetDragState,
 } = require('../../lib/end-ace-selection-drag');
 
 function createMockEditor(overrides = {}) {
@@ -79,26 +81,59 @@ function createMockDocument(editorBundle, selectionOverrides = {}) {
     };
 }
 
-describe('deselectAceOnPointerExit', () => {
-    it('always clears stuck mouse handler state and Ace selection', () => {
+function withFlags(flags, fn) {
+    const previous = {
+        pointerExited: globalThis.__splunkIdePointerExited,
+        dragInProgress: globalThis.__splunkIdeDragInProgress,
+    };
+
+    if ('pointerExited' in flags) {
+        globalThis.__splunkIdePointerExited = flags.pointerExited;
+    }
+    if ('dragInProgress' in flags) {
+        globalThis.__splunkIdeDragInProgress = flags.dragInProgress;
+    }
+
+    try {
+        fn();
+    } finally {
+        globalThis.__splunkIdePointerExited = previous.pointerExited;
+        globalThis.__splunkIdeDragInProgress = previous.dragInProgress;
+    }
+}
+
+describe('resetDragState', () => {
+    it('resets stuck mouse handler without clearing selection', () => {
         const mock = createMockEditor();
-        deselectAceOnPointerExit(createMockDocument(mock));
+        resetDragState(createMockDocument(mock));
+
+        assert.equal(mock.editor.$mouseHandler.state, '');
+        assert.equal(mock.editor.$mouseHandler.$mousedownEvent, null);
+        assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 1);
+        assert.equal(mock.editor.cleared, false);
+    });
+
+    it('does nothing when mouse handler is idle', () => {
+        const mock = createMockEditor({
+            mouseHandler: { state: '', $mousedownEvent: null },
+        });
+        resetDragState(createMockDocument(mock));
+
+        assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 0);
+        assert.equal(mock.editor.cleared, false);
+    });
+});
+
+describe('recoverFromMissedDrag', () => {
+    it('clears stuck mouse handler state and Ace selection', () => {
+        const mock = createMockEditor();
+        recoverFromMissedDrag(createMockDocument(mock));
 
         assert.equal(mock.editor.$mouseHandler.state, '');
         assert.equal(mock.editor.$mouseHandler.$mousedownEvent, null);
         assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 1);
         assert.equal(mock.editor.cleared, true);
         assert.equal(mock.editor.selection.end.column, 5);
-    });
-
-    it('clears selection even when mouse handler is already idle', () => {
-        const mock = createMockEditor({
-            mouseHandler: { state: '', $mousedownEvent: null },
-        });
-        deselectAceOnPointerExit(createMockDocument(mock));
-
-        assert.equal(mock.editor.cleared, true);
-        assert.equal(mock.editor.selection.start.column, 5);
     });
 
     it('clears native DOM selection', () => {
@@ -106,51 +141,62 @@ describe('deselectAceOnPointerExit', () => {
             mouseHandler: { state: '', $mousedownEvent: null },
         });
         const doc = createMockDocument(mock);
-        deselectAceOnPointerExit(doc);
+        recoverFromMissedDrag(doc);
 
         assert.equal(doc.getSelection().removeAllRangesCalls, 1);
     });
 });
 
-describe('endAceSelectionDrag', () => {
-    it('clears stuck mouse handler state and selection when active', () => {
-        const mock = createMockEditor();
-        endAceSelectionDrag(createMockDocument(mock));
+describe('deselectAceOnPointerExit', () => {
+    it('is an alias for recoverFromMissedDrag', () => {
+        assert.equal(deselectAceOnPointerExit, recoverFromMissedDrag);
+    });
+});
 
-        assert.equal(mock.editor.$mouseHandler.state, '');
-        assert.equal(mock.editor.$mouseHandler.$mousedownEvent, null);
-        assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 1);
-        assert.equal(mock.editor.cleared, true);
-        assert.equal(mock.editor.selection.end.column, 5);
+describe('endAceSelectionDrag', () => {
+    it('resets handler on normal mouseup without clearing selection', () => {
+        withFlags({ pointerExited: false, dragInProgress: false }, () => {
+            const mock = createMockEditor();
+            endAceSelectionDrag(createMockDocument(mock));
+
+            assert.equal(mock.editor.$mouseHandler.state, '');
+            assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 1);
+            assert.equal(mock.editor.cleared, false);
+        });
     });
 
     it('does nothing when mouse handler state is idle and pointer has not exited', () => {
-        const previousFlag = globalThis.__splunkIdePointerExited;
-        globalThis.__splunkIdePointerExited = false;
+        withFlags({ pointerExited: false, dragInProgress: false }, () => {
+            const mock = createMockEditor({
+                mouseHandler: { state: '', $mousedownEvent: null },
+            });
+            endAceSelectionDrag(createMockDocument(mock));
 
-        const mock = createMockEditor({
-            mouseHandler: { state: '', $mousedownEvent: null },
+            assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 0);
+            assert.equal(mock.editor.cleared, false);
         });
-        endAceSelectionDrag(createMockDocument(mock));
-
-        assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 0);
-        assert.equal(mock.editor.cleared, false);
-
-        globalThis.__splunkIdePointerExited = previousFlag;
     });
 
-    it('deselects on keydown after pointer left the page', () => {
-        const previousFlag = globalThis.__splunkIdePointerExited;
-        globalThis.__splunkIdePointerExited = true;
+    it('recovers when pointer left during an active drag', () => {
+        withFlags({ pointerExited: true, dragInProgress: true }, () => {
+            const mock = createMockEditor({
+                mouseHandler: { state: '', $mousedownEvent: null },
+            });
+            endAceSelectionDrag(createMockDocument(mock));
 
-        const mock = createMockEditor({
-            mouseHandler: { state: '', $mousedownEvent: null },
+            assert.equal(mock.editor.cleared, true);
         });
-        endAceSelectionDrag(createMockDocument(mock));
+    });
 
-        assert.equal(mock.editor.cleared, true);
+    it('does not recover on pointer exit alone without drag in progress', () => {
+        withFlags({ pointerExited: true, dragInProgress: false }, () => {
+            const mock = createMockEditor({
+                mouseHandler: { state: '', $mousedownEvent: null },
+            });
+            endAceSelectionDrag(createMockDocument(mock));
 
-        globalThis.__splunkIdePointerExited = previousFlag;
+            assert.equal(mock.editor.cleared, false);
+        });
     });
 
     it('does nothing when no ace editor is present', () => {
@@ -158,45 +204,42 @@ describe('endAceSelectionDrag', () => {
         assert.doesNotThrow(() => endAceSelectionDrag(doc));
     });
 
-    it('does nothing when editor has no mouse handler', () => {
-        const mock = createMockEditor({
-            editor: { $mouseHandler: null },
+    it('resets orphaned mousedown state without clearing selection', () => {
+        withFlags({ pointerExited: false, dragInProgress: false }, () => {
+            const mock = createMockEditor({
+                mouseHandler: {
+                    state: '',
+                    $mousedownEvent: { button: 0 },
+                    onMouseUpCalls: 0,
+                    onMouseUp() {
+                        this.onMouseUpCalls += 1;
+                        this.$mousedownEvent = null;
+                    },
+                },
+            });
+            endAceSelectionDrag(createMockDocument(mock));
+
+            assert.equal(mock.editor.$mouseHandler.$mousedownEvent, null);
+            assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 1);
+            assert.equal(mock.editor.cleared, false);
         });
-        assert.doesNotThrow(() => endAceSelectionDrag(createMockDocument(mock)));
     });
 
-    it('clears orphaned mousedown state when drag state is already idle', () => {
-        const mock = createMockEditor({
-            mouseHandler: {
-                state: '',
-                $mousedownEvent: { button: 0 },
-                onMouseUpCalls: 0,
-                onMouseUp() {
-                    this.onMouseUpCalls += 1;
-                    this.$mousedownEvent = null;
+    it('still resets handler state when onMouseUp throws', () => {
+        withFlags({ pointerExited: false, dragInProgress: false }, () => {
+            const mock = createMockEditor({
+                mouseHandler: {
+                    state: 'select',
+                    $mousedownEvent: { button: 0 },
+                    onMouseUp() {
+                        throw new Error('synthetic mouseup failed');
+                    },
                 },
-            },
+            });
+            endAceSelectionDrag(createMockDocument(mock));
+
+            assert.equal(mock.editor.$mouseHandler.state, '');
+            assert.equal(mock.editor.cleared, false);
         });
-        endAceSelectionDrag(createMockDocument(mock));
-
-        assert.equal(mock.editor.$mouseHandler.$mousedownEvent, null);
-        assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 1);
-        assert.equal(mock.editor.cleared, true);
-    });
-
-    it('still clears handler state when onMouseUp throws', () => {
-        const mock = createMockEditor({
-            mouseHandler: {
-                state: 'select',
-                $mousedownEvent: { button: 0 },
-                onMouseUp() {
-                    throw new Error('synthetic mouseup failed');
-                },
-            },
-        });
-        endAceSelectionDrag(createMockDocument(mock));
-
-        assert.equal(mock.editor.$mouseHandler.state, '');
-        assert.equal(mock.editor.cleared, true);
     });
 });

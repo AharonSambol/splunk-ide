@@ -37,7 +37,18 @@
             }
         }
 
-        function deselectAceOnPointerExit() {
+        function resetDragState() {
+            try {
+                const editor = document.querySelector('.ace_editor')?.env?.editor;
+                if (editor) {
+                    resetAceMouseHandler(editor.$mouseHandler);
+                }
+            } catch (err) {
+                // ignore
+            }
+        }
+
+        function recoverFromMissedDrag() {
             try {
                 const editor = document.querySelector('.ace_editor')?.env?.editor;
                 if (editor) {
@@ -51,50 +62,48 @@
             }
         }
 
-        function endAceSelectionDrag() {
-            const pointerExited = window.__splunkIdePointerExited === true;
-            try {
-                const editor = document.querySelector('.ace_editor')?.env?.editor;
-                if (!editor) return;
-                const mouseHandler = editor.$mouseHandler;
-                const stuckDrag = mouseHandler && (mouseHandler.state || mouseHandler.$mousedownEvent);
-                if (pointerExited || stuckDrag) {
-                    deselectAceOnPointerExit();
-                }
-            } catch (err) {
-                // ignore
-            }
+        window.__splunkIdeRecoverFromMissedDrag = recoverFromMissedDrag;
+        window.__splunkIdeDeselectAceOnPointerExit = recoverFromMissedDrag;
+        window.__splunkIdePointerExited = false;
+        window.__splunkIdeDragInProgress = false;
+
+        for (const eventType of ['mousedown', 'pointerdown']) {
+            document.addEventListener(eventType, () => {
+                window.__splunkIdeDragInProgress = true;
+            }, true);
         }
 
-        window.__splunkIdeDeselectAceOnPointerExit = deselectAceOnPointerExit;
-        window.__splunkIdeEndSelectionDrag = endAceSelectionDrag;
-        window.__splunkIdePointerExited = false;
+        for (const eventType of ['mouseup', 'pointerup']) {
+            document.addEventListener(eventType, () => {
+                resetDragState();
+                window.__splunkIdeDragInProgress = false;
+                window.__splunkIdePointerExited = false;
+            }, true);
+        }
 
         function markPointerExited() {
             window.__splunkIdePointerExited = true;
-            deselectAceOnPointerExit();
+            if (window.__splunkIdeDragInProgress) {
+                recoverFromMissedDrag();
+                window.__splunkIdeDragInProgress = false;
+            }
         }
 
         function markPointerEntered() {
             window.__splunkIdePointerExited = false;
         }
 
-        for (const eventType of ['mouseup', 'pointerup']) {
-            document.addEventListener(eventType, () => {
-                window.__splunkIdePointerExited = false;
-                endAceSelectionDrag();
-            }, true);
-        }
-
-        window.addEventListener('blur', markPointerExited, true);
         document.addEventListener('mouseleave', markPointerExited, true);
         document.addEventListener('pointerleave', markPointerExited, true);
         document.addEventListener('mouseenter', markPointerEntered, true);
         document.addEventListener('pointerenter', markPointerEntered, true);
 
-        document.addEventListener('keydown', (e) => {
+        document.addEventListener('keydown', () => {
             try {
-                endAceSelectionDrag();
+                if (window.__splunkIdePointerExited && window.__splunkIdeDragInProgress) {
+                    recoverFromMissedDrag();
+                }
+                window.__splunkIdeDragInProgress = false;
             } catch (err) {
                 // ignore
             }

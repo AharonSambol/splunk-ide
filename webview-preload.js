@@ -1,31 +1,41 @@
 const path = require('node:path');
 const { ipcRenderer } = require('electron');
 const {
-    deselectAceOnPointerExit,
-    endAceSelectionDrag,
+    recoverFromMissedDrag,
+    resetDragState,
 } = require(path.join(__dirname, 'lib', 'end-ace-selection-drag.js'));
 
-window.__splunkIdeDeselectAceOnPointerExit = deselectAceOnPointerExit;
-window.__splunkIdeEndSelectionDrag = endAceSelectionDrag;
+window.__splunkIdeRecoverFromMissedDrag = recoverFromMissedDrag;
+window.__splunkIdeDeselectAceOnPointerExit = recoverFromMissedDrag;
 window.__splunkIdePointerExited = false;
+window.__splunkIdeDragInProgress = false;
+
+for (const eventType of ['mousedown', 'pointerdown']) {
+    document.addEventListener(eventType, () => {
+        window.__splunkIdeDragInProgress = true;
+    }, true);
+}
+
+for (const eventType of ['mouseup', 'pointerup']) {
+    window.addEventListener(eventType, () => {
+        resetDragState();
+        window.__splunkIdeDragInProgress = false;
+        window.__splunkIdePointerExited = false;
+    }, true);
+}
 
 function markPointerExited() {
     window.__splunkIdePointerExited = true;
-    deselectAceOnPointerExit();
+    if (window.__splunkIdeDragInProgress) {
+        recoverFromMissedDrag();
+        window.__splunkIdeDragInProgress = false;
+    }
 }
 
 function markPointerEntered() {
     window.__splunkIdePointerExited = false;
 }
 
-for (const eventType of ['mouseup', 'pointerup']) {
-    window.addEventListener(eventType, () => {
-        window.__splunkIdePointerExited = false;
-        endAceSelectionDrag();
-    }, true);
-}
-
-window.addEventListener('blur', markPointerExited, true);
 document.addEventListener('mouseleave', markPointerExited, true);
 document.addEventListener('pointerleave', markPointerExited, true);
 document.addEventListener('mouseenter', markPointerEntered, true);
@@ -34,7 +44,11 @@ document.addEventListener('pointerenter', markPointerEntered, true);
 // Capture keydown at the capture phase to observe events before page handlers.
 window.addEventListener('keydown', (e) => {
     try {
-        endAceSelectionDrag();
+        if (window.__splunkIdePointerExited && window.__splunkIdeDragInProgress) {
+            recoverFromMissedDrag();
+        }
+        window.__splunkIdeDragInProgress = false;
+
         ipcRenderer.sendToHost('webview-keydown', {
             key: e.key,
             code: e.code,

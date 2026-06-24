@@ -39,7 +39,10 @@ test.describe('selection drag regression', () => {
             `);
 
             await view.executeJavaScript(`window.__testResetEditor('index=sourcetype')`);
-            await view.executeJavaScript(`window.__testSimulateStuckSelection(0, 6)`);
+            await view.executeJavaScript(`
+                window.__testSimulateStuckSelection(0, 6);
+                window.__splunkIdeDragInProgress = true;
+            `);
             window.__harnessTriggerSelectionDragCleanup();
 
             const waitForCleanup = async () => {

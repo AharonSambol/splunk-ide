@@ -6,7 +6,7 @@ const {
 } = require('../../lib/webview-selection-drag-handlers');
 
 describe('attachWebviewSelectionDragHandlers', () => {
-    it('registers mouseleave, mouseout, pointerleave, and blur handlers', () => {
+    it('registers mouseleave and pointerleave handlers only', () => {
         const listeners = new Map();
         const view = {
             addEventListener(type, handler) {
@@ -17,12 +17,14 @@ describe('attachWebviewSelectionDragHandlers', () => {
 
         attachWebviewSelectionDragHandlers(view);
 
-        for (const eventType of ['mouseleave', 'mouseout', 'pointerleave', 'blur']) {
+        for (const eventType of ['mouseleave', 'pointerleave']) {
             assert.ok(listeners.has(eventType), `missing ${eventType} listener`);
         }
+        assert.equal(listeners.has('mouseout'), false);
+        assert.equal(listeners.has('blur'), false);
     });
 
-    it('executes pointer-exit deselect in the guest on handler invocation', async () => {
+    it('executes gated recovery in the guest on handler invocation', async () => {
         const executed = [];
         const view = {
             listeners: {},
@@ -40,7 +42,8 @@ describe('attachWebviewSelectionDragHandlers', () => {
 
         assert.deepEqual(executed, [DESELECT_ON_POINTER_EXIT_JS]);
         assert.match(executed[0], /__splunkIdePointerExited = true/);
-        assert.match(executed[0], /__splunkIdeDeselectAceOnPointerExit/);
+        assert.match(executed[0], /__splunkIdeDragInProgress/);
+        assert.match(executed[0], /__splunkIdeRecoverFromMissedDrag/);
     });
 
     it('returns the cleanup handler for manual invocation', () => {
@@ -65,6 +68,6 @@ describe('attachWebviewSelectionDragHandlers', () => {
         };
 
         attachWebviewSelectionDragHandlers(view);
-        await assert.doesNotReject(async () => view.listeners.blur());
+        await assert.doesNotReject(async () => view.listeners.pointerleave());
     });
 });

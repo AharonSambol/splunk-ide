@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-    GUEST_DESELECT_JS,
+    GUEST_RECOVER_JS,
     attachParentSelectionCleanup,
 } = require('../../lib/parent-selection-cleanup');
 
@@ -25,7 +25,7 @@ describe('attachParentSelectionCleanup', () => {
         }
     });
 
-    it('cleans up the active webview on document mouseup', async () => {
+    it('invokes gated guest recovery on document mouseup', async () => {
         const executed = [];
         const doc = {
             listeners: {},
@@ -48,6 +48,8 @@ describe('attachParentSelectionCleanup', () => {
         attachParentSelectionCleanup(doc);
         await doc.listeners.mouseup();
 
-        assert.deepEqual(executed, [GUEST_DESELECT_JS]);
+        assert.deepEqual(executed, [GUEST_RECOVER_JS]);
+        assert.match(executed[0], /__splunkIdeDragInProgress/);
+        assert.match(executed[0], /__splunkIdeRecoverFromMissedDrag/);
     });
 });
