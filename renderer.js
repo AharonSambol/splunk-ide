@@ -28,6 +28,21 @@ const {
     createDuplicateFileName,
 } = require('./lib/tabs');
 const { decodeSearchText, extractQueryFromUrl, getFileFolder } = require('./lib/url-utils');
+const {
+    filterQuickSearchResults,
+    getQuickSearchEmptyMessage,
+    moveQuickSearchSelection,
+} = require('./lib/quick-search');
+const {
+    buildGitChangesFromStatus,
+    formatBranchSummary,
+    formatGitStatus: formatGitStatusRows,
+    formatCommitHistory,
+    canCommit,
+    canResetToCommit,
+    formatResetConfirmMessage,
+    isGitChangesEmpty,
+} = require('./lib/git-view-model');
 
 const newFileBtn = document.getElementById('new-file-btn');
 const newFolderBtn = document.getElementById('new-folder-btn');
@@ -1316,52 +1331,28 @@ function closeQuickSearch() {
 }
 
 function updateQuickSearchResults() {
-    const query = quickSearchInput.value.trim().toLowerCase();
-    let results = [];
-
-    if (quickSearchMode === 'content') {
-        if (!query) {
-            quickSearchResults.innerHTML = '';
-            const empty = document.createElement('div');
-            empty.id = 'quick-search-empty';
-            empty.textContent = 'Start typing to search file contents.';
-            quickSearchResults.appendChild(empty);
-            return;
-        }
-
-        results = files.map(file => {
+    const query = quickSearchInput.value;
+    const { results, awaitingQuery } = filterQuickSearchResults(
+        files,
+        folders,
+        query,
+        quickSearchMode,
+        file => {
             try {
                 const rawText = fs.readFileSync(file.path, 'utf8');
-                const queryText = extractQueryFromUrl(rawText);
-                const lowerQueryText = queryText.toLowerCase();
-                const index = lowerQueryText.indexOf(query);
-                if (index === -1) {
-                    return null;
-                }
-
-                const snippet = queryText.replace(/\s+/g, ' ');
-                return { ...file, snippet };
+                return extractQueryFromUrl(rawText);
             } catch {
-                return null;
+                return '';
             }
-        }).filter(Boolean);
-    } else {
-        results = files
-            .map(file => ({
-                ...file,
-                searchLabel: file.name.split('/').pop()
-            }))
-            .filter(file => file.name.toLowerCase().includes(query) || file.searchLabel.toLowerCase().includes(query));
-    }
+        }
+    );
 
     quickSearchResults.innerHTML = '';
 
     if (results.length === 0) {
         const empty = document.createElement('div');
         empty.id = 'quick-search-empty';
-        empty.textContent = quickSearchMode === 'content'
-            ? 'No matching text found.'
-            : 'No matching files.';
+        empty.textContent = getQuickSearchEmptyMessage(quickSearchMode, awaitingQuery);
         quickSearchResults.appendChild(empty);
         return;
     }
@@ -1398,13 +1389,21 @@ function handleQuickSearchKeydown(event) {
     const visibleItems = Array.from(document.querySelectorAll('.quick-search-item'));
     if (event.key === 'ArrowDown') {
         event.preventDefault();
-        quickSearchSelectedIndex = Math.min(quickSearchSelectedIndex + 1, visibleItems.length - 1);
+        quickSearchSelectedIndex = moveQuickSearchSelection(
+            quickSearchSelectedIndex,
+            'down',
+            visibleItems.length
+        );
         updateQuickSearchResults();
     }
 
     if (event.key === 'ArrowUp') {
         event.preventDefault();
-        quickSearchSelectedIndex = Math.max(quickSearchSelectedIndex - 1, 0);
+        quickSearchSelectedIndex = moveQuickSearchSelection(
+            quickSearchSelectedIndex,
+            'up',
+            visibleItems.length
+        );
         updateQuickSearchResults();
     }
 
@@ -1466,30 +1465,10 @@ async function refreshGitStatus() {
     try {
         // Get current branch
         const branch = await currentGit.branch();
-        gitBranch.textContent = `Branch: ${branch.current}`;
+        gitBranch.textContent = formatBranchSummary(branch.current);
 
-        // Get status
         const status = await currentGit.status();
-        gitChanges = {};
-
-        // Collect changed files
-        status.not_added.forEach(file => {
-            gitChanges[file] = 'untracked';
-        });
-        status.modified.forEach(file => {
-            gitChanges[file] = 'modified';
-        });
-        status.created.forEach(file => {
-            gitChanges[file] = 'added';
-        });
-        status.deleted.forEach(file => {
-            gitChanges[file] = 'deleted';
-        });
-        status.staged.forEach(file => {
-            if (gitChanges[file]) {
-                gitChanges[file] = 'staged';
-            }
-        });
+        gitChanges = buildGitChangesFromStatus(status);
 
         renderGitStatus();
     } catch (err) {
@@ -1500,7 +1479,7 @@ async function refreshGitStatus() {
 function renderGitStatus() {
     gitStatus.innerHTML = '';
 
-    if (Object.keys(gitChanges).length === 0) {
+    if (isGitChangesEmpty(gitChanges)) {
         const empty = document.createElement('div');
         empty.style.padding = '12px';
         empty.style.color = '#888';
@@ -1509,28 +1488,28 @@ function renderGitStatus() {
         return;
     }
 
-    Object.entries(gitChanges).forEach(([file, status]) => {
+    formatGitStatusRows(gitChanges).forEach(row => {
         const item = document.createElement('div');
         item.className = 'git-file-item';
 
         const statusBadge = document.createElement('div');
-        statusBadge.className = `git-file-status ${status}`;
-        statusBadge.textContent = status.charAt(0).toUpperCase();
+        statusBadge.className = `git-file-status ${row.status}`;
+        statusBadge.textContent = row.statusBadge;
 
         const fileName = document.createElement('div');
         fileName.className = 'git-file-name';
-        fileName.textContent = file;
-        fileName.title = file;
+        fileName.textContent = row.file;
+        fileName.title = row.file;
 
         const actions = document.createElement('div');
         actions.className = 'git-actions';
 
         const stageBtn = document.createElement('button');
         stageBtn.className = 'git-button-small';
-        stageBtn.textContent = status === 'staged' ? 'Unstage' : 'Stage';
+        stageBtn.textContent = row.stageButtonLabel;
         stageBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            toggleStageFile(file, status === 'staged');
+            toggleStageFile(row.file, row.stageAction === 'unstage');
         });
 
         actions.appendChild(stageBtn);
@@ -1559,7 +1538,7 @@ async function toggleStageFile(file, isStaged) {
 }
 
 async function commitChanges() {
-    if (!currentGit || !gitMessage.value.trim()) {
+    if (!currentGit || !canCommit(gitMessage.value, gitChanges)) {
         alert('Please enter a commit message');
         return;
     }
@@ -1648,22 +1627,22 @@ function renderGitHistory() {
         return;
     }
 
-    gitCommits.forEach((commit, index) => {
+    formatCommitHistory({ all: gitCommits }).forEach((row, index) => {
+        const commit = gitCommits[index];
         const item = document.createElement('div');
         item.className = 'git-commit-item';
 
         const hash = document.createElement('div');
         hash.className = 'git-commit-hash';
-        hash.textContent = commit.hash.substring(0, 7);
+        hash.textContent = row.shortHash;
 
         const message = document.createElement('div');
         message.className = 'git-commit-message';
-        message.textContent = commit.message;
+        message.textContent = row.message;
 
         const meta = document.createElement('div');
         meta.className = 'git-commit-meta';
-        const authorDate = new Date(commit.date).toLocaleString();
-        meta.textContent = `${commit.author_name} on ${authorDate}`;
+        meta.textContent = row.meta;
 
         const actions = document.createElement('div');
         actions.className = 'git-commit-actions';
@@ -1672,7 +1651,8 @@ function renderGitHistory() {
         resetBtn.className = 'git-commit-btn danger';
         resetBtn.textContent = 'Reset to this commit';
         resetBtn.addEventListener('click', () => {
-            if (confirm(`Reset to commit ${commit.hash.substring(0, 7)}: "${commit.message}"?\n\nThis will discard all changes after this commit.`)) {
+            const confirmed = confirm(formatResetConfirmMessage(commit));
+            if (canResetToCommit(commit.hash, confirmed)) {
                 resetToCommit(commit.hash);
             }
         });
