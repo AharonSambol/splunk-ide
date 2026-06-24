@@ -1,6 +1,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const {
+    clearAceSelection,
     deselectAceOnPointerExit,
     endAceSelectionDrag,
     recoverFromMissedDrag,
@@ -121,6 +122,17 @@ describe('resetDragState', () => {
 
         assert.equal(mock.editor.$mouseHandler.onMouseUpCalls, 0);
         assert.equal(mock.editor.cleared, false);
+    });
+});
+
+describe('clearAceSelection', () => {
+    it('clears Ace selection and native DOM selection', () => {
+        const mock = createMockEditor();
+        const doc = createMockDocument(mock);
+        clearAceSelection(doc);
+
+        assert.equal(mock.editor.cleared, true);
+        assert.equal(doc.getSelection().removeAllRangesCalls, 1);
     });
 });
 

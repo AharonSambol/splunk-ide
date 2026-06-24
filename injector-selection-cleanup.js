@@ -50,7 +50,7 @@
             }
         }
 
-        function recoverFromMissedDrag() {
+        function clearAceSelection() {
             try {
                 const editor = document.querySelector('.ace_editor')?.env?.editor;
                 if (editor) {
@@ -64,6 +64,11 @@
             }
         }
 
+        function recoverFromMissedDrag() {
+            clearAceSelection();
+        }
+
+        window.__splunkIdeClearSelection = clearAceSelection;
         window.__splunkIdeRecoverFromMissedDrag = recoverFromMissedDrag;
         window.__splunkIdeDeselectAceOnPointerExit = recoverFromMissedDrag;
         window.__splunkIdePointerExited = false;
@@ -80,6 +85,9 @@
         function onPointerDown(event) {
             pointerDown = { x: event.clientX, y: event.clientY };
             setDragInProgress(false);
+            if (!dragInProgress && !event.target?.closest?.('.ace_editor')) {
+                clearAceSelection();
+            }
         }
 
         function onPointerMove(event) {

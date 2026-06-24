@@ -16,6 +16,33 @@ test.describe('selection drag regression', () => {
         }
     });
 
+    test('clicking outside the webview clears Ace selection', async () => {
+        app = await electron.launch({ args: [harnessMain] });
+        const page = await app.firstWindow();
+
+        await page.waitForFunction(() => window.__harnessReady);
+
+        const afterOutsideClick = await page.evaluate(async () => {
+            const guest = document.getElementById('guest');
+            await window.__harnessReady;
+            await guest.executeJavaScript(`window.__testResetEditor('index=sourcetype')`);
+            await guest.executeJavaScript(`window.__testSetIdleSelection(0, 6)`);
+
+            const before = await guest.executeJavaScript(`window.__testGetSelection()`);
+            document.getElementById('outside').dispatchEvent(new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+            }));
+
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            const after = await guest.executeJavaScript(`window.__testGetSelection()`);
+            return { before, after };
+        });
+
+        expect(afterOutsideClick.before.selectedText).toBe('index=');
+        expect(afterOutsideClick.after.selectedText).toBe('');
+    });
+
     test('clicking Ace collapses an existing selection', async () => {
         app = await electron.launch({ args: [harnessMain] });
         const page = await app.firstWindow();
