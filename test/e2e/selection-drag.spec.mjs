@@ -16,6 +16,33 @@ test.describe('selection drag regression', () => {
         }
     });
 
+    test('clicking Ace collapses an existing selection', async () => {
+        app = await electron.launch({ args: [harnessMain] });
+        const page = await app.firstWindow();
+
+        await page.waitForFunction(() => window.__harnessReady);
+        const view = page.locator('#guest');
+
+        const selection = await view.evaluate(async () => {
+            await window.__harnessReady;
+            const guest = document.getElementById('guest');
+            await guest.executeJavaScript(`window.__testResetEditor('index=sourcetype')`);
+            await guest.executeJavaScript(`window.__testSetIdleSelection(0, 6)`);
+            return guest.executeJavaScript(`window.__testGetSelection()`);
+        });
+
+        expect(selection.selectedText).toBe('index=');
+
+        const afterClick = await view.evaluate(async () => {
+            const guest = document.getElementById('guest');
+            return guest.executeJavaScript(`window.__testSimulateClickAt(10)`);
+        });
+
+        expect(afterClick.selectedText).toBe('');
+        expect(afterClick.start).toBe(10);
+        expect(afterClick.end).toBe(10);
+    });
+
     test('typing after mouseleave does not keep replacing selection', async () => {
         app = await electron.launch({ args: [harnessMain] });
         const page = await app.firstWindow();

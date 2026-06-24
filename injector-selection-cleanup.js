@@ -1,5 +1,7 @@
 (function () {
     try {
+        const DRAG_THRESHOLD_PX = 3;
+
         function resetAceMouseHandler(mouseHandler) {
             if (!mouseHandler) return;
             try {
@@ -67,30 +69,58 @@
         window.__splunkIdePointerExited = false;
         window.__splunkIdeDragInProgress = false;
 
-        for (const eventType of ['mousedown', 'pointerdown']) {
-            document.addEventListener(eventType, () => {
-                window.__splunkIdeDragInProgress = true;
-            }, true);
+        let pointerDown = null;
+        let dragInProgress = false;
+
+        function setDragInProgress(value) {
+            dragInProgress = value;
+            window.__splunkIdeDragInProgress = value;
         }
 
-        for (const eventType of ['mouseup', 'pointerup']) {
-            document.addEventListener(eventType, () => {
+        function onPointerDown(event) {
+            pointerDown = { x: event.clientX, y: event.clientY };
+            setDragInProgress(false);
+        }
+
+        function onPointerMove(event) {
+            if (!pointerDown || dragInProgress) return;
+            const dx = event.clientX - pointerDown.x;
+            const dy = event.clientY - pointerDown.y;
+            if ((dx * dx) + (dy * dy) >= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+                setDragInProgress(true);
+            }
+        }
+
+        function onPointerUp() {
+            // Only reset Ace drag state after an actual drag. Clicks must reach Ace first.
+            if (dragInProgress) {
                 resetDragState();
-                window.__splunkIdeDragInProgress = false;
-                window.__splunkIdePointerExited = false;
-            }, true);
+            }
+            pointerDown = null;
+            setDragInProgress(false);
+            window.__splunkIdePointerExited = false;
         }
 
         function markPointerExited() {
             window.__splunkIdePointerExited = true;
-            if (window.__splunkIdeDragInProgress) {
+            if (dragInProgress) {
                 recoverFromMissedDrag();
-                window.__splunkIdeDragInProgress = false;
+                setDragInProgress(false);
             }
         }
 
         function markPointerEntered() {
             window.__splunkIdePointerExited = false;
+        }
+
+        for (const eventType of ['mousedown', 'pointerdown']) {
+            document.addEventListener(eventType, onPointerDown, true);
+        }
+        for (const eventType of ['mousemove', 'pointermove']) {
+            document.addEventListener(eventType, onPointerMove, true);
+        }
+        for (const eventType of ['mouseup', 'pointerup']) {
+            document.addEventListener(eventType, onPointerUp, true);
         }
 
         document.addEventListener('mouseleave', markPointerExited, true);
@@ -100,10 +130,10 @@
 
         document.addEventListener('keydown', () => {
             try {
-                if (window.__splunkIdePointerExited && window.__splunkIdeDragInProgress) {
+                if (window.__splunkIdePointerExited && dragInProgress) {
                     recoverFromMissedDrag();
                 }
-                window.__splunkIdeDragInProgress = false;
+                setDragInProgress(false);
             } catch (err) {
                 // ignore
             }

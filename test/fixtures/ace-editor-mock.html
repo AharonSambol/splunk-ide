@@ -120,6 +120,17 @@
             const editor = createMockEditor(aceElement.textContent);
             aceElement.env = { editor };
 
+            aceElement.addEventListener('mousedown', (event) => {
+                if (editor.$mouseHandler.state) {
+                    return;
+                }
+                const column = Math.max(0, Math.min(editor.session.getValue().length, event.clientX));
+                if (!editor.getSelectionRange().isEmpty()) {
+                    editor.selection.moveCursorTo(0, column);
+                    editor.clearSelection();
+                }
+            });
+
             aceElement.addEventListener('keydown', (event) => {
                 if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) {
                     return;
@@ -152,10 +163,29 @@
                 editor.setSelection(start, end);
                 aceElement.textContent = editor.session.getValue();
             };
+            window.__testSetIdleSelection = (start, end) => {
+                editor.$mouseHandler.state = '';
+                editor.$mouseHandler.$mousedownEvent = null;
+                editor.setSelection(start, end);
+                aceElement.textContent = editor.session.getValue();
+            };
             window.__testType = (text) => {
                 editor.typeWhileStuck(text);
                 aceElement.textContent = editor.session.getValue();
                 return editor.session.getValue();
+            };
+            window.__testSimulateClickAt = (column) => {
+                aceElement.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    clientX: column,
+                    clientY: 10,
+                }));
+                aceElement.dispatchEvent(new MouseEvent('mouseup', {
+                    bubbles: true,
+                    clientX: column,
+                    clientY: 10,
+                }));
+                return window.__testGetSelection();
             };
         })();
     </script>
