@@ -11,6 +11,41 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ipcRenderer } = require('electron');
 const { simpleGit } = require('simple-git');
+const { buildFileTree } = require('./lib/file-tree');
+const {
+    normalizeRelativePath,
+    getProjectFilePath: buildProjectFilePath,
+    ensureDirectoryExists: ensureProjectDirectoryExists,
+    scanProjectFiles: scanProjectFilesOnDisk,
+    scanProjectFolders: scanProjectFoldersOnDisk,
+    getMoveTargetPath,
+} = require('./lib/project-files');
+const {
+    closeFileState,
+    reorderTabs: computeTabOrder,
+    getPreviousTab,
+    getNextTab,
+    createDuplicateFileName,
+} = require('./lib/tabs');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder } = require('./lib/url-utils');
+const {
+    filterQuickSearchResults,
+    getQuickSearchEmptyMessage,
+    moveQuickSearchSelection,
+} = require('./lib/quick-search');
+const {
+    buildGitChangesFromStatus,
+    formatBranchSummary,
+    formatGitStatus: formatGitStatusRows,
+    formatCommitHistory,
+    canCommit,
+    canResetToCommit,
+    formatResetConfirmMessage,
+    isGitChangesEmpty,
+} = require('./lib/git-view-model');
+const { renderExplorer } = require('./lib/render-explorer');
+const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
+const { renderQuickSearchResults } = require('./lib/render-quick-search');
 
 const newFileBtn = document.getElementById('new-file-btn');
 const newFolderBtn = document.getElementById('new-folder-btn');
@@ -141,7 +176,7 @@ function duplicateCurrentTab() {
 
     const baseName = activeFile.name.split('/').pop();
     const folder = getFileFolder(activeFile.name);
-    const newName = `${baseName} (2)`;
+    const newName = createDuplicateFileName(files, baseName);
     createFileWithUrl(newName, activeFile.url, folder);
 }
 
@@ -151,7 +186,7 @@ function createFileWithUrl(name, url, parentFolder = '') {
         return;
     }
 
-    const normalizedFileName = name.replaceAll('\\', '/').trim();
+    const normalizedFileName = normalizeRelativePath(name);
     const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
     fileCounter++;
 
@@ -182,7 +217,7 @@ function createNewFile(name, parentFolder = '') {
 
     const defaultName = `Search ${fileCounter}`;
     const fileName = name ? name.trim() || defaultName : defaultName;
-    const normalizedFileName = fileName.replaceAll('\\', '/').trim();
+    const normalizedFileName = normalizeRelativePath(fileName);
     const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
     fileCounter++;
 
@@ -216,7 +251,7 @@ function createNewFolder(name, parentFolder = '') {
         return;
     }
 
-    const normalizedFolder = folderNameRaw.replaceAll('\\', '/').trim();
+    const normalizedFolder = normalizeRelativePath(folderNameRaw);
     const relativeFolder = parentFolder ? `${parentFolder}/${normalizedFolder}` : normalizedFolder;
     const folderPath = path.join(currentProjectPath, ...relativeFolder.split('/'));
     ensureDirectoryExists(folderPath);
@@ -236,6 +271,10 @@ function addFolderForPath(folderPath) {
     });
 }
 
+function getOpenTabIds() {
+    return Array.from(tabBar.querySelectorAll('.tab')).map(tab => tab.dataset.targetId);
+}
+
 function closeTab(fileId) {
     const file = files.find(f => f.id === fileId);
     if (!file) {
@@ -243,6 +282,9 @@ function closeTab(fileId) {
     }
 
     saveFileUrl(fileId);
+
+    const openTabsBeforeClose = getOpenTabIds();
+    const wasActive = activeFileId === fileId;
 
     const tab = tabBar.querySelector(`.tab[data-target-id="${fileId}"]`);
     if (tab) {
@@ -254,12 +296,12 @@ function closeTab(fileId) {
         view.remove();
     }
 
-    fileMru = fileMru.filter(id => id !== fileId);
+    const tabState = closeFileState(files, openTabsBeforeClose, activeFileId, fileId, fileMru);
+    fileMru = tabState.fileMru;
 
-    if (activeFileId === fileId) {
-        const remainingTabs = Array.from(tabBar.querySelectorAll('.tab'));
-        if (remainingTabs.length > 0) {
-            switchToFile(remainingTabs[0].dataset.targetId);
+    if (wasActive) {
+        if (tabState.activeFileId) {
+            switchToFile(tabState.activeFileId);
         } else {
             activeFileId = null;
             document.querySelectorAll('webview').forEach(view => view.classList.remove('active'));
@@ -357,19 +399,19 @@ function openFile(fileId) {
 }
 
 function getProjectFilePath(fileName) {
-    const normalizedRelative = path.normalize(fileName).split(path.sep).filter(segment => segment && segment !== '..').map(segment => segment.replace(/[<>:"|?*]/g, '_')).join(path.sep);
-    let filePath = path.join(currentProjectPath, normalizedRelative);
-    if (!path.extname(filePath)) {
-        filePath += '.spl';
-    }
-    return filePath;
+    return buildProjectFilePath(currentProjectPath, fileName, path);
 }
 
 function ensureDirectoryExists(directoryPath) {
-    if (!fs.existsSync(directoryPath)) {
-        ensureDirectoryExists(path.dirname(directoryPath));
-        fs.mkdirSync(directoryPath);
-    }
+    ensureProjectDirectoryExists(fs, directoryPath, path);
+}
+
+function scanProjectFiles(directory) {
+    return scanProjectFilesOnDisk(fs, path, directory);
+}
+
+function scanProjectFolders(directory) {
+    return scanProjectFoldersOnDisk(fs, path, directory, currentProjectPath);
 }
 
 function saveFileUrl(fileId) {
@@ -421,20 +463,13 @@ function openMoveFileModal(file) {
     showNewFileModal();
 }
 
-function getFileFolder(fileName) {
-    const lastSlash = fileName.lastIndexOf('/');
-    return lastSlash === -1 ? '' : fileName.slice(0, lastSlash);
-}
-
 function moveFile(fileId, targetFolder) {
     const file = files.find(f => f.id === fileId);
     if (!file) {
         return;
     }
 
-    const fileName = file.name.split('/').pop();
-    const newRelativeName = targetFolder ? `${targetFolder}/${fileName}` : fileName;
-    const newPath = getProjectFilePath(newRelativeName);
+    const newPath = getMoveTargetPath(currentProjectPath, file.name, targetFolder, path);
     const oldPath = file.path;
 
     if (newPath === oldPath) {
@@ -443,9 +478,9 @@ function moveFile(fileId, targetFolder) {
 
     ensureDirectoryExists(path.dirname(newPath));
     fs.renameSync(oldPath, newPath);
-    file.name = newRelativeName;
+    file.name = path.relative(currentProjectPath, newPath).replace(/\.spl$/i, '').split(path.sep).join('/');
     file.path = newPath;
-    const movedParent = getFileFolder(newRelativeName);
+    const movedParent = getFileFolder(file.name);
     if (movedParent) addFolderForPath(movedParent);
     updateExplorer();
 }
@@ -492,7 +527,7 @@ async function loadProject(projectPath) {
 
     folders = scanProjectFolders(projectPath);
 
-    const filePaths = scanProjectFiles(projectPath);
+    const filePaths = scanProjectFiles(currentProjectPath);
     filePaths.forEach(filePath => {
         const url = fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL;
         const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
@@ -500,35 +535,6 @@ async function loadProject(projectPath) {
     });
 
     updateExplorer();
-}
-
-function scanProjectFiles(directory) {
-    let results = [];
-    fs.readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
-        if (dirent.name === '.git') {
-            return;
-        }
-        const fullPath = path.join(directory, dirent.name);
-        if (dirent.isDirectory()) {
-            results = results.concat(scanProjectFiles(fullPath));
-        } else if (dirent.isFile() && path.extname(dirent.name).toLowerCase() === '.spl') {
-            results.push(fullPath);
-        }
-    });
-    return results;
-}
-
-function scanProjectFolders(directory) {
-    let results = [];
-    fs.readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
-        const fullPath = path.join(directory, dirent.name);
-        if (dirent.isDirectory() && dirent.name !== '.git') {
-            const relativePath = path.relative(currentProjectPath, fullPath).split(path.sep).join('/');
-            results.push(relativePath);
-            results = results.concat(scanProjectFolders(fullPath));
-        }
-    });
-    return results;
 }
 
 function clearOpenTabs() {
@@ -646,37 +652,14 @@ function renameFile(fileId, newName) {
 }
 
 function updateTabLabel(file) {
-    const tab = tabBar.querySelector(`.tab[data-target-id="${file.id}"]`);
-    if (tab) {
-        const title = tab.querySelector('.tab-title');
-        if (title) {
-            title.textContent = file.name.split('/').pop();
-        }
-    }
+    updateTabTitle(tabBar, file.id, file.name);
 }
 
 function createTab(file) {
-    const tab = document.createElement('div');
-    tab.className = 'tab';
-    tab.dataset.targetId = file.id;
-    tab.draggable = true;
-
-    const title = document.createElement('span');
-    title.className = 'tab-title';
-    title.textContent = file.name.split('/').pop();
-
-    const closeButton = document.createElement('button');
-    closeButton.className = 'tab-close';
-    closeButton.type = 'button';
-    closeButton.innerText = '×';
-    closeButton.addEventListener('click', event => {
-        event.stopPropagation();
-        closeTab(file.id);
+    const tab = createTabElement(document, file, activeFileId, {
+        onClose: closeTab,
+        onSwitch: switchToFile,
     });
-
-    tab.appendChild(title);
-    tab.appendChild(closeButton);
-    tab.addEventListener('click', () => switchToFile(file.id));
 
     // Drag and drop handlers
     tab.addEventListener('dragstart', (e) => {
@@ -866,27 +849,26 @@ switchToFile = function(targetId) {
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
 };
 
-function reorderTabs(draggedFileId, targetFileId, dropEvent) {
-    const draggedTab = tabBar.querySelector(`.tab[data-target-id="${draggedFileId}"]`);
-    const targetTab = tabBar.querySelector(`.tab[data-target-id="${targetFileId}"]`);
+function applyTabOrder(tabIds) {
+    tabIds.forEach(tabId => {
+        const tab = tabBar.querySelector(`.tab[data-target-id="${tabId}"]`);
+        if (tab) {
+            tabBar.appendChild(tab);
+        }
+    });
+}
 
-    if (!draggedTab || !targetTab) {
+function reorderTabs(draggedFileId, targetFileId, dropEvent) {
+    const targetTab = tabBar.querySelector(`.tab[data-target-id="${targetFileId}"]`);
+    if (!targetTab || !tabBar.querySelector(`.tab[data-target-id="${draggedFileId}"]`)) {
         return;
     }
 
-    // Determine if we should insert before or after the target
     const rect = targetTab.getBoundingClientRect();
     const midpoint = rect.left + rect.width / 2;
-    const clientX = dropEvent.clientX;
-
-    // Simple reorder: insert before or after based on cursor position
-    if (clientX < midpoint) {
-        // Insert before target
-        targetTab.parentNode.insertBefore(draggedTab, targetTab);
-    } else {
-        // Insert after target
-        targetTab.parentNode.insertBefore(draggedTab, targetTab.nextSibling);
-    }
+    const position = dropEvent.clientX < midpoint ? 'before' : 'after';
+    const newOrder = computeTabOrder(getOpenTabIds(), draggedFileId, targetFileId, position);
+    applyTabOrder(newOrder);
 }
 
 function switchToFile(targetId) {
@@ -902,9 +884,7 @@ function switchToFile(targetId) {
     fileMru = fileMru.filter(id => id !== targetId);
     fileMru.unshift(targetId);
 
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.targetId === targetId);
-    });
+    setActiveTab(tabBar, targetId);
 
     document.querySelectorAll('webview').forEach(view => {
         view.classList.toggle('active', view.id === targetId);
@@ -1014,165 +994,17 @@ function handleKeyboardShortcut(d) {
 }
 
 function updateExplorer() {
-    explorer.innerHTML = '';
-
-    if (files.length === 0 && folders.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'explorer-item';
-        empty.textContent = 'No files yet. Create a new search file or folder.';
-        explorer.appendChild(empty);
-        return;
-    }
-
     const root = buildFileTree(files, folders);
-    const rootLabel = document.createElement('div');
-    rootLabel.className = 'folder-root';
-    rootLabel.textContent = 'Search Files';
-    explorer.appendChild(rootLabel);
-
-    root.files.forEach(file => {
-        explorer.appendChild(renderFileNode(file));
+    renderExplorer(explorer, root, {
+        activeFileId,
+        isEmpty: files.length === 0 && folders.length === 0,
+    }, {
+        onFileClick: openFile,
+        onFileDblClick: openRenameModal,
+        onFileMove: openMoveFileModal,
+        onFileDelete: deleteFile,
+        onFolderDelete: deleteFolder,
     });
-
-    root.children.forEach(folder => {
-        explorer.appendChild(renderFolderNode(folder));
-    });
-}
-
-function buildFileTree(fileList, folderList) {
-    const root = { children: [], files: [] };
-    const map = new Map();
-
-    function ensureFolderNode(pathSegments) {
-        let current = root;
-        let accumulatedPath = '';
-
-        for (let segment of pathSegments) {
-            accumulatedPath = accumulatedPath ? `${accumulatedPath}/${segment}` : segment;
-            let folder = map.get(accumulatedPath);
-            if (!folder) {
-                folder = { name: segment, path: accumulatedPath, children: [], files: [] };
-                map.set(accumulatedPath, folder);
-                if (current === root) {
-                    root.children.push(folder);
-                } else {
-                    current.children.push(folder);
-                }
-            }
-            current = folder;
-        }
-
-        return current;
-    }
-
-    folderList.forEach(folderPath => {
-        const segments = folderPath.split('/').map(segment => segment.trim()).filter(Boolean);
-        if (segments.length > 0) {
-            ensureFolderNode(segments);
-        }
-    });
-
-    fileList.forEach(file => {
-        const segments = file.name.split('/').map(segment => segment.trim()).filter(Boolean);
-        if (segments.length === 0) {
-            root.files.push({ ...file, displayName: file.name });
-            return;
-        }
-
-        if (segments.length === 1) {
-            root.files.push({ ...file, displayName: segments[0] });
-            return;
-        }
-
-        const parentFolder = ensureFolderNode(segments.slice(0, -1));
-        parentFolder.files.push({ ...file, displayName: segments[segments.length - 1] });
-    });
-
-    return root;
-}
-
-function renderFolderNode(folder) {
-    const details = document.createElement('details');
-    details.className = 'folder';
-    details.open = true;
-
-    const summary = document.createElement('summary');
-
-    const title = document.createElement('span');
-    title.textContent = folder.name;
-    summary.appendChild(title);
-
-    const folderActions = document.createElement('span');
-    folderActions.className = 'folder-actions';
-
-    const deleteButton = document.createElement('button');
-    deleteButton.type = 'button';
-    deleteButton.textContent = 'Delete';
-    deleteButton.addEventListener('click', event => {
-        event.stopPropagation();
-        deleteFolder(folder.path);
-    });
-
-    folderActions.appendChild(deleteButton);
-    summary.appendChild(folderActions);
-    details.appendChild(summary);
-
-    const folderContents = document.createElement('div');
-    folderContents.className = 'folder-contents';
-
-    folder.files.forEach(file => {
-        folderContents.appendChild(renderFileNode(file));
-    });
-
-    folder.children.forEach(child => {
-        folderContents.appendChild(renderFolderNode(child));
-    });
-
-    details.appendChild(folderContents);
-    return details;
-}
-
-function renderFileNode(file) {
-    const item = document.createElement('div');
-    item.className = 'explorer-item';
-    item.dataset.fileId = file.id;
-
-    const label = document.createElement('span');
-    label.className = 'file-name';
-    label.textContent = file.displayName || file.name;
-
-    const actions = document.createElement('span');
-    actions.className = 'file-actions';
-
-    const moveButton = document.createElement('button');
-    moveButton.className = 'file-action file-move';
-    moveButton.type = 'button';
-    moveButton.textContent = 'Move';
-    moveButton.addEventListener('click', event => {
-        event.stopPropagation();
-        openMoveFileModal(file);
-    });
-
-    const deleteButton = document.createElement('button');
-    deleteButton.className = 'file-action file-delete';
-    deleteButton.type = 'button';
-    deleteButton.textContent = 'Delete';
-    deleteButton.addEventListener('click', event => {
-        event.stopPropagation();
-        deleteFile(file.id);
-    });
-
-    actions.appendChild(moveButton);
-    actions.appendChild(deleteButton);
-
-    item.appendChild(label);
-    item.appendChild(actions);
-    item.addEventListener('click', () => openFile(file.id));
-    item.addEventListener('dblclick', () => openRenameModal(file));
-    if (file.id === activeFileId) {
-        item.classList.add('active');
-    }
-    return item;
 }
 
 function handleGlobalKeydown(event) {
@@ -1220,21 +1052,15 @@ function openMostRecentTab() {
 }
 
 function switchToPreviousTab() {
-    const tabs = Array.from(tabBar.querySelectorAll('.tab'));
-    const activeIndex = tabs.findIndex(tab => tab.dataset.targetId === activeFileId);
-
-    if (activeIndex > 0) {
-        const previousTabId = tabs[activeIndex - 1].dataset.targetId;
+    const previousTabId = getPreviousTab(getOpenTabIds(), activeFileId);
+    if (previousTabId) {
         switchToFile(previousTabId);
     }
 }
 
 function switchToNextTab() {
-    const tabs = Array.from(tabBar.querySelectorAll('.tab'));
-    const activeIndex = tabs.findIndex(tab => tab.dataset.targetId === activeFileId);
-
-    if (activeIndex < tabs.length - 1) {
-        const nextTabId = tabs[activeIndex + 1].dataset.targetId;
+    const nextTabId = getNextTab(getOpenTabIds(), activeFileId);
+    if (nextTabId) {
         switchToFile(nextTabId);
     }
 }
@@ -1382,119 +1208,34 @@ function doFind(text, forward = true, findNext = false) {
     }
 }
 
-function decodeSearchText(rawText) {
-    const normalized = rawText.replaceAll('+', ' ');
-    try {
-        return decodeURIComponent(normalized);
-    } catch {
-        return normalized;
-    }
-}
-
-function extractQueryFromUrl(rawText) {
-    const cleaned = rawText.trim();
-    if (!cleaned) {
-        return '';
-    }
-
-    try {
-        const parsed = new URL(cleaned);
-        const q = parsed.searchParams.get('q');
-        if (q !== null) {
-            return decodeSearchText(q).replace(/^search /, "");
-        }
-    } catch {
-        // Fallback for non-absolute or malformed URLs
-    }
-
-    const queryMatch = cleaned.match(/[?&]q=([^&]+)/);
-    if (queryMatch) {
-        return decodeSearchText(queryMatch[1]).replace(/^search /, "");
-    }
-
-    return decodeSearchText(cleaned).replace(/^search /, "");
-}
-
 function closeQuickSearch() {
     quickSearchOverlay.classList.remove('visible');
 }
 
 function updateQuickSearchResults() {
-    const query = quickSearchInput.value.trim().toLowerCase();
-    let results = [];
-
-    if (quickSearchMode === 'content') {
-        if (!query) {
-            quickSearchResults.innerHTML = '';
-            const empty = document.createElement('div');
-            empty.id = 'quick-search-empty';
-            empty.textContent = 'Start typing to search file contents.';
-            quickSearchResults.appendChild(empty);
-            return;
-        }
-
-        results = files.map(file => {
+    const query = quickSearchInput.value;
+    const { results, awaitingQuery } = filterQuickSearchResults(
+        files,
+        folders,
+        query,
+        quickSearchMode,
+        file => {
             try {
                 const rawText = fs.readFileSync(file.path, 'utf8');
-                const queryText = extractQueryFromUrl(rawText);
-                const lowerQueryText = queryText.toLowerCase();
-                const index = lowerQueryText.indexOf(query);
-                if (index === -1) {
-                    return null;
-                }
-
-                const snippet = queryText.replace(/\s+/g, ' ');
-                return { ...file, snippet };
+                return extractQueryFromUrl(rawText);
             } catch {
-                return null;
+                return '';
             }
-        }).filter(Boolean);
-    } else {
-        results = files
-            .map(file => ({
-                ...file,
-                searchLabel: file.name.split('/').pop()
-            }))
-            .filter(file => file.name.toLowerCase().includes(query) || file.searchLabel.toLowerCase().includes(query));
-    }
-
-    quickSearchResults.innerHTML = '';
-
-    if (results.length === 0) {
-        const empty = document.createElement('div');
-        empty.id = 'quick-search-empty';
-        empty.textContent = quickSearchMode === 'content'
-            ? 'No matching text found.'
-            : 'No matching files.';
-        quickSearchResults.appendChild(empty);
-        return;
-    }
-
-    results.forEach((file, index) => {
-        const item = document.createElement('div');
-        item.className = 'quick-search-item';
-        item.dataset.fileId = file.id;
-
-        const title = document.createElement('div');
-        title.textContent = file.name;
-        item.appendChild(title);
-
-        if (quickSearchMode === 'content' && file.snippet) {
-            const snippet = document.createElement('div');
-            snippet.className = 'quick-search-snippet';
-            snippet.textContent = file.snippet;
-            item.appendChild(snippet);
         }
+    );
 
-        if (index === quickSearchSelectedIndex) {
-            item.classList.add('selected');
-        }
-
-        item.addEventListener('click', () => {
-            activateFileFromQuickSearch(file.id);
-        });
-
-        quickSearchResults.appendChild(item);
+    renderQuickSearchResults(quickSearchResults, {
+        results,
+        selectedIndex: quickSearchSelectedIndex,
+        mode: quickSearchMode,
+        emptyMessage: getQuickSearchEmptyMessage(quickSearchMode, awaitingQuery),
+    }, {
+        onSelect: activateFileFromQuickSearch,
     });
 }
 
@@ -1502,13 +1243,21 @@ function handleQuickSearchKeydown(event) {
     const visibleItems = Array.from(document.querySelectorAll('.quick-search-item'));
     if (event.key === 'ArrowDown') {
         event.preventDefault();
-        quickSearchSelectedIndex = Math.min(quickSearchSelectedIndex + 1, visibleItems.length - 1);
+        quickSearchSelectedIndex = moveQuickSearchSelection(
+            quickSearchSelectedIndex,
+            'down',
+            visibleItems.length
+        );
         updateQuickSearchResults();
     }
 
     if (event.key === 'ArrowUp') {
         event.preventDefault();
-        quickSearchSelectedIndex = Math.max(quickSearchSelectedIndex - 1, 0);
+        quickSearchSelectedIndex = moveQuickSearchSelection(
+            quickSearchSelectedIndex,
+            'up',
+            visibleItems.length
+        );
         updateQuickSearchResults();
     }
 
@@ -1570,30 +1319,10 @@ async function refreshGitStatus() {
     try {
         // Get current branch
         const branch = await currentGit.branch();
-        gitBranch.textContent = `Branch: ${branch.current}`;
+        gitBranch.textContent = formatBranchSummary(branch.current);
 
-        // Get status
         const status = await currentGit.status();
-        gitChanges = {};
-
-        // Collect changed files
-        status.not_added.forEach(file => {
-            gitChanges[file] = 'untracked';
-        });
-        status.modified.forEach(file => {
-            gitChanges[file] = 'modified';
-        });
-        status.created.forEach(file => {
-            gitChanges[file] = 'added';
-        });
-        status.deleted.forEach(file => {
-            gitChanges[file] = 'deleted';
-        });
-        status.staged.forEach(file => {
-            if (gitChanges[file]) {
-                gitChanges[file] = 'staged';
-            }
-        });
+        gitChanges = buildGitChangesFromStatus(status);
 
         renderGitStatus();
     } catch (err) {
@@ -1604,7 +1333,7 @@ async function refreshGitStatus() {
 function renderGitStatus() {
     gitStatus.innerHTML = '';
 
-    if (Object.keys(gitChanges).length === 0) {
+    if (isGitChangesEmpty(gitChanges)) {
         const empty = document.createElement('div');
         empty.style.padding = '12px';
         empty.style.color = '#888';
@@ -1613,28 +1342,28 @@ function renderGitStatus() {
         return;
     }
 
-    Object.entries(gitChanges).forEach(([file, status]) => {
+    formatGitStatusRows(gitChanges).forEach(row => {
         const item = document.createElement('div');
         item.className = 'git-file-item';
 
         const statusBadge = document.createElement('div');
-        statusBadge.className = `git-file-status ${status}`;
-        statusBadge.textContent = status.charAt(0).toUpperCase();
+        statusBadge.className = `git-file-status ${row.status}`;
+        statusBadge.textContent = row.statusBadge;
 
         const fileName = document.createElement('div');
         fileName.className = 'git-file-name';
-        fileName.textContent = file;
-        fileName.title = file;
+        fileName.textContent = row.file;
+        fileName.title = row.file;
 
         const actions = document.createElement('div');
         actions.className = 'git-actions';
 
         const stageBtn = document.createElement('button');
         stageBtn.className = 'git-button-small';
-        stageBtn.textContent = status === 'staged' ? 'Unstage' : 'Stage';
+        stageBtn.textContent = row.stageButtonLabel;
         stageBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            toggleStageFile(file, status === 'staged');
+            toggleStageFile(row.file, row.stageAction === 'unstage');
         });
 
         actions.appendChild(stageBtn);
@@ -1663,7 +1392,7 @@ async function toggleStageFile(file, isStaged) {
 }
 
 async function commitChanges() {
-    if (!currentGit || !gitMessage.value.trim()) {
+    if (!currentGit || !canCommit(gitMessage.value, gitChanges)) {
         alert('Please enter a commit message');
         return;
     }
@@ -1752,22 +1481,22 @@ function renderGitHistory() {
         return;
     }
 
-    gitCommits.forEach((commit, index) => {
+    formatCommitHistory({ all: gitCommits }).forEach((row, index) => {
+        const commit = gitCommits[index];
         const item = document.createElement('div');
         item.className = 'git-commit-item';
 
         const hash = document.createElement('div');
         hash.className = 'git-commit-hash';
-        hash.textContent = commit.hash.substring(0, 7);
+        hash.textContent = row.shortHash;
 
         const message = document.createElement('div');
         message.className = 'git-commit-message';
-        message.textContent = commit.message;
+        message.textContent = row.message;
 
         const meta = document.createElement('div');
         meta.className = 'git-commit-meta';
-        const authorDate = new Date(commit.date).toLocaleString();
-        meta.textContent = `${commit.author_name} on ${authorDate}`;
+        meta.textContent = row.meta;
 
         const actions = document.createElement('div');
         actions.className = 'git-commit-actions';
@@ -1776,7 +1505,8 @@ function renderGitHistory() {
         resetBtn.className = 'git-commit-btn danger';
         resetBtn.textContent = 'Reset to this commit';
         resetBtn.addEventListener('click', () => {
-            if (confirm(`Reset to commit ${commit.hash.substring(0, 7)}: "${commit.message}"?\n\nThis will discard all changes after this commit.`)) {
+            const confirmed = confirm(formatResetConfirmMessage(commit));
+            if (canResetToCommit(commit.hash, confirmed)) {
                 resetToCommit(commit.hash);
             }
         });
