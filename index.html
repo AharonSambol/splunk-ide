@@ -30,34 +30,6 @@
             flex-direction: column;
         }
 
-        #sidebar-tabs {
-            display: flex;
-            border-bottom: 1px solid #333;
-            background: #2d2d30;
-        }
-
-        .sidebar-tab {
-            flex: 1;
-            padding: 12px 16px;
-            background: transparent;
-            border: none;
-            color: #8a8a8a;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 600;
-            border-bottom: 2px solid transparent;
-            transition: all 0.15s ease;
-        }
-
-        .sidebar-tab.active {
-            color: #ffffff;
-            border-bottom-color: #007acc;
-        }
-
-        .sidebar-tab:hover {
-            color: #cccccc;
-        }
-
         #sidebar-header {
             padding: 14px 16px;
             display: flex;
@@ -73,270 +45,6 @@
             margin: 0;
         }
 
-        #git-view {
-            display: none;
-            flex: 1;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        #git-view.active {
-            display: flex;
-        }
-
-        #git-view-content {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            overflow: auto;
-        }
-
-        #git-status {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px;
-        }
-
-        .git-file-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            margin-bottom: 4px;
-            background: #2d2d2d;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            user-select: none;
-        }
-
-        .git-file-item:hover {
-            background: #3d3d3d;
-        }
-
-        .git-file-status {
-            min-width: 20px;
-            font-weight: 600;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 0.75rem;
-        }
-
-        .git-file-status.modified {
-            background: #ffa500;
-            color: #000;
-        }
-
-        .git-file-status.added {
-            background: #22863a;
-            color: #fff;
-        }
-
-        .git-file-status.untracked {
-            background: #6c757d;
-            color: #fff;
-        }
-
-        .git-file-status.deleted {
-            background: #cb2431;
-            color: #fff;
-        }
-
-        .git-file-status.staged {
-            background: #28a745;
-            color: #fff;
-        }
-
-        .git-file-name {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .git-actions {
-            display: flex;
-            gap: 4px;
-        }
-
-        .git-button-small {
-            padding: 4px 8px;
-            background: #0e639c;
-            border: none;
-            color: white;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .git-button-small:hover {
-            background: #1177bb;
-        }
-
-        #git-controls {
-            padding: 12px;
-            border-top: 1px solid #333;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        #git-message {
-            width: 100%;
-            padding: 8px;
-            background: #1e1e1e;
-            border: 1px solid #333;
-            border-radius: 4px;
-            color: #cccccc;
-            font-family: monospace;
-            font-size: 0.85rem;
-            resize: vertical;
-            box-sizing: border-box;
-            min-height: 80px;
-        }
-
-        #git-message::placeholder {
-            color: #666;
-        }
-
-        #git-controls-buttons {
-            display: flex;
-            gap: 8px;
-        }
-
-        .git-button {
-            flex: 1;
-            padding: 10px;
-            background: #0e639c;
-            border: none;
-            color: white;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-
-        .git-button:hover {
-            background: #1177bb;
-        }
-
-        .git-button.secondary {
-            background: #2d2d2d;
-            color: #cccccc;
-        }
-
-        .git-button.secondary:hover {
-            background: #3d3d3d;
-        }
-
-        .git-branch {
-            padding: 8px 12px;
-            background: #2d2d2d;
-            border-radius: 4px;
-            color: #cccccc;
-            font-size: 0.85rem;
-        }
-
-        #git-tabs {
-            display: flex;
-            gap: 8px;
-            padding: 12px;
-            border-bottom: 1px solid #333;
-        }
-
-        .git-tab-btn {
-            padding: 6px 12px;
-            background: #2d2d2d;
-            border: none;
-            color: #8a8a8a;
-            cursor: pointer;
-            font-size: 0.85rem;
-            border-radius: 3px;
-            font-weight: 600;
-        }
-
-        .git-tab-btn.active {
-            background: #0e639c;
-            color: white;
-        }
-
-        .git-tab-btn:hover {
-            background: #3d3d3d;
-        }
-
-        .git-tab-content {
-            display: none;
-            flex: 1;
-            overflow: hidden;
-            flex-direction: column;
-        }
-
-        .git-tab-content.active {
-            display: flex;
-        }
-
-        #git-history {
-            overflow-y: auto;
-            flex: 1;
-        }
-
-        .git-commit-item {
-            padding: 12px;
-            border-bottom: 1px solid #333;
-            background: #2d2d2d;
-            margin: 8px;
-            border-radius: 4px;
-            font-size: 0.9rem;
-        }
-
-        .git-commit-hash {
-            font-family: monospace;
-            color: #7ec699;
-            font-size: 0.75rem;
-        }
-
-        .git-commit-message {
-            color: #cccccc;
-            margin: 4px 0;
-            font-weight: 600;
-        }
-
-        .git-commit-meta {
-            color: #888;
-            font-size: 0.8rem;
-            margin: 4px 0;
-        }
-
-        .git-commit-actions {
-            display: flex;
-            gap: 6px;
-            margin-top: 8px;
-        }
-
-        .git-commit-btn {
-            padding: 4px 10px;
-            background: #0e639c;
-            border: none;
-            color: white;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .git-commit-btn:hover {
-            background: #1177bb;
-        }
-
-        .git-commit-btn.danger {
-            background: #cb2431;
-        }
-
-        .git-commit-btn.danger:hover {
-            background: #d9393c;
-        }
-
         #explorer {
             flex: 1;
             overflow: auto;
@@ -345,6 +53,177 @@
 
         #explorer.hidden {
             display: none;
+        }
+
+        #main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        #query-history-panel {
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid #333;
+            background: #252526;
+            max-height: 40vh;
+            min-height: 180px;
+        }
+
+        #query-history-panel.collapsed {
+            display: none;
+        }
+
+        #query-history-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-bottom: 1px solid #333;
+            background: #2d2d30;
+        }
+
+        #query-history-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            flex: 1;
+        }
+
+        #query-history-status {
+            font-size: 0.8rem;
+            color: #8a8a8a;
+        }
+
+        #query-history-status.dirty {
+            color: #ffa500;
+        }
+
+        #query-history-close {
+            background: transparent;
+            border: none;
+            color: #8a8a8a;
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        #query-history-close:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        #query-history-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        #query-version-list {
+            width: 280px;
+            border-right: 1px solid #333;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .query-version-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #333;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .query-version-item:hover,
+        .query-version-item.selected {
+            background: #094771;
+        }
+
+        .query-version-item .version-label {
+            font-weight: 600;
+            color: #e0e0e0;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .query-version-item .version-meta {
+            color: #888;
+            font-size: 0.75rem;
+        }
+
+        #query-version-preview {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #query-version-preview pre {
+            flex: 1;
+            margin: 0;
+            padding: 12px;
+            overflow: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: #d4d4d4;
+            background: #1e1e1e;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        #query-history-actions {
+            display: flex;
+            gap: 8px;
+            padding: 8px 12px;
+            border-top: 1px solid #333;
+        }
+
+        #query-save-message {
+            flex: 1;
+            padding: 6px 8px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #ccc;
+            font-size: 0.85rem;
+        }
+
+        .query-history-btn {
+            padding: 6px 12px;
+            background: #0e639c;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .query-history-btn:hover {
+            background: #1177bb;
+        }
+
+        .query-history-btn.secondary {
+            background: #3d3d3d;
+        }
+
+        .query-history-btn.secondary:hover {
+            background: #4d4d4d;
+        }
+
+        .query-history-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .tab.dirty .tab-title::after {
+            content: ' •';
+            color: #ffa500;
         }
 
         #explorer-footer {
@@ -778,12 +657,6 @@
 <body>
     <div id="app-shell">
         <aside id="sidebar">
-            <div id="sidebar-tabs">
-                <button class="sidebar-tab active" data-view="explorer">Explorer</button>
-                <button class="sidebar-tab" data-view="git">Source Control</button>
-            </div>
-
-            <!-- Explorer View -->
             <div id="sidebar-header">
                 <span>File Explorer</span>
                 <span>
@@ -805,31 +678,6 @@
             </div>
             <div id="explorer"></div>
             <div id="explorer-footer">Press Shift twice to search files.</div>
-
-            <!-- Git View -->
-            <div id="git-view">
-                <div id="git-view-content">
-                    <div id="git-branch" class="git-branch"></div>
-                    <div id="git-tabs">
-                        <button class="git-tab-btn active" data-tab="changes">Changes</button>
-                        <button class="git-tab-btn" data-tab="history">History</button>
-                    </div>
-                    <div id="git-changes-tab" class="git-tab-content active">
-                        <div id="git-status"></div>
-                    </div>
-                    <div id="git-history-tab" class="git-tab-content">
-                        <div id="git-history"></div>
-                    </div>
-                </div>
-                <div id="git-controls">
-                    <textarea id="git-message" placeholder="Commit message..."></textarea>
-                    <div id="git-controls-buttons">
-                        <button id="git-commit" class="git-button">Commit</button>
-                        <button id="git-push" class="git-button">Push</button>
-                        <button id="git-pull" class="git-button secondary">Pull</button>
-                    </div>
-                </div>
-            </div>
         </aside>
 
         <div id="main-area">
@@ -840,13 +688,32 @@
                 <button id="prev-page-btn" class="project-action" style="margin-left: auto; font-size:larger; padding: 0 10px" title="Back">⬅</button>
                 <button id="next-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Forward">➡</button>
                 <button id="copy-url-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Copy URL of open file">Copy URL</button>
+                <button id="query-history-btn" class="project-action" style="margin-right: 8px; padding: 5px 10px" title="Query version history">History</button>
             </div>
             <div>
                 <div id="tab-bar"></div>
             </div>
 
-            <div id="views-container">
-
+            <div id="main-content">
+                <div id="views-container"></div>
+                <div id="query-history-panel" class="collapsed">
+                    <div id="query-history-header">
+                        <span id="query-history-title">Query History</span>
+                        <span id="query-history-status"></span>
+                        <button id="query-history-close" type="button" title="Close">×</button>
+                    </div>
+                    <div id="query-history-body">
+                        <div id="query-version-list"></div>
+                        <div id="query-version-preview">
+                            <pre id="query-version-preview-text">Select a version to preview SPL.</pre>
+                        </div>
+                    </div>
+                    <div id="query-history-actions">
+                        <input id="query-save-message" type="text" placeholder="Version note (optional)..." />
+                        <button id="query-save-btn" class="query-history-btn" type="button">Save Version</button>
+                        <button id="query-restore-btn" class="query-history-btn secondary" type="button" disabled>Restore</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
