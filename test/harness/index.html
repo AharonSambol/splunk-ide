@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Selection drag test harness</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background: #252526;
+            color: #ccc;
+        }
+
+        #guest {
+            display: flex;
+            width: 640px;
+            height: 420px;
+            border: 1px solid #444;
+            margin: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="outside" style="padding: 16px;">outside</div>
+    <webview id="guest" class="active"></webview>
+    <script>
+        const fs = require('node:fs');
+        const path = require('node:path');
+        const { attachWebviewSelectionDragHandlers } = require('../../lib/webview-selection-drag-handlers');
+        const { attachParentSelectionCleanup } = require('../../lib/parent-selection-cleanup');
+
+        attachParentSelectionCleanup(document);
+
+        const view = document.getElementById('guest');
+        const preloadPath = path.join(__dirname, '../../webview-preload.js');
+        const fixturePath = path.join(__dirname, '../fixtures/ace-editor-mock.html');
+        const injectorCode = [
+            fs.readFileSync(path.join(__dirname, '../../injector-selection-cleanup.js'), 'utf8'),
+        ].join('\n');
+
+        view.setAttribute('preload', `file://${preloadPath}`);
+        view.setAttribute('webpreferences', 'contextIsolation=yes,sandbox=yes');
+        window.__harnessEndSelectionDrag = attachWebviewSelectionDragHandlers(view);
+        view.src = `file://${fixturePath}`;
+
+        window.__harnessTriggerSelectionDragCleanup = () => {
+            window.__harnessEndSelectionDrag();
+        };
+
+        window.__harnessReady = new Promise((resolve) => {
+            view.addEventListener('dom-ready', () => {
+                view.executeJavaScript(injectorCode)
+                    .then(() => resolve(true))
+                    .catch(() => resolve(true));
+            }, { once: true });
+        });
+    </script>
+</body>
+</html>

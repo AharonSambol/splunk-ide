@@ -1,4 +1,22 @@
+const path = require('node:path');
 const { ipcRenderer } = require('electron');
+const {
+    clearAceSelection,
+    recoverFromMissedDrag,
+    resetDragState,
+} = require(path.join(__dirname, 'lib', 'end-ace-selection-drag.js'));
+const { attachSelectionDragTracker } = require(path.join(__dirname, 'lib', 'selection-drag-tracker.js'));
+
+window.__splunkIdeClearSelection = () => clearAceSelection(document);
+window.__splunkIdeRecoverFromMissedDrag = () => recoverFromMissedDrag(document);
+window.__splunkIdeDeselectAceOnPointerExit = window.__splunkIdeRecoverFromMissedDrag;
+window.__splunkIdePointerExited = false;
+window.__splunkIdeDragInProgress = false;
+
+attachSelectionDragTracker(document, {
+    resetDragState: () => resetDragState(document),
+    recoverFromMissedDrag: () => recoverFromMissedDrag(document),
+});
 
 // Capture keydown at the capture phase to observe events before page handlers.
 window.addEventListener('keydown', (e) => {

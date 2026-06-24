@@ -4,8 +4,12 @@
   "main": "main.js",
   "scripts": {
     "start": "electron-forge start",
-    "test": "node --test test/**/*.test.js",
+    "test": "npm run test:unit",
+    "test:unit": "node --test test/**/*.test.js",
     "test:smoke": "playwright test",
+    "test:e2e": "playwright test",
+    "test:ui": "npm run test:unit && npm run test:e2e",
+    "test:syntax": "node --check main.js && node --check renderer.js && node --check webview-preload.js && node --check injector.js && node --check injector-selection-cleanup.js && node --check lib/end-ace-selection-drag.js && node --check lib/webview-selection-drag-handlers.js && node --check lib/parent-selection-cleanup.js && node --check lib/selection-drag-tracker.js",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },

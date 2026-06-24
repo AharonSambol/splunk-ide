@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ace editor mock</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        .ace_editor {
+            min-height: 120px;
+            padding: 12px;
+            border: 1px solid #333;
+            outline: none;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="ace_editor" tabindex="0">index=sourcetype</div>
+    <script>
+        (function () {
+            function createRange(startRow, startCol, endRow, endCol) {
+                return {
+                    start: { row: startRow, column: startCol },
+                    end: { row: endRow, column: endCol },
+                    isEmpty() {
+                        return this.start.row === this.end.row && this.start.column === this.end.column;
+                    },
+                };
+            }
+
+            function createMockEditor(initialText) {
+                const state = {
+                    text: initialText,
+                    selection: createRange(0, 0, 0, 0),
+                };
+
+                const editor = {
+                    session: {
+                        getValue() {
+                            return state.text;
+                        },
+                        setValue(value) {
+                            state.text = value;
+                        },
+                    },
+                    selection: {
+                        moveCursorTo(row, column) {
+                            state.selection = createRange(row, column, row, column);
+                        },
+                    },
+                    $mouseHandler: {
+                        state: '',
+                        $mousedownEvent: null,
+                        onMouseUp() {
+                            this.state = '';
+                            this.$mousedownEvent = null;
+                        },
+                    },
+                    getSelectionRange() {
+                        return createRange(
+                            state.selection.start.row,
+                            state.selection.start.column,
+                            state.selection.end.row,
+                            state.selection.end.column
+                        );
+                    },
+                    clearSelection() {
+                        const end = state.selection.end;
+                        state.selection = createRange(end.row, end.column, end.row, end.column);
+                    },
+                    setSelection(start, end) {
+                        state.selection = createRange(0, start, 0, end);
+                    },
+                    getSelectedText() {
+                        const range = editor.getSelectionRange();
+                        if (range.isEmpty()) return '';
+                        return state.text.slice(range.start.column, range.end.column);
+                    },
+                    insertAtCursor(text) {
+                        const range = editor.getSelectionRange();
+                        const before = state.text.slice(0, range.start.column);
+                        const after = state.text.slice(range.end.column);
+                        state.text = before + text + after;
+                        const cursor = before.length + text.length;
+                        state.selection = createRange(0, cursor, 0, cursor);
+                    },
+                    /**
+                     * Bug model: while Ace thinks a drag-select is active, each typed
+                     * character replaces the current selection instead of appending.
+                     */
+                    typeWhileStuck(text) {
+                        if (!editor.$mouseHandler.state) {
+                            editor.insertAtCursor(text);
+                            return;
+                        }
+
+                        let current = state.text;
+                        for (const char of text) {
+                            const range = editor.getSelectionRange();
+                            const before = current.slice(0, range.start.column);
+                            const after = current.slice(range.end.column);
+                            current = before + char + after;
+                            const endColumn = before.length + 1;
+                            state.selection = createRange(0, range.start.column, 0, endColumn);
+                        }
+                        state.text = current;
+                    },
+                };
+
+                return editor;
+            }
+
+            const aceElement = document.querySelector('.ace_editor');
+            const editor = createMockEditor(aceElement.textContent);
+            aceElement.env = { editor };
+
+            aceElement.addEventListener('mousedown', (event) => {
+                if (editor.$mouseHandler.state) {
+                    return;
+                }
+                const column = Math.max(0, Math.min(editor.session.getValue().length, event.clientX));
+                if (!editor.getSelectionRange().isEmpty()) {
+                    editor.selection.moveCursorTo(0, column);
+                    editor.clearSelection();
+                }
+            });
+
+            aceElement.addEventListener('keydown', (event) => {
+                if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) {
+                    return;
+                }
+                event.preventDefault();
+                editor.typeWhileStuck(event.key);
+                aceElement.textContent = editor.session.getValue();
+            });
+
+            window.__testGetEditorText = () => editor.session.getValue();
+            window.__testGetMouseHandlerState = () => editor.$mouseHandler.state;
+            window.__testGetSelection = () => {
+                const range = editor.getSelectionRange();
+                return {
+                    start: range.start.column,
+                    end: range.end.column,
+                    selectedText: editor.getSelectedText(),
+                };
+            };
+            window.__testResetEditor = (text = 'index=sourcetype') => {
+                editor.session.setValue(text);
+                editor.$mouseHandler.state = '';
+                editor.$mouseHandler.$mousedownEvent = null;
+                editor.clearSelection();
+                aceElement.textContent = text;
+            };
+            window.__testSimulateStuckSelection = (start, end) => {
+                editor.$mouseHandler.state = 'select';
+                editor.$mouseHandler.$mousedownEvent = { button: 0 };
+                editor.setSelection(start, end);
+                aceElement.textContent = editor.session.getValue();
+            };
+            window.__testSetIdleSelection = (start, end) => {
+                editor.$mouseHandler.state = '';
+                editor.$mouseHandler.$mousedownEvent = null;
+                editor.setSelection(start, end);
+                aceElement.textContent = editor.session.getValue();
+            };
+            window.__testType = (text) => {
+                editor.typeWhileStuck(text);
+                aceElement.textContent = editor.session.getValue();
+                return editor.session.getValue();
+            };
+            window.__testSimulateClickAt = (column) => {
+                aceElement.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    clientX: column,
+                    clientY: 10,
+                }));
+                aceElement.dispatchEvent(new MouseEvent('mouseup', {
+                    bubbles: true,
+                    clientX: column,
+                    clientY: 10,
+                }));
+                return window.__testGetSelection();
+            };
+        })();
+    </script>
+</body>
+</html>
