@@ -1,14 +1,49 @@
-let fileCounter = 1;
-let splunk_url;
-try {
-    splunk_url = fs.readFileSync(String.raw`%userprofile%\.splunk`, 'utf8');
-} catch {
-    splunk_url = 'http://localhost:8010/en-US/app/search/search';
-}
-const SPLUNK_URL = splunk_url;
-
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('os');
+// const prompt = require('electron-prompt');
+const { dialog } = require('electron');
+
+const splunkConfigPromptEnterBtn = document.getElementById('splunk-config-prompt-enter');
+const splunkConfigPromptInput = document.getElementById('splunk-config-prompt-input');
+const splunkConfigPrompt = document.getElementById('splunk-config-prompt');
+
+splunkConfigPromptEnterBtn.addEventListener('click', closeCreateSplunkPrompt);
+let SPLUNK_URL = undefined;
+
+
+function closeCreateSplunkPrompt() {
+    userInput = splunkConfigPromptInput.value;
+    console.log(userInput);
+    if (userInput === null) {
+        console.log('User cancelled the prompt.');
+        return null; 
+    }
+    SPLUNK_URL = userInput;
+    const splunkPath = path.join(os.homedir(), '.splunk');
+    fs.writeFileSync(splunkPath, userInput, 'utf8');      
+    splunkConfigPrompt.classList.remove('visible');      
+}
+async function getOrCreateSplunkConfig() {
+    const splunkPath = path.join(os.homedir(), '.splunk');
+
+    try {
+        if (fs.existsSync(splunkPath)) {
+            SPLUNK_URL = fs.readFileSync(splunkPath, 'utf8');
+        } else {
+            splunkConfigPrompt.classList.add('visible');
+        }
+    } catch (error) {
+        console.error('Error handling the .splunk configuration:', error);
+        throw error;
+    }
+}
+
+getOrCreateSplunkConfig();
+
+let fileCounter = 1;
+
+
 const { ipcRenderer } = require('electron');
 const { simpleGit } = require('simple-git');
 
@@ -70,6 +105,7 @@ newFileBtn.addEventListener('click', openNewFileModal);
 newFolderBtn.addEventListener('click', openNewFolderModal);
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
+
 
 // Sidebar tabs
 sidebarTabs.forEach(tab => {
