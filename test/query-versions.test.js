@@ -188,6 +188,28 @@ describe('listVersions', () => {
         assert.equal(versions[1].query, 'index=main');
         assert.match(versions[0].hash, /^[0-9a-f]{40}$/);
     });
+
+    it('returns parentHash when saved with a parent', async () => {
+        await saveVersion(git, relativePath, 'First save');
+        const [parent] = await listVersions(git, relativePath);
+
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        await saveVersion(git, relativePath, 'Child save', parent.hash);
+
+        const versions = await listVersions(git, relativePath);
+        assert.equal(versions.length, 2);
+        assert.equal(versions[0].message, 'Child save');
+        assert.equal(versions[0].parentHash, parent.hash);
+        assert.equal(versions[1].parentHash, undefined);
+    });
+
+    it('omits parentHash for commits without the trailer', async () => {
+        await saveVersion(git, relativePath, 'Standalone save');
+
+        const [version] = await listVersions(git, relativePath);
+        assert.equal(version.message, 'Standalone save');
+        assert.equal(version.parentHash, undefined);
+    });
 });
 
 describe('restoreVersion', () => {
@@ -228,6 +250,19 @@ describe('restoreVersion', () => {
         const log = await git.log({ file: relativePath });
         assert.match(log.latest.message, /Auto-save before restore/);
         assert.equal(log.total, 3);
+    });
+
+    it('records parentHash on auto-save before restore when provided', async () => {
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20dirty');
+        const versions = await listVersions(git, relativePath);
+        const latestHash = versions[0].hash;
+        const firstHash = versions[1].hash;
+
+        await restoreVersion(git, relativePath, firstHash, latestHash);
+
+        const [autoSave] = await listVersions(git, relativePath);
+        assert.match(autoSave.message, /Auto-save before restore/);
+        assert.equal(autoSave.parentHash, latestHash);
     });
 });
 

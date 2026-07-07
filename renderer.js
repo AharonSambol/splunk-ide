@@ -114,6 +114,7 @@ let queryRefreshGeneration = 0;
 let currentQueryText = '';
 let previewMode = 'preview';
 let confirmResolve = null;
+const restoreParentByFileId = new Map();
 
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
@@ -557,6 +558,7 @@ async function loadProject(projectPath) {
     folders = [];
     fileMru = [];
     activeFileId = null;
+    restoreParentByFileId.clear();
     clearOpenTabs();
 
     folders = scanProjectFolders(projectPath);
@@ -906,7 +908,11 @@ function updateNavButtons() {
 // Update nav buttons whenever active tab changes
 const originalSwitchToFile = switchToFile;
 switchToFile = function(targetId) {
+    const prevFileId = activeFileId;
     originalSwitchToFile(targetId);
+    if (prevFileId !== targetId) {
+        selectedVersionHash = null;
+    }
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
     refreshQueryDirtyState(targetId);
     if (!querySidebar.classList.contains('collapsed')) {
@@ -1400,7 +1406,11 @@ function setPreviewMode(mode) {
 }
 
 function renderVersionPreview() {
-    if (previewMode === 'diff' && selectedVersionHash) {
+    if (previewMode === 'diff') {
+        if (!selectedVersionHash) {
+            queryVersionPreviewText.textContent = 'Select a version to diff.';
+            return;
+        }
         const version = queryVersions.find(v => v.hash === selectedVersionHash);
         if (version) {
             const diff = diffLines(version.query || '', currentQueryText || '');
@@ -1415,7 +1425,7 @@ function renderVersionPreview() {
         return;
     }
 
-    queryVersionPreviewText.textContent = currentQueryText || 'Select a version to preview SPL.';
+    queryVersionPreviewText.textContent = currentQueryText || '(empty query)';
 }
 
 function setQueryHistoryPanelOpen(open, { persist = true } = {}) {
@@ -1531,17 +1541,19 @@ async function refreshQueryHistory() {
             return;
         }
 
+        const preservedHash = selectedVersionHash;
         queryVersions = versions;
-        selectedVersionHash = null;
-        queryRestoreBtn.disabled = true;
+        selectedVersionHash = preservedHash && versions.some(v => v.hash === preservedHash)
+            ? preservedHash
+            : null;
+        queryRestoreBtn.disabled = !selectedVersionHash;
         querySaveBtn.disabled = !hasChanges;
         queryHistoryStatus.textContent = hasChanges ? `Unsaved (${status})` : 'Up to date';
         queryHistoryStatus.classList.toggle('dirty', hasChanges);
         currentQueryText = current.query || '';
-        previewMode = 'preview';
-        queryPreviewModeBtns.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.mode === 'preview');
-        });
+        if (!restoreParentByFileId.has(file.id) && versions.length > 0) {
+            restoreParentByFileId.set(file.id, versions[0].hash);
+        }
         renderVersionPreview();
 
         renderQueryVersionList();
@@ -1587,11 +1599,15 @@ function renderQueryVersionList() {
         const meta = document.createElement('div');
         meta.className = 'version-meta';
         const when = new Date(version.date).toLocaleString();
-        meta.textContent = `${version.hash.substring(0, 7)} · ${when}`;
+        const shortHash = version.hash.substring(0, 7);
+        meta.textContent = version.parentHash
+            ? `${shortHash} · parent ${version.parentHash.substring(0, 7)} · ${when}`
+            : `${shortHash} · ${when}`;
 
         item.appendChild(label);
         item.appendChild(meta);
         item.addEventListener('click', () => selectQueryVersion(version));
+        item.addEventListener('dblclick', () => restoreQueryVersion(version.hash, { confirm: false }));
         queryVersionList.appendChild(item);
     });
 }
@@ -1618,7 +1634,8 @@ async function saveQueryVersion() {
 
     try {
         querySaveBtn.disabled = true;
-        const result = await saveVersion(currentGit, relativePath, label);
+        const parentHash = restoreParentByFileId.get(file.id);
+        const result = await saveVersion(currentGit, relativePath, label, parentHash);
         if (!result.saved) {
             queryHistoryStatus.textContent = 'No changes to save';
             queryHistoryStatus.classList.remove('dirty');
@@ -1626,6 +1643,11 @@ async function saveQueryVersion() {
         }
         querySaveMessage.value = '';
         await refreshQueryHistory();
+        if (queryVersions.length > 0) {
+            restoreParentByFileId.set(file.id, queryVersions[0].hash);
+        } else {
+            restoreParentByFileId.delete(file.id);
+        }
     } catch (err) {
         queryHistoryStatus.textContent = `Save failed: ${err.message}`;
         queryHistoryStatus.classList.add('dirty');
@@ -1634,29 +1656,33 @@ async function saveQueryVersion() {
     }
 }
 
-async function restoreSelectedVersion() {
+async function restoreQueryVersion(hash, { confirm = true } = {}) {
     const file = getActiveFile();
-    if (!file || !currentGit || !selectedVersionHash) {
+    if (!file || !currentGit || !hash) {
         return;
     }
 
-    const version = queryVersions.find(v => v.hash === selectedVersionHash);
+    const version = queryVersions.find(v => v.hash === hash);
     if (!version) {
         return;
     }
 
-    const confirmed = await showConfirmModal({
-        title: 'Restore version',
-        body: `Restore "${file.name.split('/').pop()}" to version from ${new Date(version.date).toLocaleString()}?\n\nThis replaces the current query.`
-    });
-    if (!confirmed) {
-        return;
+    if (confirm) {
+        const confirmed = await showConfirmModal({
+            title: 'Restore version',
+            body: `Restore "${file.name.split('/').pop()}" to version from ${new Date(version.date).toLocaleString()}?\n\nThis replaces the current query.`
+        });
+        if (!confirmed) {
+            return;
+        }
     }
+
+    selectedVersionHash = hash;
 
     try {
         queryRestoreBtn.disabled = true;
         const relativePath = getRelativePath(file);
-        const restored = await restoreVersion(currentGit, relativePath, selectedVersionHash);
+        const restored = await restoreVersion(currentGit, relativePath, hash, restoreParentByFileId.get(file.id));
         file.url = restored.url;
         fs.writeFileSync(file.path, restored.url, 'utf8');
 
@@ -1665,6 +1691,7 @@ async function restoreSelectedVersion() {
             view.src = restored.url;
         }
 
+        restoreParentByFileId.set(file.id, hash);
         onQueryFileChanged(file.id, { refreshHistory: true });
         await refreshQueryHistory();
     } catch (err) {
@@ -1673,6 +1700,10 @@ async function restoreSelectedVersion() {
     } finally {
         queryRestoreBtn.disabled = !selectedVersionHash;
     }
+}
+
+async function restoreSelectedVersion() {
+    await restoreQueryVersion(selectedVersionHash, { confirm: true });
 }
 
 // Handle commands from main process context menu (Select All, etc.)
