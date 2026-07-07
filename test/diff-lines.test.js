@@ -35,4 +35,24 @@ describe('renderDiffHtml', () => {
         assert.match(html, /&lt;script&gt;/);
         assert.doesNotMatch(html, /<script>/);
     });
+
+    it('highlights changed tokens inline for similar line pairs', () => {
+        const html = renderDiffHtml([
+            { type: 'removed', text: '| stats count' },
+            { type: 'added', text: '| stats avg' },
+        ]);
+        assert.match(html, /<span class="diff-removed">count<\/span>/);
+        assert.match(html, /<span class="diff-added">avg<\/span>/);
+        assert.match(html, /\| stats /);
+    });
+
+    it('keeps whole-line rendering when lines do not share tokens', () => {
+        const html = renderDiffHtml([
+            { type: 'removed', text: 'index=main' },
+            { type: 'added', text: 'error=timeout' },
+        ]);
+        assert.doesNotMatch(html, /<span class="diff-removed">index=main<\/span>/);
+        assert.match(html, /diff-removed">- index=main</);
+        assert.match(html, /diff-added">\+ error=timeout</);
+    });
 });

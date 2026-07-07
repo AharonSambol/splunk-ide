@@ -39,7 +39,8 @@ const {
     readCurrentQuery,
     saveVersion,
     restoreVersion,
-    renameQueryFile
+    renameQueryFile,
+    consumeAutoSave
 } = require('./lib/query-versions');
 const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
@@ -61,6 +62,10 @@ const projectNameLabel = document.getElementById('project-name');
 const tabBar = document.getElementById('tab-bar');
 const viewsContainer = document.getElementById('views-container');
 const explorer = document.getElementById('explorer');
+const sidebar = document.getElementById('sidebar');
+const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
+const sidebarReopenBtn = document.getElementById('sidebar-reopen');
+const querySidebarResize = document.getElementById('query-sidebar-resize');
 const quickSearchOverlay = document.getElementById('quick-search-overlay');
 const quickSearchHint = document.getElementById('quick-search-hint');
 const quickSearchInput = document.getElementById('quick-search-input');
@@ -94,6 +99,11 @@ const statusSave = document.getElementById('status-save');
 const statusVersions = document.getElementById('status-versions');
 
 const QUERY_SIDEBAR_COLLAPSED_KEY = 'splunk-ide-query-sidebar-collapsed';
+const QUERY_SIDEBAR_WIDTH_KEY = 'splunk-ide-query-sidebar-width';
+const PROJECT_SIDEBAR_COLLAPSED_KEY = 'splunk-ide-project-sidebar-collapsed';
+const QUERY_SIDEBAR_MIN_WIDTH = 220;
+const QUERY_SIDEBAR_MAX_WIDTH = 560;
+const QUERY_SIDEBAR_DEFAULT_WIDTH = 320;
 
 let files = [];
 let folders = [];
@@ -125,6 +135,8 @@ newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
 
 queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false));
+sidebarCollapseBtn.addEventListener('click', () => setProjectSidebarCollapsed(true));
+sidebarReopenBtn.addEventListener('click', () => setProjectSidebarCollapsed(false));
 querySaveBtn.addEventListener('click', saveQueryVersion);
 queryRestoreBtn.addEventListener('click', restoreSelectedVersion);
 queryPreviewModeBtns.forEach(btn => {
@@ -160,6 +172,7 @@ quickSearchInput.addEventListener('input', updateQuickSearchResults);
 quickSearchInput.addEventListener('keydown', handleQuickSearchKeydown);
 
 window.onload = () => {
+    initializeLayoutControls();
     updateProjectDisplay();
 };
 
@@ -1428,6 +1441,59 @@ function renderVersionPreview() {
     queryVersionPreviewText.textContent = currentQueryText || '(empty query)';
 }
 
+function clampQuerySidebarWidth(width) {
+    return Math.min(QUERY_SIDEBAR_MAX_WIDTH, Math.max(QUERY_SIDEBAR_MIN_WIDTH, width));
+}
+
+function applyQuerySidebarWidth(width, { persist = true } = {}) {
+    const clamped = clampQuerySidebarWidth(width);
+    querySidebar.style.width = `${clamped}px`;
+    if (persist) {
+        localStorage.setItem(QUERY_SIDEBAR_WIDTH_KEY, String(clamped));
+    }
+    return clamped;
+}
+
+function initializeQuerySidebarResize() {
+    const saved = Number.parseInt(localStorage.getItem(QUERY_SIDEBAR_WIDTH_KEY), 10);
+    applyQuerySidebarWidth(Number.isFinite(saved) ? saved : QUERY_SIDEBAR_DEFAULT_WIDTH, { persist: false });
+
+    querySidebarResize.addEventListener('mousedown', event => {
+        if (querySidebar.classList.contains('collapsed')) {
+            return;
+        }
+        event.preventDefault();
+        const startX = event.clientX;
+        const startWidth = querySidebar.offsetWidth;
+
+        const onMouseMove = moveEvent => {
+            applyQuerySidebarWidth(startWidth + (startX - moveEvent.clientX));
+        };
+        const onMouseUp = () => {
+            querySidebarResize.classList.remove('dragging');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        querySidebarResize.classList.add('dragging');
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+}
+
+function setProjectSidebarCollapsed(collapsed, { persist = true } = {}) {
+    sidebar.classList.toggle('collapsed', collapsed);
+    sidebarReopenBtn.classList.toggle('visible', collapsed);
+    if (persist) {
+        localStorage.setItem(PROJECT_SIDEBAR_COLLAPSED_KEY, String(collapsed));
+    }
+}
+
+function initializeLayoutControls() {
+    initializeQuerySidebarResize();
+    setProjectSidebarCollapsed(localStorage.getItem(PROJECT_SIDEBAR_COLLAPSED_KEY) === 'true', { persist: false });
+}
+
 function setQueryHistoryPanelOpen(open, { persist = true } = {}) {
     querySidebar.classList.toggle('collapsed', !open);
     if (persist) {
@@ -1571,6 +1637,17 @@ async function refreshQueryHistory() {
     }
 }
 
+function getTrackedBaseHash() {
+    const file = getActiveFile();
+    return file ? restoreParentByFileId.get(file.id) : null;
+}
+
+function applyVersionRowClasses(item, hash) {
+    const trackedHash = getTrackedBaseHash();
+    item.classList.toggle('selected', hash === selectedVersionHash);
+    item.classList.toggle('tracked-base', !!trackedHash && hash === trackedHash);
+}
+
 function renderQueryVersionList() {
     queryVersionList.innerHTML = '';
 
@@ -1587,9 +1664,7 @@ function renderQueryVersionList() {
         const item = document.createElement('div');
         item.className = 'query-version-item';
         item.dataset.hash = version.hash;
-        if (version.hash === selectedVersionHash) {
-            item.classList.add('selected');
-        }
+        applyVersionRowClasses(item, version.hash);
 
         const label = document.createElement('div');
         label.className = 'version-label';
@@ -1616,7 +1691,7 @@ function selectQueryVersion(version) {
     selectedVersionHash = version.hash;
     queryRestoreBtn.disabled = false;
     queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
-        item.classList.toggle('selected', item.dataset.hash === version.hash);
+        applyVersionRowClasses(item, item.dataset.hash);
     });
     renderVersionPreview();
 }
@@ -1682,7 +1757,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
     try {
         queryRestoreBtn.disabled = true;
         const relativePath = getRelativePath(file);
-        const restored = await restoreVersion(currentGit, relativePath, hash, restoreParentByFileId.get(file.id));
+        const restored = await restoreVersion(
+            currentGit,
+            relativePath,
+            hash,
+            restoreParentByFileId.get(file.id),
+            { skipAutoSave: !!version.isAutoSave }
+        );
         file.url = restored.url;
         fs.writeFileSync(file.path, restored.url, 'utf8');
 
@@ -1691,7 +1772,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             view.src = restored.url;
         }
 
-        restoreParentByFileId.set(file.id, hash);
+        if (version.isAutoSave) {
+            await consumeAutoSave(currentGit, hash);
+            restoreParentByFileId.set(file.id, version.parentHash || hash);
+            selectedVersionHash = null;
+        } else {
+            restoreParentByFileId.set(file.id, hash);
+        }
         onQueryFileChanged(file.id, { refreshHistory: true });
         await refreshQueryHistory();
     } catch (err) {

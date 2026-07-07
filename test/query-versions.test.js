@@ -7,7 +7,8 @@ const {
     listVersions,
     restoreVersion,
     readCurrentQuery,
-    renameQueryFile
+    renameQueryFile,
+    consumeAutoSave
 } = require('../lib/query-versions');
 const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('./helpers/temp-git-repo');
 
@@ -263,6 +264,53 @@ describe('restoreVersion', () => {
         const [autoSave] = await listVersions(git, relativePath);
         assert.match(autoSave.message, /Auto-save before restore/);
         assert.equal(autoSave.parentHash, latestHash);
+    });
+
+    it('marks auto-save before restore with isAutoSave', async () => {
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20dirty');
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+
+        await restoreVersion(git, relativePath, firstHash);
+
+        const [autoSave] = await listVersions(git, relativePath);
+        assert.equal(autoSave.isAutoSave, true);
+        assert.equal(autoSave.isConsumedAutoSave, undefined);
+    });
+
+    it('hides consumed auto-save from listVersions by default', async () => {
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20dirty');
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+
+        await restoreVersion(git, relativePath, firstHash);
+
+        const beforeConsume = await listVersions(git, relativePath);
+        assert.equal(beforeConsume.length, 3);
+        const autoSaveHash = beforeConsume[0].hash;
+
+        await consumeAutoSave(git, autoSaveHash);
+
+        const afterConsume = await listVersions(git, relativePath);
+        assert.equal(afterConsume.length, 2);
+        assert.ok(!afterConsume.some(version => version.hash === autoSaveHash));
+
+        const withConsumed = await listVersions(git, relativePath, 30, { includeConsumedAutoSaves: true });
+        const consumed = withConsumed.find(version => version.hash === autoSaveHash);
+        assert.equal(consumed.isAutoSave, true);
+        assert.equal(consumed.isConsumedAutoSave, true);
+    });
+
+    it('can restore without creating an auto-save when requested', async () => {
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20dirty');
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+
+        await restoreVersion(git, relativePath, firstHash, undefined, { skipAutoSave: true });
+
+        const afterRestore = await listVersions(git, relativePath);
+        assert.equal(afterRestore.length, 2);
+        assert.equal(afterRestore.some(version => version.isAutoSave), false);
     });
 });
 

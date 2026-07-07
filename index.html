@@ -28,6 +28,49 @@
             border-right: 1px solid #333;
             display: flex;
             flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        #sidebar.collapsed {
+            display: none;
+        }
+
+        #sidebar-reopen {
+            display: none;
+            flex-shrink: 0;
+            width: 28px;
+            background: #252526;
+            border: none;
+            border-right: 1px solid #333;
+            color: #9cdcfe;
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 0;
+        }
+
+        #sidebar-reopen.visible {
+            display: block;
+        }
+
+        #sidebar-reopen:hover {
+            background: #2d2d30;
+            color: #fff;
+        }
+
+        #sidebar-collapse-btn {
+            background: transparent;
+            border: none;
+            color: #8a8a8a;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        #sidebar-collapse-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
         }
 
         #sidebar-header {
@@ -63,10 +106,26 @@
             flex-direction: column;
             overflow: hidden;
             flex-shrink: 0;
+            position: relative;
         }
 
         #query-sidebar.collapsed {
             display: none;
+        }
+
+        #query-sidebar-resize {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            cursor: col-resize;
+            z-index: 2;
+        }
+
+        #query-sidebar-resize:hover,
+        #query-sidebar-resize.dragging {
+            background: #007acc;
         }
 
         #query-history-header {
@@ -128,9 +187,39 @@
             font-size: 0.85rem;
         }
 
-        .query-version-item:hover,
+        .query-version-item:hover {
+            background: #1a3a52;
+        }
+
         .query-version-item.selected {
             background: #094771;
+        }
+
+        .query-version-item.tracked-base {
+            border-left: 3px solid #cca700;
+            padding-left: 9px;
+            background: rgba(204, 167, 0, 0.08);
+        }
+
+        .query-version-item.tracked-base:hover {
+            background: rgba(204, 167, 0, 0.15);
+        }
+
+        .query-version-item.selected.tracked-base {
+            background: #094771;
+            box-shadow: inset 0 0 0 2px #cca700;
+        }
+
+        .query-version-item.tracked-base .version-label::after {
+            content: 'Base';
+            margin-left: 6px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: #cca700;
+            background: rgba(204, 167, 0, 0.15);
+            vertical-align: middle;
         }
 
         .query-version-item .version-label {
@@ -768,10 +857,12 @@
 
 <body>
     <div id="app-shell">
+        <button id="sidebar-reopen" type="button" title="Show file explorer">▶</button>
         <aside id="sidebar">
             <div id="sidebar-header">
                 <span>File Explorer</span>
                 <span>
+                    <button id="sidebar-collapse-btn" type="button" title="Hide file explorer">◀</button>
                     <button id="new-folder-btn" disabled>
                         <svg viewBox="0 0 24 24" width="35" height="35">
                             <path
@@ -809,6 +900,7 @@
         </div>
 
         <aside id="query-sidebar" class="collapsed">
+            <div id="query-sidebar-resize" title="Drag to resize"></div>
             <div id="query-history-header">
                 <span id="query-history-title">Query History</span>
                 <span id="query-history-status"></span>
