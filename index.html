@@ -462,6 +462,12 @@
             display: inline-flex;
             gap: 4px;
             margin-left: 12px;
+            opacity: 0;
+        }
+
+        .explorer-item:hover .file-actions,
+        .explorer-item.active .file-actions {
+            opacity: 1;
         }
 
         .explorer-item .file-action {
@@ -857,37 +863,29 @@
 
 <body>
     <div id="app-shell">
-        <button id="sidebar-reopen" type="button" title="Show file explorer">▶</button>
+        <button id="sidebar-reopen" type="button" title="Show searches">▶</button>
         <aside id="sidebar">
             <div id="sidebar-header">
-                <span>File Explorer</span>
+                <span>Searches</span>
                 <span>
-                    <button id="sidebar-collapse-btn" type="button" title="Hide file explorer">◀</button>
-                    <button id="new-folder-btn" disabled>
+                    <button id="sidebar-collapse-btn" type="button" title="Hide searches">◀</button>
+                    <button id="new-file-btn" disabled title="New Search">
                         <svg viewBox="0 0 24 24" width="35" height="35">
                             <path
-                                d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2m-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3z">
-                            </path>
-                        </svg>
-                    </button>
-                    <button id="new-file-btn" disabled>
-                        <svg viewBox="0 0 24 24" width="35" height="35">
-                            <path
-                                d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8zm2 14h-3v3h-2v-3H8v-2h3v-3h2v3h3zm-3-7V3.5L18.5 9z">
+                                d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z">
                             </path>
                         </svg>
                     </button>
                 </span>
             </div>
             <div id="explorer"></div>
-            <div id="explorer-footer">Press Shift twice to search files.</div>
         </aside>
 
         <div id="main-area">
             <div id="header">
-                <button id="new-project-btn" class="project-action" style="padding: 5px 15px">New Project</button>
-                <button id="open-project-btn" class="project-action" style="padding: 5px 15px">Open Project</button>
-                <div id="project-name">No project loaded</div>
+                <button id="new-project-btn" class="project-action" style="padding: 5px 15px" hidden>New Project</button>
+                <button id="open-project-btn" class="project-action" style="padding: 5px 15px" hidden>Open Project</button>
+                <div id="project-name" hidden>No project loaded</div>
                 <button id="prev-page-btn" class="project-action" style="margin-left: auto; font-size:larger; padding: 0 10px" title="Back">⬅</button>
                 <button id="next-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Forward">➡</button>
                 <button id="copy-url-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Copy URL of open file">Copy URL</button>

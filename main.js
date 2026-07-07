@@ -72,6 +72,7 @@ if (require('electron-squirrel-startup')) return;
 
 
 const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, webContents } = require('electron');
+const fs = require('node:fs');
 const path = require('node:path');
 const { createContextMenuTemplate } = require('./lib/main/context-menu');
 const { findInPage, stopFindInPage } = require('./lib/main/find-in-page');
@@ -85,6 +86,12 @@ const { findInPage, stopFindInPage } = require('./lib/main/find-in-page');
 
 ipcMain.handle('select-project-folder', async (event, options) => {
     return dialog.showOpenDialog(options);
+});
+
+ipcMain.handle('get-default-workspace', () => {
+    const workspacePath = path.join(app.getPath('userData'), 'searches');
+    fs.mkdirSync(workspacePath, { recursive: true });
+    return workspacePath;
 });
 
 ipcMain.handle('show-context-menu', async (event, info) => {

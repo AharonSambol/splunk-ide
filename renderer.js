@@ -52,7 +52,6 @@ const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
 attachParentSelectionCleanup(document);
 
 const newFileBtn = document.getElementById('new-file-btn');
-const newFolderBtn = document.getElementById('new-folder-btn');
 const newProjectBtn = document.getElementById('new-project-btn');
 const openProjectBtn = document.getElementById('open-project-btn');
 const copyUrlBtn = document.getElementById('copy-url-btn');
@@ -130,7 +129,6 @@ newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
 copyUrlBtn.addEventListener('click', copyActiveFileUrl);
 newFileBtn.addEventListener('click', openNewFileModal);
-newFolderBtn.addEventListener('click', openNewFolderModal);
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
 
@@ -171,10 +169,31 @@ document.addEventListener('keydown', handleGlobalKeydown);
 quickSearchInput.addEventListener('input', updateQuickSearchResults);
 quickSearchInput.addEventListener('keydown', handleQuickSearchKeydown);
 
-window.onload = () => {
+window.onload = async () => {
     initializeLayoutControls();
-    updateProjectDisplay();
+    const workspacePath = await ipcRenderer.invoke('get-default-workspace');
+    await loadProject(workspacePath);
+    if (files.length === 0) {
+        createNewFile('Search 1');
+    } else {
+        openStartupSearch();
+    }
 };
+
+function openStartupSearch() {
+    let fileId = fileMru.find(id => files.some(file => file.id === id));
+    if (!fileId) {
+        const sorted = [...files].sort((a, b) => {
+            const aMtime = fs.statSync(a.path).mtimeMs;
+            const bMtime = fs.statSync(b.path).mtimeMs;
+            return bMtime - aMtime;
+        });
+        fileId = sorted[0]?.id;
+    }
+    if (fileId) {
+        openFile(fileId);
+    }
+}
 
 function copyActiveFileUrl() {
     if (!activeFileId) {
@@ -596,15 +615,13 @@ function clearOpenTabs() {
 function updateProjectDisplay() {
     projectNameLabel.textContent = currentProjectPath ? currentProjectName : 'No project loaded';
     projectNameLabel.title = currentProjectPath || '';
-    const disabled = !currentProjectPath;
-    newFileBtn.disabled = disabled;
-    newFolderBtn.disabled = disabled;
+    newFileBtn.disabled = !currentProjectPath;
 }
 
 function openNewFileModal() {
     modalMode = 'create';
     modalTargetFileId = null;
-    newFileModalLabel.textContent = 'New Search File Name';
+    newFileModalLabel.textContent = 'New Search';
     newFileModalInput.value = `Search ${fileCounter}`;
     showNewFileModal();
 }
@@ -640,10 +657,9 @@ function showNewFileModal() {
         newFileFolderRow.style.display = 'block';
         newFileModalInput.disabled = true;
     } else {
-        newFileModalLabel.textContent = 'New Search File Name';
-        newFileFolderRow.style.display = 'block';
+        newFileModalLabel.textContent = 'New Search';
+        newFileFolderRow.style.display = 'none';
         newFileModalInput.disabled = false;
-        populateFolderSelect('');
     }
 
     if (modalMode === 'rename') {
@@ -679,7 +695,7 @@ function confirmNewFileCreation() {
     } else if (modalMode === 'move' && modalTargetFileId) {
         moveFile(modalTargetFileId, selectedFolder);
     } else {
-        createNewFile(name, selectedFolder);
+        createNewFile(name);
     }
     closeNewFileModal();
 }
@@ -1088,17 +1104,62 @@ function handleKeyboardShortcut(d) {
 }
 
 function updateExplorer() {
-    const root = buildFileTree(files, folders);
-    renderExplorer(explorer, root, {
-        activeFileId,
-        isEmpty: files.length === 0 && folders.length === 0,
-    }, {
-        onFileClick: openFile,
-        onFileDblClick: openRenameModal,
-        onFileMove: openMoveFileModal,
-        onFileDelete: deleteFile,
-        onFolderDelete: deleteFolder,
+    explorer.innerHTML = '';
+
+    if (files.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'explorer-item';
+        empty.textContent = 'No searches yet. Click + to create one.';
+        explorer.appendChild(empty);
+        return;
+    }
+
+    const sorted = [...files].sort((a, b) => {
+        const aName = a.name.split('/').pop();
+        const bName = b.name.split('/').pop();
+        return aName.localeCompare(bName, undefined, { sensitivity: 'base' });
     });
+
+    sorted.forEach(file => {
+        explorer.appendChild(renderFileNode({
+            ...file,
+            displayName: file.name.split('/').pop()
+        }));
+    });
+}
+
+function renderFileNode(file) {
+    const item = document.createElement('div');
+    item.className = 'explorer-item';
+    item.dataset.fileId = file.id;
+
+    const label = document.createElement('span');
+    label.className = 'file-name';
+    label.textContent = file.displayName || file.name;
+
+    const actions = document.createElement('span');
+    actions.className = 'file-actions';
+
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'file-action file-delete';
+    deleteButton.type = 'button';
+    deleteButton.title = 'Delete';
+    deleteButton.textContent = '×';
+    deleteButton.addEventListener('click', event => {
+        event.stopPropagation();
+        deleteFile(file.id);
+    });
+
+    actions.appendChild(deleteButton);
+
+    item.appendChild(label);
+    item.appendChild(actions);
+    item.addEventListener('click', () => openFile(file.id));
+    item.addEventListener('dblclick', () => openRenameModal(file));
+    if (file.id === activeFileId) {
+        item.classList.add('active');
+    }
+    return item;
 }
 
 function handleGlobalKeydown(event) {
