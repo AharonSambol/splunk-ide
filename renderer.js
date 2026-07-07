@@ -126,6 +126,7 @@ let currentQueryText = '';
 let previewMode = 'preview';
 let confirmResolve = null;
 const restoreParentByFileId = new Map();
+const forcedDraftByFileId = new Set();
 
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
@@ -593,6 +594,7 @@ async function loadProject(projectPath) {
     fileMru = [];
     activeFileId = null;
     restoreParentByFileId.clear();
+    forcedDraftByFileId.clear();
     clearOpenTabs();
 
     folders = scanProjectFolders(projectPath);
@@ -1634,17 +1636,18 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
     try {
         const relativePath = getRelativePath(file);
         const { hasChanges } = await getFileStatus(currentGit, relativePath);
+        const effectiveHasChanges = hasChanges || forcedDraftByFileId.has(fileId);
         if (generation !== queryRefreshGeneration && fileId !== activeFileId) {
             return;
         }
-        tab.classList.toggle('dirty', hasChanges);
+        tab.classList.toggle('dirty', effectiveHasChanges);
         if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
-            queryHistoryStatus.textContent = hasChanges ? 'Unsaved changes' : 'Up to date';
-            queryHistoryStatus.classList.toggle('dirty', hasChanges);
-            querySaveBtn.disabled = !hasChanges;
+            queryHistoryStatus.textContent = effectiveHasChanges ? 'Unsaved changes' : 'Up to date';
+            queryHistoryStatus.classList.toggle('dirty', effectiveHasChanges);
+            querySaveBtn.disabled = !effectiveHasChanges;
         }
         if (fileId === activeFileId) {
-            updateStatusBar({ hasChanges });
+            updateStatusBar({ hasChanges: effectiveHasChanges });
         }
     } catch {
         tab.classList.remove('dirty');
@@ -1686,16 +1689,16 @@ async function refreshQueryHistory() {
 
         const preservedHash = selectedVersionHash;
         queryVersions = versions;
-        queryHasUnsavedChanges = hasChanges;
-        selectedVersionHash = preservedHash === DRAFT_VERSION_HASH && hasChanges
+        queryHasUnsavedChanges = hasChanges || forcedDraftByFileId.has(file.id);
+        selectedVersionHash = preservedHash === DRAFT_VERSION_HASH && queryHasUnsavedChanges
             ? DRAFT_VERSION_HASH
             : preservedHash && versions.some(v => v.hash === preservedHash)
                 ? preservedHash
                 : null;
         queryRestoreBtn.disabled = !selectedVersionHash || selectedVersionHash === DRAFT_VERSION_HASH;
-        querySaveBtn.disabled = !hasChanges;
-        queryHistoryStatus.textContent = hasChanges ? `Unsaved (${status})` : 'Up to date';
-        queryHistoryStatus.classList.toggle('dirty', hasChanges);
+        querySaveBtn.disabled = !queryHasUnsavedChanges;
+        queryHistoryStatus.textContent = queryHasUnsavedChanges ? `Unsaved (${status})` : 'Up to date';
+        queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
         currentQueryText = current.query || '';
         if (!restoreParentByFileId.has(file.id) && versions.length > 0) {
             restoreParentByFileId.set(file.id, versions[0].hash);
@@ -1705,7 +1708,7 @@ async function refreshQueryHistory() {
         renderQueryVersionList();
         await refreshQueryDirtyState(file.id);
         updateStatusBar({
-            hasChanges,
+            hasChanges: queryHasUnsavedChanges,
             status,
             versionCount: versions.length
         });
@@ -1833,6 +1836,7 @@ async function saveQueryVersion() {
             queryHistoryStatus.classList.remove('dirty');
             return;
         }
+        forcedDraftByFileId.delete(file.id);
         querySaveMessage.value = '';
         await refreshQueryHistory();
         if (queryVersions.length > 0) {
@@ -1875,6 +1879,7 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         queryRestoreBtn.disabled = true;
         const relativePath = getRelativePath(file);
         const trackedHash = restoreParentByFileId.get(file.id);
+        const headHash = version.isAutoSave ? (await currentGit.revparse(['HEAD'])).trim() : '';
         const restored = await restoreVersion(
             currentGit,
             relativePath,
@@ -1892,9 +1897,14 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
 
         if (version.isAutoSave) {
             await consumeAutoSave(currentGit, hash);
-            restoreParentByFileId.set(file.id, version.parentHash || hash);
-            selectedVersionHash = null;
+            if (hash === headHash) {
+                await currentGit.raw(['reset', '--mixed', `${hash}^`]);
+            }
+            restoreParentByFileId.set(file.id, version.parentHash || trackedHash || hash);
+            forcedDraftByFileId.add(file.id);
+            selectedVersionHash = DRAFT_VERSION_HASH;
         } else {
+            forcedDraftByFileId.delete(file.id);
             restoreParentByFileId.set(file.id, hash);
         }
         onQueryFileChanged(file.id, { refreshHistory: true });
