@@ -34,18 +34,19 @@ const {
     moveQuickSearchSelection,
 } = require('./lib/quick-search');
 const {
-    ensureRepo,
     getFileStatus,
     listVersions,
     readCurrentQuery,
     saveVersion,
-    restoreVersion
+    restoreVersion,
+    renameQueryFile
 } = require('./lib/query-versions');
 const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
 const { renderQuickSearchResults } = require('./lib/render-quick-search');
 const { attachWebviewSelectionDragHandlers } = require('./lib/webview-selection-drag-handlers');
 const { attachParentSelectionCleanup } = require('./lib/parent-selection-cleanup');
+const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
 
 attachParentSelectionCleanup(document);
 
@@ -73,16 +74,26 @@ const newFileCreateBtn = document.getElementById('new-file-create');
 const newFileCancelBtn = document.getElementById('new-file-cancel');
 
 // Query history elements
-const queryHistoryBtn = document.getElementById('query-history-btn');
-const queryHistoryPanel = document.getElementById('query-history-panel');
+const querySidebar = document.getElementById('query-sidebar');
 const queryHistoryTitle = document.getElementById('query-history-title');
 const queryHistoryStatus = document.getElementById('query-history-status');
 const queryHistoryClose = document.getElementById('query-history-close');
 const queryVersionList = document.getElementById('query-version-list');
 const queryVersionPreviewText = document.getElementById('query-version-preview-text');
+const queryPreviewModeBtns = document.querySelectorAll('.preview-mode-btn');
 const querySaveMessage = document.getElementById('query-save-message');
 const querySaveBtn = document.getElementById('query-save-btn');
 const queryRestoreBtn = document.getElementById('query-restore-btn');
+const confirmModal = document.getElementById('confirm-modal');
+const confirmModalTitle = document.getElementById('confirm-modal-title');
+const confirmModalBody = document.getElementById('confirm-modal-body');
+const confirmCancelBtn = document.getElementById('confirm-cancel');
+const confirmOkBtn = document.getElementById('confirm-ok');
+const statusFile = document.getElementById('status-file');
+const statusSave = document.getElementById('status-save');
+const statusVersions = document.getElementById('status-versions');
+
+const QUERY_SIDEBAR_COLLAPSED_KEY = 'splunk-ide-query-sidebar-collapsed';
 
 let files = [];
 let folders = [];
@@ -99,6 +110,10 @@ let modalTargetFileId = null;
 let currentGit = null;
 let queryVersions = [];
 let selectedVersionHash = null;
+let queryRefreshGeneration = 0;
+let currentQueryText = '';
+let previewMode = 'preview';
+let confirmResolve = null;
 
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
@@ -108,10 +123,27 @@ newFolderBtn.addEventListener('click', openNewFolderModal);
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
 
-queryHistoryBtn.addEventListener('click', toggleQueryHistoryPanel);
 queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false));
 querySaveBtn.addEventListener('click', saveQueryVersion);
 queryRestoreBtn.addEventListener('click', restoreSelectedVersion);
+queryPreviewModeBtns.forEach(btn => {
+    btn.addEventListener('click', () => setPreviewMode(btn.dataset.mode));
+});
+confirmCancelBtn.addEventListener('click', () => closeConfirmModal(false));
+confirmOkBtn.addEventListener('click', () => closeConfirmModal(true));
+confirmModal.addEventListener('keydown', event => {
+    if (!confirmModal.classList.contains('visible')) {
+        return;
+    }
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeConfirmModal(false);
+    }
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        closeConfirmModal(true);
+    }
+});
 newFileModalInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
         event.preventDefault();
@@ -199,6 +231,7 @@ function createFileWithUrl(name, url, parentFolder = '') {
     createView(file);
     updateExplorer();
     switchToFile(fileId);
+    onQueryFileChanged(fileId);
 }
 
 function createNewFile(name, parentFolder = '') {
@@ -230,6 +263,7 @@ function createNewFile(name, parentFolder = '') {
     createView(file);
     updateExplorer();
     switchToFile(fileId);
+    onQueryFileChanged(fileId);
 }
 
 function createNewFolder(name, parentFolder = '') {
@@ -418,7 +452,7 @@ function saveFileUrl(fileId) {
         if (url && url !== file.url) {
             file.url = url;
             fs.writeFileSync(file.path, url, 'utf8');
-            refreshQueryDirtyState(fileId);
+            onQueryFileChanged(fileId, { refreshHistory: true });
         }
     }
 }
@@ -456,7 +490,7 @@ function openMoveFileModal(file) {
     showNewFileModal();
 }
 
-function moveFile(fileId, targetFolder) {
+async function moveFile(fileId, targetFolder) {
     const file = files.find(f => f.id === fileId);
     if (!file) {
         return;
@@ -464,18 +498,25 @@ function moveFile(fileId, targetFolder) {
 
     const newPath = getMoveTargetPath(currentProjectPath, file.name, targetFolder, path);
     const oldPath = file.path;
+    const oldRelative = getRelativePath(file);
 
     if (newPath === oldPath) {
         return;
     }
 
-    ensureDirectoryExists(path.dirname(newPath));
-    fs.renameSync(oldPath, newPath);
+    if (currentGit) {
+        await renameQueryFile(currentGit, currentProjectPath, oldRelative, path.relative(currentProjectPath, newPath).split(path.sep).join('/'));
+    } else {
+        ensureDirectoryExists(path.dirname(newPath));
+        fs.renameSync(oldPath, newPath);
+    }
+
     file.name = path.relative(currentProjectPath, newPath).replace(/\.spl$/i, '').split(path.sep).join('/');
     file.path = newPath;
     const movedParent = getFileFolder(file.name);
     if (movedParent) addFolderForPath(movedParent);
     updateExplorer();
+    onQueryFileChanged(fileId, { refreshHistory: true });
 }
 
 async function createNewProject() {
@@ -628,7 +669,7 @@ function confirmNewFileCreation() {
     closeNewFileModal();
 }
 
-function renameFile(fileId, newName) {
+async function renameFile(fileId, newName) {
     const file = files.find(f => f.id === fileId);
     if (!file) {
         return;
@@ -639,9 +680,35 @@ function renameFile(fileId, newName) {
         return;
     }
 
-    file.name = trimmed;
+    const folder = getFileFolder(file.name);
+    const baseName = trimmed.includes('/') ? trimmed.split('/').pop() : trimmed;
+    const newRelativeName = folder && !trimmed.includes('/')
+        ? `${folder}/${baseName}`
+        : trimmed.replaceAll('\\', '/');
+    const newPath = getProjectFilePath(newRelativeName);
+    const oldRelative = getRelativePath(file);
+
+    if (newPath === file.path) {
+        return;
+    }
+
+    if (currentGit) {
+        await renameQueryFile(
+            currentGit,
+            currentProjectPath,
+            oldRelative,
+            path.relative(currentProjectPath, newPath).split(path.sep).join('/')
+        );
+    } else {
+        ensureDirectoryExists(path.dirname(newPath));
+        fs.renameSync(file.path, newPath);
+    }
+
+    file.name = newRelativeName;
+    file.path = newPath;
     updateTabLabel(file);
     updateExplorer();
+    onQueryFileChanged(fileId, { refreshHistory: true });
 }
 
 function updateTabLabel(file) {
@@ -720,7 +787,6 @@ function createView(file) {
         } else if (event.channel === 'save-file') {
             // Save file when Enter is pressed in search interface
             saveFileUrl(file.id);
-            refreshQueryDirtyState(file.id);
         } else if (event.channel === 'webview-contextmenu') {
             // Forward to main process to show native menu
             try {
@@ -843,8 +909,10 @@ switchToFile = function(targetId) {
     originalSwitchToFile(targetId);
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
     refreshQueryDirtyState(targetId);
-    if (!queryHistoryPanel.classList.contains('collapsed')) {
+    if (!querySidebar.classList.contains('collapsed')) {
         refreshQueryHistory();
+    } else if (activeFileId && localStorage.getItem(QUERY_SIDEBAR_COLLAPSED_KEY) !== 'true') {
+        setQueryHistoryPanelOpen(true);
     }
 };
 
@@ -902,7 +970,9 @@ function handleKeyboardShortcut(d) {
     }
 
     // Skip if modal or quick search is open
-    if (quickSearchOverlay.classList.contains('visible') || newFileModal.classList.contains('visible')) {
+    if (quickSearchOverlay.classList.contains('visible')
+        || newFileModal.classList.contains('visible')
+        || confirmModal.classList.contains('visible')) {
         return;
     }
 
@@ -948,6 +1018,10 @@ function handleKeyboardShortcut(d) {
         }
         if (d.shift && key === 'n') {
             duplicateCurrentTab();
+            return;
+        }
+        if (d.shift && key === 'h') {
+            toggleQueryHistoryPanel();
             return;
         }
         if (key === 'tab') {
@@ -1030,6 +1104,9 @@ function handleGlobalKeydown(event) {
         event.preventDefault();
     }
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault();
+    }
+    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'h') {
         event.preventDefault();
     }
     if (event.ctrlKey && event.key === 'Tab') {
@@ -1289,10 +1366,67 @@ function getRelativePath(file) {
     return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
 }
 
-function setQueryHistoryPanelOpen(open) {
-    queryHistoryPanel.classList.toggle('collapsed', !open);
+function onQueryFileChanged(fileId, { refreshHistory = false } = {}) {
+    refreshQueryDirtyState(fileId);
+    if (refreshHistory && fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
+        refreshQueryHistory();
+    }
+}
+
+function showConfirmModal({ title, body }) {
+    return new Promise(resolve => {
+        confirmResolve = resolve;
+        confirmModalTitle.textContent = title;
+        confirmModalBody.textContent = body;
+        confirmModal.classList.add('visible');
+        confirmOkBtn.focus();
+    });
+}
+
+function closeConfirmModal(confirmed) {
+    confirmModal.classList.remove('visible');
+    if (confirmResolve) {
+        confirmResolve(confirmed);
+        confirmResolve = null;
+    }
+}
+
+function setPreviewMode(mode) {
+    previewMode = mode;
+    queryPreviewModeBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    renderVersionPreview();
+}
+
+function renderVersionPreview() {
+    if (previewMode === 'diff' && selectedVersionHash) {
+        const version = queryVersions.find(v => v.hash === selectedVersionHash);
+        if (version) {
+            const diff = diffLines(version.query || '', currentQueryText || '');
+            queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
+            return;
+        }
+    }
+
+    if (selectedVersionHash) {
+        const version = queryVersions.find(v => v.hash === selectedVersionHash);
+        queryVersionPreviewText.textContent = version?.query || '(empty query)';
+        return;
+    }
+
+    queryVersionPreviewText.textContent = currentQueryText || 'Select a version to preview SPL.';
+}
+
+function setQueryHistoryPanelOpen(open, { persist = true } = {}) {
+    querySidebar.classList.toggle('collapsed', !open);
+    if (persist) {
+        localStorage.setItem(QUERY_SIDEBAR_COLLAPSED_KEY, String(!open));
+    }
     if (open) {
         refreshQueryHistory();
+    } else {
+        updateStatusBar();
     }
 }
 
@@ -1300,8 +1434,29 @@ function toggleQueryHistoryPanel() {
     if (!activeFileId) {
         return;
     }
-    const isOpen = !queryHistoryPanel.classList.contains('collapsed');
+    const isOpen = !querySidebar.classList.contains('collapsed');
     setQueryHistoryPanelOpen(!isOpen);
+}
+
+function updateStatusBar({ hasChanges, status, versionCount } = {}) {
+    const file = getActiveFile();
+    if (!file) {
+        statusFile.textContent = 'No query open';
+        statusSave.textContent = '';
+        statusSave.classList.remove('dirty');
+        statusVersions.textContent = '';
+        return;
+    }
+
+    statusFile.textContent = file.name.split('/').pop();
+    if (hasChanges !== undefined) {
+        statusSave.textContent = hasChanges ? 'Unsaved changes' : 'Saved';
+        statusSave.classList.toggle('dirty', hasChanges);
+    }
+    if (versionCount !== undefined) {
+        const label = versionCount === 1 ? 'version' : 'versions';
+        statusVersions.textContent = `${versionCount} ${label}`;
+    }
 }
 
 async function initializeQueryVersions() {
@@ -1311,10 +1466,10 @@ async function initializeQueryVersions() {
     }
 
     currentGit = simpleGit(currentProjectPath);
-    await ensureRepo(currentGit);
 }
 
 async function refreshQueryDirtyState(fileId = activeFileId) {
+    const generation = queryRefreshGeneration;
     const file = files.find(f => f.id === fileId);
     const tab = tabBar.querySelector(`.tab[data-target-id="${fileId}"]`);
     if (!file || !tab || !currentGit) {
@@ -1327,10 +1482,17 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
     try {
         const relativePath = getRelativePath(file);
         const { hasChanges } = await getFileStatus(currentGit, relativePath);
+        if (generation !== queryRefreshGeneration && fileId !== activeFileId) {
+            return;
+        }
         tab.classList.toggle('dirty', hasChanges);
-        if (fileId === activeFileId && !queryHistoryPanel.classList.contains('collapsed')) {
+        if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
             queryHistoryStatus.textContent = hasChanges ? 'Unsaved changes' : 'Up to date';
             queryHistoryStatus.classList.toggle('dirty', hasChanges);
+            querySaveBtn.disabled = !hasChanges;
+        }
+        if (fileId === activeFileId) {
+            updateStatusBar({ hasChanges });
         }
     } catch {
         tab.classList.remove('dirty');
@@ -1338,37 +1500,61 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
 }
 
 async function refreshQueryHistory() {
+    const generation = ++queryRefreshGeneration;
     const file = getActiveFile();
     if (!file || !currentGit || !currentProjectPath) {
         queryHistoryTitle.textContent = 'Query History';
         queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see its history.</div>';
-        queryVersionPreviewText.textContent = 'Select a version to preview SPL.';
+        currentQueryText = '';
+        selectedVersionHash = null;
+        renderVersionPreview();
         queryHistoryStatus.textContent = '';
         queryRestoreBtn.disabled = true;
+        querySaveBtn.disabled = true;
+        updateStatusBar();
         return;
     }
 
     const relativePath = getRelativePath(file);
     const displayName = file.name.split('/').pop();
     queryHistoryTitle.textContent = `History: ${displayName}`;
+    queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Loading...</div>';
 
     try {
         const [{ hasChanges, status }, versions, current] = await Promise.all([
             getFileStatus(currentGit, relativePath),
-            listVersions(currentGit, currentProjectPath, relativePath),
+            listVersions(currentGit, relativePath),
             Promise.resolve(readCurrentQuery(file.path))
         ]);
+
+        if (generation !== queryRefreshGeneration) {
+            return;
+        }
 
         queryVersions = versions;
         selectedVersionHash = null;
         queryRestoreBtn.disabled = true;
+        querySaveBtn.disabled = !hasChanges;
         queryHistoryStatus.textContent = hasChanges ? `Unsaved (${status})` : 'Up to date';
         queryHistoryStatus.classList.toggle('dirty', hasChanges);
-        queryVersionPreviewText.textContent = current.query || '(empty query)';
+        currentQueryText = current.query || '';
+        previewMode = 'preview';
+        queryPreviewModeBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === 'preview');
+        });
+        renderVersionPreview();
 
         renderQueryVersionList();
         await refreshQueryDirtyState(file.id);
+        updateStatusBar({
+            hasChanges,
+            status,
+            versionCount: versions.length
+        });
     } catch (err) {
+        if (generation !== queryRefreshGeneration) {
+            return;
+        }
         queryVersionList.innerHTML = `<div style="padding:12px;color:#f48771;">Error: ${err.message}</div>`;
     }
 }
@@ -1388,6 +1574,7 @@ function renderQueryVersionList() {
     queryVersions.forEach(version => {
         const item = document.createElement('div');
         item.className = 'query-version-item';
+        item.dataset.hash = version.hash;
         if (version.hash === selectedVersionHash) {
             item.classList.add('selected');
         }
@@ -1411,9 +1598,11 @@ function renderQueryVersionList() {
 
 function selectQueryVersion(version) {
     selectedVersionHash = version.hash;
-    queryVersionPreviewText.textContent = version.query || '(empty query)';
     queryRestoreBtn.disabled = false;
-    renderQueryVersionList();
+    queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.hash === version.hash);
+    });
+    renderVersionPreview();
 }
 
 async function saveQueryVersion() {
@@ -1429,7 +1618,12 @@ async function saveQueryVersion() {
 
     try {
         querySaveBtn.disabled = true;
-        await saveVersion(currentGit, relativePath, label);
+        const result = await saveVersion(currentGit, relativePath, label);
+        if (!result.saved) {
+            queryHistoryStatus.textContent = 'No changes to save';
+            queryHistoryStatus.classList.remove('dirty');
+            return;
+        }
         querySaveMessage.value = '';
         await refreshQueryHistory();
     } catch (err) {
@@ -1451,7 +1645,10 @@ async function restoreSelectedVersion() {
         return;
     }
 
-    const confirmed = confirm(`Restore "${file.name.split('/').pop()}" to version from ${new Date(version.date).toLocaleString()}?\n\nThis replaces the current query.`);
+    const confirmed = await showConfirmModal({
+        title: 'Restore version',
+        body: `Restore "${file.name.split('/').pop()}" to version from ${new Date(version.date).toLocaleString()}?\n\nThis replaces the current query.`
+    });
     if (!confirmed) {
         return;
     }
@@ -1468,6 +1665,7 @@ async function restoreSelectedVersion() {
             view.src = restored.url;
         }
 
+        onQueryFileChanged(file.id, { refreshHistory: true });
         await refreshQueryHistory();
     } catch (err) {
         queryHistoryStatus.textContent = `Restore failed: ${err.message}`;

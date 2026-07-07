@@ -55,24 +55,17 @@
             display: none;
         }
 
-        #main-content {
-            flex: 1;
+        #query-sidebar {
+            width: 320px;
+            background: #252526;
+            border-left: 1px solid #333;
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            min-height: 0;
+            flex-shrink: 0;
         }
 
-        #query-history-panel {
-            display: flex;
-            flex-direction: column;
-            border-top: 1px solid #333;
-            background: #252526;
-            max-height: 40vh;
-            min-height: 180px;
-        }
-
-        #query-history-panel.collapsed {
+        #query-sidebar.collapsed {
             display: none;
         }
 
@@ -83,17 +76,22 @@
             padding: 8px 12px;
             border-bottom: 1px solid #333;
             background: #2d2d30;
+            flex-shrink: 0;
         }
 
         #query-history-title {
             font-weight: 600;
             font-size: 0.9rem;
             flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         #query-history-status {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             color: #8a8a8a;
+            flex-shrink: 0;
         }
 
         #query-history-status.dirty {
@@ -108,6 +106,7 @@
             font-size: 1.1rem;
             padding: 2px 6px;
             border-radius: 3px;
+            flex-shrink: 0;
         }
 
         #query-history-close:hover {
@@ -115,18 +114,11 @@
             background: rgba(255, 255, 255, 0.08);
         }
 
-        #query-history-body {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-            min-height: 0;
-        }
-
         #query-version-list {
-            width: 280px;
-            border-right: 1px solid #333;
+            flex: 1;
             overflow-y: auto;
-            flex-shrink: 0;
+            min-height: 100px;
+            border-bottom: 1px solid #333;
         }
 
         .query-version-item {
@@ -160,13 +152,46 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 100px;
+        }
+
+        #query-version-preview-toolbar {
+            display: flex;
+            gap: 4px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+        }
+
+        .preview-mode-btn {
+            padding: 4px 10px;
+            background: #2d2d2d;
+            border: none;
+            color: #8a8a8a;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .preview-mode-btn.active {
+            background: #0e639c;
+            color: #fff;
+        }
+
+        .preview-mode-btn:hover:not(.active) {
+            background: #3d3d3d;
+        }
+
+        #query-version-preview-content {
+            flex: 1;
+            overflow: auto;
+            background: #1e1e1e;
         }
 
         #query-version-preview pre {
-            flex: 1;
             margin: 0;
             padding: 12px;
-            overflow: auto;
             font-family: 'Consolas', 'Courier New', monospace;
             font-size: 0.85rem;
             line-height: 1.4;
@@ -176,11 +201,32 @@
             word-break: break-word;
         }
 
+        .diff-line {
+            display: block;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .diff-added {
+            background: rgba(40, 167, 69, 0.2);
+            color: #7ec699;
+        }
+
+        .diff-removed {
+            background: rgba(203, 36, 49, 0.2);
+            color: #f48771;
+        }
+
+        .diff-same {
+            color: #888;
+        }
+
         #query-history-actions {
             display: flex;
             gap: 8px;
             padding: 8px 12px;
             border-top: 1px solid #333;
+            flex-shrink: 0;
         }
 
         #query-save-message {
@@ -191,6 +237,7 @@
             border-radius: 4px;
             color: #ccc;
             font-size: 0.85rem;
+            min-width: 0;
         }
 
         .query-history-btn {
@@ -202,6 +249,7 @@
             cursor: pointer;
             font-weight: 600;
             font-size: 0.85rem;
+            flex-shrink: 0;
         }
 
         .query-history-btn:hover {
@@ -219,6 +267,32 @@
         .query-history-btn:disabled {
             opacity: 0.45;
             cursor: not-allowed;
+        }
+
+        #status-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 4px 12px;
+            background: #007acc;
+            color: #ffffff;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+            min-height: 22px;
+        }
+
+        #status-bar .status-item {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #status-bar .status-item.dirty {
+            color: #ffe082;
+        }
+
+        #status-bar .status-spacer {
+            flex: 1;
         }
 
         .tab.dirty .tab-title::after {
@@ -547,9 +621,47 @@
             transition: opacity 0.15s ease;
         }
 
-        #new-file-modal.visible {
+        #new-file-modal.visible,
+        #confirm-modal.visible {
             opacity: 1;
             pointer-events: auto;
+        }
+
+        #confirm-modal {
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 20, 20, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 25;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease;
+        }
+
+        #confirm-modal-box {
+            width: min(440px, calc(100% - 40px));
+            background: #1f2124;
+            border-radius: 12px;
+            border: 1px solid #333;
+            padding: 22px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        #confirm-modal-title {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #e0e0e0;
+            margin-bottom: 10px;
+        }
+
+        #confirm-modal-body {
+            color: #b0b0b0;
+            font-size: 0.9rem;
+            line-height: 1.45;
+            margin-bottom: 18px;
+            white-space: pre-wrap;
         }
 
         #new-file-modal-box {
@@ -688,34 +800,43 @@
                 <button id="prev-page-btn" class="project-action" style="margin-left: auto; font-size:larger; padding: 0 10px" title="Back">⬅</button>
                 <button id="next-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Forward">➡</button>
                 <button id="copy-url-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Copy URL of open file">Copy URL</button>
-                <button id="query-history-btn" class="project-action" style="margin-right: 8px; padding: 5px 10px" title="Query version history">History</button>
             </div>
             <div>
                 <div id="tab-bar"></div>
             </div>
 
-            <div id="main-content">
-                <div id="views-container"></div>
-                <div id="query-history-panel" class="collapsed">
-                    <div id="query-history-header">
-                        <span id="query-history-title">Query History</span>
-                        <span id="query-history-status"></span>
-                        <button id="query-history-close" type="button" title="Close">×</button>
-                    </div>
-                    <div id="query-history-body">
-                        <div id="query-version-list"></div>
-                        <div id="query-version-preview">
-                            <pre id="query-version-preview-text">Select a version to preview SPL.</pre>
-                        </div>
-                    </div>
-                    <div id="query-history-actions">
-                        <input id="query-save-message" type="text" placeholder="Version note (optional)..." />
-                        <button id="query-save-btn" class="query-history-btn" type="button">Save Version</button>
-                        <button id="query-restore-btn" class="query-history-btn secondary" type="button" disabled>Restore</button>
-                    </div>
+            <div id="views-container"></div>
+        </div>
+
+        <aside id="query-sidebar" class="collapsed">
+            <div id="query-history-header">
+                <span id="query-history-title">Query History</span>
+                <span id="query-history-status"></span>
+                <button id="query-history-close" type="button" title="Collapse timeline">×</button>
+            </div>
+            <div id="query-version-list"></div>
+            <div id="query-version-preview">
+                <div id="query-version-preview-toolbar">
+                    <button type="button" class="preview-mode-btn active" data-mode="preview">Preview</button>
+                    <button type="button" class="preview-mode-btn" data-mode="diff">Diff</button>
+                </div>
+                <div id="query-version-preview-content">
+                    <pre id="query-version-preview-text">Select a version to preview SPL.</pre>
                 </div>
             </div>
-        </div>
+            <div id="query-history-actions">
+                <input id="query-save-message" type="text" placeholder="Version note (optional)..." />
+                <button id="query-save-btn" class="query-history-btn" type="button">Save Version</button>
+                <button id="query-restore-btn" class="query-history-btn secondary" type="button" disabled>Restore</button>
+            </div>
+        </aside>
+    </div>
+
+    <div id="status-bar">
+        <span id="status-file" class="status-item">No query open</span>
+        <span id="status-save" class="status-item"></span>
+        <span class="status-spacer"></span>
+        <span id="status-versions" class="status-item"></span>
     </div>
 
     <div id="quick-search-overlay" class="">
@@ -724,6 +845,17 @@
             <input id="quick-search-input" type="text" placeholder="Search files..." autocomplete="off"
                 spellcheck="false" />
             <div id="quick-search-results"></div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="">
+        <div id="confirm-modal-box">
+            <div id="confirm-modal-title"></div>
+            <div id="confirm-modal-body"></div>
+            <div class="modal-buttons">
+                <button id="confirm-cancel" class="modal-button">Cancel</button>
+                <button id="confirm-ok" class="modal-button primary">Confirm</button>
+            </div>
         </div>
     </div>
 
