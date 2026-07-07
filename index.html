@@ -57,35 +57,59 @@
             color: #fff;
         }
 
+        #sidebar-header {
+            padding: 6px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: space-between;
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: #c8c8c8;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+        }
+
+        #sidebar-header-title {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #sidebar-header-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+
+        #sidebar-header #new-file-btn,
         #sidebar-collapse-btn {
             background: transparent;
             border: none;
             color: #8a8a8a;
             cursor: pointer;
-            font-size: 1rem;
-            padding: 2px 6px;
+            font-size: 0.95rem;
+            line-height: 1;
+            padding: 2px 5px;
             border-radius: 3px;
-            flex-shrink: 0;
+            margin: 0;
+            font-weight: normal;
+            fill: unset;
         }
 
+        #sidebar-header #new-file-btn:hover,
         #sidebar-collapse-btn:hover {
             color: #fff;
             background: rgba(255, 255, 255, 0.08);
         }
 
-        #sidebar-header {
-            padding: 14px 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            justify-content: space-between;
-            font-weight: bold;
-            color: #f3f3f3;
-            border-bottom: 1px solid #333;
-        }
-
-        #sidebar-header button {
-            margin: 0;
+        #sidebar-header #new-file-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            background: transparent;
         }
 
         #explorer {
@@ -219,6 +243,33 @@
             font-weight: 500;
             color: #cca700;
             background: rgba(204, 167, 0, 0.15);
+            vertical-align: middle;
+        }
+
+        .query-version-item.draft {
+            border-left: 3px solid #f48771;
+            padding-left: 9px;
+            background: rgba(244, 135, 113, 0.08);
+        }
+
+        .query-version-item.draft:hover {
+            background: rgba(244, 135, 113, 0.15);
+        }
+
+        .query-version-item.selected.draft {
+            background: #094771;
+            box-shadow: inset 0 0 0 2px #f48771;
+        }
+
+        .query-version-item.draft .version-label::after {
+            content: 'Draft';
+            margin-left: 6px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: #f48771;
+            background: rgba(244, 135, 113, 0.15);
             vertical-align: middle;
         }
 
@@ -473,16 +524,17 @@
         .explorer-item .file-action {
             background: transparent;
             border: none;
-            color: #9d9d9d;
+            color: #666;
             cursor: pointer;
-            font-size: 0.9rem;
-            padding: 4px 6px;
-            border-radius: 4px;
+            font-size: 0.7rem;
+            line-height: 1;
+            padding: 0 3px;
+            border-radius: 2px;
         }
 
         .explorer-item .file-action:hover {
-            background: rgba(255, 255, 255, 0.08);
-            color: #ffffff;
+            background: rgba(255, 255, 255, 0.06);
+            color: #bbb;
         }
 
         #main-area {
@@ -492,12 +544,21 @@
             overflow: hidden;
         }
 
-        #header {
+        #tab-row {
             display: flex;
+            align-items: stretch;
             background: #252526;
-            padding: 8px;
-            align-items: center;
             border-bottom: 1px solid #333;
+            flex-shrink: 0;
+            min-width: 0;
+        }
+
+        #tab-nav-actions {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            padding: 4px 8px 4px 4px;
+            gap: 4px;
         }
 
         button.project-action,
@@ -558,6 +619,7 @@
             gap: 2px;
             overflow-x: auto;
             flex: 1;
+            min-width: 0;
         }
 
         .tab {
@@ -866,32 +928,28 @@
         <button id="sidebar-reopen" type="button" title="Show searches">▶</button>
         <aside id="sidebar">
             <div id="sidebar-header">
-                <span>Searches</span>
-                <span>
-                    <button id="sidebar-collapse-btn" type="button" title="Hide searches">◀</button>
-                    <button id="new-file-btn" disabled title="New Search">
-                        <svg viewBox="0 0 24 24" width="35" height="35">
-                            <path
-                                d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z">
-                            </path>
-                        </svg>
-                    </button>
+                <span id="sidebar-header-title">Searches</span>
+                <span id="sidebar-header-actions">
+                    <button id="new-file-btn" type="button" disabled title="New Search">+</button>
+                    <button id="sidebar-collapse-btn" type="button" title="Hide searches">‹</button>
                 </span>
             </div>
             <div id="explorer"></div>
         </aside>
 
         <div id="main-area">
-            <div id="header">
-                <button id="new-project-btn" class="project-action" style="padding: 5px 15px" hidden>New Project</button>
-                <button id="open-project-btn" class="project-action" style="padding: 5px 15px" hidden>Open Project</button>
-                <div id="project-name" hidden>No project loaded</div>
-                <button id="prev-page-btn" class="project-action" style="margin-left: auto; font-size:larger; padding: 0 10px" title="Back">⬅</button>
-                <button id="next-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Forward">➡</button>
-                <button id="copy-url-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Copy URL of open file">Copy URL</button>
+            <div id="header" hidden>
+                <button id="new-project-btn" class="project-action" style="padding: 5px 15px">New Project</button>
+                <button id="open-project-btn" class="project-action" style="padding: 5px 15px">Open Project</button>
+                <div id="project-name">No project loaded</div>
             </div>
-            <div>
+            <div id="tab-row">
                 <div id="tab-bar"></div>
+                <div id="tab-nav-actions">
+                    <button id="prev-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Back">⬅</button>
+                    <button id="next-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Forward">➡</button>
+                    <button id="copy-url-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Copy URL of open file">Copy URL</button>
+                </div>
             </div>
 
             <div id="views-container"></div>

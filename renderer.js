@@ -103,6 +103,7 @@ const PROJECT_SIDEBAR_COLLAPSED_KEY = 'splunk-ide-project-sidebar-collapsed';
 const QUERY_SIDEBAR_MIN_WIDTH = 220;
 const QUERY_SIDEBAR_MAX_WIDTH = 560;
 const QUERY_SIDEBAR_DEFAULT_WIDTH = 320;
+const DRAFT_VERSION_HASH = '__draft__';
 
 let files = [];
 let folders = [];
@@ -118,6 +119,7 @@ let modalMode = 'create';
 let modalTargetFileId = null;
 let currentGit = null;
 let queryVersions = [];
+let queryHasUnsavedChanges = false;
 let selectedVersionHash = null;
 let queryRefreshGeneration = 0;
 let currentQueryText = '';
@@ -1480,7 +1482,20 @@ function setPreviewMode(mode) {
 }
 
 function renderVersionPreview() {
+    const isDraftSelected = selectedVersionHash === DRAFT_VERSION_HASH;
+
     if (previewMode === 'diff') {
+        if (isDraftSelected) {
+            const baseHash = getTrackedBaseHash();
+            const baseVersion = baseHash ? queryVersions.find(v => v.hash === baseHash) : null;
+            if (baseVersion) {
+                const diff = diffLines(baseVersion.query || '', currentQueryText || '');
+                queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
+            } else {
+                queryVersionPreviewText.textContent = 'No saved base version to compare against.';
+            }
+            return;
+        }
         if (!selectedVersionHash) {
             queryVersionPreviewText.textContent = 'Select a version to diff.';
             return;
@@ -1493,13 +1508,13 @@ function renderVersionPreview() {
         }
     }
 
-    if (selectedVersionHash) {
-        const version = queryVersions.find(v => v.hash === selectedVersionHash);
-        queryVersionPreviewText.textContent = version?.query || '(empty query)';
+    if (isDraftSelected || !selectedVersionHash) {
+        queryVersionPreviewText.textContent = currentQueryText || '(empty query)';
         return;
     }
 
-    queryVersionPreviewText.textContent = currentQueryText || '(empty query)';
+    const version = queryVersions.find(v => v.hash === selectedVersionHash);
+    queryVersionPreviewText.textContent = version?.query || '(empty query)';
 }
 
 function clampQuerySidebarWidth(width) {
@@ -1643,6 +1658,7 @@ async function refreshQueryHistory() {
         queryHistoryTitle.textContent = 'Query History';
         queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see its history.</div>';
         currentQueryText = '';
+        queryHasUnsavedChanges = false;
         selectedVersionHash = null;
         renderVersionPreview();
         queryHistoryStatus.textContent = '';
@@ -1670,10 +1686,13 @@ async function refreshQueryHistory() {
 
         const preservedHash = selectedVersionHash;
         queryVersions = versions;
-        selectedVersionHash = preservedHash && versions.some(v => v.hash === preservedHash)
-            ? preservedHash
-            : null;
-        queryRestoreBtn.disabled = !selectedVersionHash;
+        queryHasUnsavedChanges = hasChanges;
+        selectedVersionHash = preservedHash === DRAFT_VERSION_HASH && hasChanges
+            ? DRAFT_VERSION_HASH
+            : preservedHash && versions.some(v => v.hash === preservedHash)
+                ? preservedHash
+                : null;
+        queryRestoreBtn.disabled = !selectedVersionHash || selectedVersionHash === DRAFT_VERSION_HASH;
         querySaveBtn.disabled = !hasChanges;
         queryHistoryStatus.textContent = hasChanges ? `Unsaved (${status})` : 'Up to date';
         queryHistoryStatus.classList.toggle('dirty', hasChanges);
@@ -1705,19 +1724,47 @@ function getTrackedBaseHash() {
 
 function applyVersionRowClasses(item, hash) {
     const trackedHash = getTrackedBaseHash();
+    const isDraft = hash === DRAFT_VERSION_HASH;
     item.classList.toggle('selected', hash === selectedVersionHash);
-    item.classList.toggle('tracked-base', !!trackedHash && hash === trackedHash);
+    item.classList.toggle('tracked-base', !isDraft && !!trackedHash && hash === trackedHash);
+    item.classList.toggle('draft', isDraft);
+}
+
+function appendDraftVersionRow() {
+    const item = document.createElement('div');
+    item.className = 'query-version-item draft';
+    item.dataset.hash = DRAFT_VERSION_HASH;
+    applyVersionRowClasses(item, DRAFT_VERSION_HASH);
+
+    const label = document.createElement('div');
+    label.className = 'version-label';
+    label.textContent = 'Draft changes';
+
+    const meta = document.createElement('div');
+    meta.className = 'version-meta';
+    meta.textContent = 'Uncommitted changes';
+
+    item.appendChild(label);
+    item.appendChild(meta);
+    item.addEventListener('click', selectDraftVersion);
+    queryVersionList.appendChild(item);
 }
 
 function renderQueryVersionList() {
     queryVersionList.innerHTML = '';
 
+    if (queryHasUnsavedChanges) {
+        appendDraftVersionRow();
+    }
+
     if (queryVersions.length === 0) {
-        const empty = document.createElement('div');
-        empty.style.padding = '12px';
-        empty.style.color = '#888';
-        empty.textContent = 'No saved versions yet.';
-        queryVersionList.appendChild(empty);
+        if (!queryHasUnsavedChanges) {
+            const empty = document.createElement('div');
+            empty.style.padding = '12px';
+            empty.style.color = '#888';
+            empty.textContent = 'No saved versions yet.';
+            queryVersionList.appendChild(empty);
+        }
         return;
     }
 
@@ -1746,6 +1793,15 @@ function renderQueryVersionList() {
         item.addEventListener('dblclick', () => restoreQueryVersion(version.hash, { confirm: false }));
         queryVersionList.appendChild(item);
     });
+}
+
+function selectDraftVersion() {
+    selectedVersionHash = DRAFT_VERSION_HASH;
+    queryRestoreBtn.disabled = true;
+    queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
+        applyVersionRowClasses(item, item.dataset.hash);
+    });
+    renderVersionPreview();
 }
 
 function selectQueryVersion(version) {
@@ -1794,7 +1850,7 @@ async function saveQueryVersion() {
 
 async function restoreQueryVersion(hash, { confirm = true } = {}) {
     const file = getActiveFile();
-    if (!file || !currentGit || !hash) {
+    if (!file || !currentGit || !hash || hash === DRAFT_VERSION_HASH) {
         return;
     }
 
@@ -1818,12 +1874,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
     try {
         queryRestoreBtn.disabled = true;
         const relativePath = getRelativePath(file);
+        const trackedHash = restoreParentByFileId.get(file.id);
         const restored = await restoreVersion(
             currentGit,
             relativePath,
             hash,
-            restoreParentByFileId.get(file.id),
-            { skipAutoSave: !!version.isAutoSave }
+            trackedHash,
+            { skipAutoSave: !!version.isAutoSave || hash === trackedHash }
         );
         file.url = restored.url;
         fs.writeFileSync(file.path, restored.url, 'utf8');
@@ -1846,7 +1903,7 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         queryHistoryStatus.textContent = `Restore failed: ${err.message}`;
         queryHistoryStatus.classList.add('dirty');
     } finally {
-        queryRestoreBtn.disabled = !selectedVersionHash;
+        queryRestoreBtn.disabled = !selectedVersionHash || selectedVersionHash === DRAFT_VERSION_HASH;
     }
 }
 
