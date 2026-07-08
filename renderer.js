@@ -127,6 +127,7 @@ let previewMode = 'preview';
 let confirmResolve = null;
 const restoreParentByFileId = new Map();
 const forcedDraftByFileId = new Set();
+const userDraftByFileId = new Set();
 
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
@@ -488,6 +489,7 @@ function saveFileUrl(fileId) {
         if (url && url !== file.url) {
             file.url = url;
             fs.writeFileSync(file.path, url, 'utf8');
+            userDraftByFileId.add(fileId);
             onQueryFileChanged(fileId, { refreshHistory: true });
         }
     }
@@ -595,6 +597,7 @@ async function loadProject(projectPath) {
     activeFileId = null;
     restoreParentByFileId.clear();
     forcedDraftByFileId.clear();
+    userDraftByFileId.clear();
     clearOpenTabs();
 
     folders = scanProjectFolders(projectPath);
@@ -1837,6 +1840,7 @@ async function saveQueryVersion() {
             return;
         }
         forcedDraftByFileId.delete(file.id);
+        userDraftByFileId.delete(file.id);
         querySaveMessage.value = '';
         await refreshQueryHistory();
         if (queryVersions.length > 0) {
@@ -1879,13 +1883,14 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         queryRestoreBtn.disabled = true;
         const relativePath = getRelativePath(file);
         const trackedHash = restoreParentByFileId.get(file.id);
+        const hasUserDraft = userDraftByFileId.has(file.id);
         const headHash = version.isAutoSave ? (await currentGit.revparse(['HEAD'])).trim() : '';
         const restored = await restoreVersion(
             currentGit,
             relativePath,
             hash,
             trackedHash,
-            { skipAutoSave: !!version.isAutoSave || hash === trackedHash }
+            { skipAutoSave: !!version.isAutoSave || !hasUserDraft }
         );
         file.url = restored.url;
         fs.writeFileSync(file.path, restored.url, 'utf8');
@@ -1905,6 +1910,7 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             selectedVersionHash = DRAFT_VERSION_HASH;
         } else {
             forcedDraftByFileId.delete(file.id);
+            userDraftByFileId.delete(file.id);
             restoreParentByFileId.set(file.id, hash);
         }
         onQueryFileChanged(file.id, { refreshHistory: true });

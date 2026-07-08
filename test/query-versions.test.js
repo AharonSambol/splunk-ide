@@ -211,6 +211,21 @@ describe('listVersions', () => {
         assert.equal(version.message, 'Standalone save');
         assert.equal(version.parentHash, undefined);
     });
+
+    it('detects isAutoSave when body has both Query-Parent and Query-Autosave trailers', async () => {
+        await saveVersion(git, relativePath, 'First save');
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        await saveVersion(git, relativePath, 'Second save');
+
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20dirty');
+        const versions = await listVersions(git, relativePath);
+        await restoreVersion(git, relativePath, versions[1].hash, versions[0].hash);
+
+        const [autoSave] = await listVersions(git, relativePath);
+        assert.match(autoSave.message, /Auto-save before restore/);
+        assert.equal(autoSave.parentHash, versions[0].hash);
+        assert.equal(autoSave.isAutoSave, true);
+    });
 });
 
 describe('restoreVersion', () => {
@@ -311,6 +326,19 @@ describe('restoreVersion', () => {
         const afterRestore = await listVersions(git, relativePath);
         assert.equal(afterRestore.length, 2);
         assert.equal(afterRestore.some(version => version.isAutoSave), false);
+    });
+
+    it('does not create auto-save when jumping forward without user draft edits', async () => {
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+        const latestHash = versions[0].hash;
+
+        await restoreVersion(git, relativePath, firstHash, latestHash, { skipAutoSave: true });
+        await restoreVersion(git, relativePath, latestHash, latestHash, { skipAutoSave: true });
+
+        const afterJump = await listVersions(git, relativePath);
+        assert.equal(afterJump.length, 2);
+        assert.equal(afterJump.some(version => version.isAutoSave), false);
     });
 });
 
