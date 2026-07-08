@@ -127,7 +127,58 @@ let modalTargetFileId = null;
 let currentGit = null;
 let queryVersions = [];
 let queryHasUnsavedChanges = false;
-let selectedVersionHash = null;
+let selectedVersionHashes = [];
+
+function getPrimarySelectedHash() {
+    return selectedVersionHashes.length ? selectedVersionHashes[selectedVersionHashes.length - 1] : null;
+}
+
+function isMultiVersionCompare() {
+    return selectedVersionHashes.length === 2
+        && !selectedVersionHashes.includes(DRAFT_VERSION_HASH);
+}
+
+function updateVersionSelectionUi() {
+    const primary = getPrimarySelectedHash();
+    queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
+    queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
+        applyVersionRowClasses(item, item.dataset.hash);
+    });
+    renderVersionPreview();
+}
+
+function handleVersionRowClick(event, hash) {
+    if (hash === DRAFT_VERSION_HASH) {
+        selectDraftVersion();
+        return;
+    }
+    if (event.metaKey || event.ctrlKey) {
+        toggleVersionMultiSelect(hash);
+        return;
+    }
+    const version = queryVersions.find(v => v.hash === hash);
+    if (version) {
+        selectQueryVersion(version);
+    }
+}
+
+function toggleVersionMultiSelect(hash) {
+    if (hash === DRAFT_VERSION_HASH) {
+        return;
+    }
+    let hashes = selectedVersionHashes.filter(h => h !== DRAFT_VERSION_HASH);
+    const idx = hashes.indexOf(hash);
+    if (idx >= 0) {
+        hashes.splice(idx, 1);
+    } else {
+        hashes.push(hash);
+        if (hashes.length > 2) {
+            hashes.shift();
+        }
+    }
+    selectedVersionHashes = hashes;
+    updateVersionSelectionUi();
+}
 let queryRefreshGeneration = 0;
 let currentQueryText = '';
 let previewMode = 'preview';
@@ -977,7 +1028,7 @@ switchToFile = function(targetId) {
     const prevFileId = activeFileId;
     originalSwitchToFile(targetId);
     if (prevFileId !== targetId) {
-        selectedVersionHash = null;
+        selectedVersionHashes = [];
     }
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
     refreshQueryDirtyState(targetId);
@@ -1556,13 +1607,13 @@ async function saveTagFromPopup() {
         return;
     }
     const relativePath = getRelativePath(file);
-    const preservedHash = selectedVersionHash;
+    const preservedHashes = [...selectedVersionHashes];
     try {
         await setVersionTag(currentGit, relativePath, hash, name);
         versionTags = await listVersionTags(currentGit, relativePath);
         closeTagPopup();
         renderHistorySidebarList();
-        selectedVersionHash = preservedHash;
+        selectedVersionHashes = preservedHashes;
         queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
             applyVersionRowClasses(item, item.dataset.hash);
         });
@@ -1656,7 +1707,7 @@ function renderVersionTreeList() {
 
         item.appendChild(label);
         item.appendChild(meta);
-        item.addEventListener('click', () => selectVersionByHash(version.hash));
+        item.addEventListener('click', event => handleVersionRowClick(event, version.hash));
         attachVersionRowContextMenu(item, version.hash);
         queryVersionList.appendChild(item);
     }
@@ -1695,7 +1746,7 @@ function renderTagsList() {
 
         item.appendChild(label);
         item.appendChild(meta);
-        item.addEventListener('click', () => selectVersionByHash(entry.hash));
+        item.addEventListener('click', event => handleVersionRowClick(event, entry.hash));
         item.addEventListener('dblclick', () => restoreQueryVersion(entry.hash, { confirm: false }));
         attachVersionRowContextMenu(item, entry.hash);
         queryVersionList.appendChild(item);
@@ -1736,9 +1787,22 @@ function setPreviewMode(mode) {
 }
 
 function renderVersionPreview() {
-    const isDraftSelected = selectedVersionHash === DRAFT_VERSION_HASH;
+    const primary = getPrimarySelectedHash();
+    const isDraftSelected = primary === DRAFT_VERSION_HASH;
 
     if (previewMode === 'diff') {
+        if (isMultiVersionCompare()) {
+            const [fromHash, toHash] = selectedVersionHashes;
+            const fromVersion = queryVersions.find(v => v.hash === fromHash);
+            const toVersion = queryVersions.find(v => v.hash === toHash);
+            if (fromVersion && toVersion) {
+                const diff = diffLines(fromVersion.query || '', toVersion.query || '');
+                queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
+            } else {
+                queryVersionPreviewText.textContent = 'Could not load selected versions.';
+            }
+            return;
+        }
         if (isDraftSelected) {
             const baseHash = getTrackedBaseHash();
             const baseVersion = baseHash ? queryVersions.find(v => v.hash === baseHash) : null;
@@ -1750,11 +1814,11 @@ function renderVersionPreview() {
             }
             return;
         }
-        if (!selectedVersionHash) {
+        if (!primary) {
             queryVersionPreviewText.textContent = 'Select a version to diff.';
             return;
         }
-        const version = queryVersions.find(v => v.hash === selectedVersionHash);
+        const version = queryVersions.find(v => v.hash === primary);
         if (version) {
             const diff = diffLines(version.query || '', currentQueryText || '');
             queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
@@ -1762,12 +1826,12 @@ function renderVersionPreview() {
         }
     }
 
-    if (isDraftSelected || !selectedVersionHash) {
+    if (isDraftSelected || !primary) {
         queryVersionPreviewText.textContent = currentQueryText || '(empty query)';
         return;
     }
 
-    const version = queryVersions.find(v => v.hash === selectedVersionHash);
+    const version = queryVersions.find(v => v.hash === primary);
     queryVersionPreviewText.textContent = version?.query || '(empty query)';
 }
 
@@ -1796,18 +1860,24 @@ function initializeQuerySidebarResize() {
         const startX = event.clientX;
         const startWidth = querySidebar.offsetWidth;
 
+        const preventSelect = e => e.preventDefault();
         const onMouseMove = moveEvent => {
+            moveEvent.preventDefault();
             applyQuerySidebarWidth(startWidth + (startX - moveEvent.clientX));
         };
         const onMouseUp = () => {
             querySidebarResize.classList.remove('dragging');
+            document.body.classList.remove('query-sidebar-resizing');
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
+            document.removeEventListener('selectstart', preventSelect);
         };
 
         querySidebarResize.classList.add('dragging');
+        document.body.classList.add('query-sidebar-resizing');
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('selectstart', preventSelect);
     });
 }
 
@@ -1914,7 +1984,7 @@ async function refreshQueryHistory() {
         queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see its history.</div>';
         currentQueryText = '';
         queryHasUnsavedChanges = false;
-        selectedVersionHash = null;
+        selectedVersionHashes = [];
         renderVersionPreview();
         queryHistoryStatus.textContent = '';
         queryRestoreBtn.disabled = true;
@@ -1943,16 +2013,17 @@ async function refreshQueryHistory() {
             return;
         }
 
-        const preservedHash = selectedVersionHash;
+        const preservedHashes = [...selectedVersionHashes];
         queryVersions = versions;
         versionTags = tags;
         queryHasUnsavedChanges = hasChanges || forcedDraftByFileId.has(file.id);
-        selectedVersionHash = preservedHash === DRAFT_VERSION_HASH && queryHasUnsavedChanges
-            ? DRAFT_VERSION_HASH
-            : preservedHash && versions.some(v => v.hash === preservedHash)
-                ? preservedHash
-                : null;
-        queryRestoreBtn.disabled = !selectedVersionHash || selectedVersionHash === DRAFT_VERSION_HASH;
+        selectedVersionHashes = preservedHashes.filter(hash => (
+            hash === DRAFT_VERSION_HASH
+                ? queryHasUnsavedChanges
+                : versions.some(v => v.hash === hash)
+        )).slice(-2);
+        const primary = getPrimarySelectedHash();
+        queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
         querySaveBtn.disabled = !queryHasUnsavedChanges;
         queryHistoryStatus.textContent = queryHasUnsavedChanges ? `Unsaved (${status})` : 'Up to date';
         queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
@@ -1985,7 +2056,11 @@ function getTrackedBaseHash() {
 function applyVersionRowClasses(item, hash) {
     const trackedHash = getTrackedBaseHash();
     const isDraft = hash === DRAFT_VERSION_HASH;
-    item.classList.toggle('selected', hash === selectedVersionHash);
+    const selIdx = selectedVersionHashes.indexOf(hash);
+    const isMulti = isMultiVersionCompare();
+    item.classList.toggle('selected', !isMulti && selIdx >= 0);
+    item.classList.toggle('selected-compare-from', isMulti && selIdx === 0);
+    item.classList.toggle('selected-compare-to', isMulti && selIdx === 1);
     item.classList.toggle('tracked-base', !isDraft && !!trackedHash && hash === trackedHash);
     item.classList.toggle('draft', isDraft);
 }
@@ -2050,7 +2125,7 @@ function renderQueryVersionList() {
 
         item.appendChild(label);
         item.appendChild(meta);
-        item.addEventListener('click', () => selectQueryVersion(version));
+        item.addEventListener('click', event => handleVersionRowClick(event, version.hash));
         item.addEventListener('dblclick', () => restoreQueryVersion(version.hash, { confirm: false }));
         attachVersionRowContextMenu(item, version.hash);
         queryVersionList.appendChild(item);
@@ -2058,21 +2133,13 @@ function renderQueryVersionList() {
 }
 
 function selectDraftVersion() {
-    selectedVersionHash = DRAFT_VERSION_HASH;
-    queryRestoreBtn.disabled = true;
-    queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
-        applyVersionRowClasses(item, item.dataset.hash);
-    });
-    renderVersionPreview();
+    selectedVersionHashes = [DRAFT_VERSION_HASH];
+    updateVersionSelectionUi();
 }
 
 function selectQueryVersion(version) {
-    selectedVersionHash = version.hash;
-    queryRestoreBtn.disabled = false;
-    queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
-        applyVersionRowClasses(item, item.dataset.hash);
-    });
-    renderVersionPreview();
+    selectedVersionHashes = [version.hash];
+    updateVersionSelectionUi();
 }
 
 async function saveQueryVersion() {
@@ -2133,7 +2200,7 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         }
     }
 
-    selectedVersionHash = hash;
+    selectedVersionHashes = [hash];
 
     try {
         queryRestoreBtn.disabled = true;
@@ -2163,7 +2230,7 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             }
             restoreParentByFileId.set(file.id, version.parentHash || trackedHash || hash);
             forcedDraftByFileId.add(file.id);
-            selectedVersionHash = DRAFT_VERSION_HASH;
+            selectedVersionHashes = [DRAFT_VERSION_HASH];
         } else {
             forcedDraftByFileId.delete(file.id);
             userDraftByFileId.delete(file.id);
@@ -2175,12 +2242,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         queryHistoryStatus.textContent = `Restore failed: ${err.message}`;
         queryHistoryStatus.classList.add('dirty');
     } finally {
-        queryRestoreBtn.disabled = !selectedVersionHash || selectedVersionHash === DRAFT_VERSION_HASH;
+        const primary = getPrimarySelectedHash();
+        queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
     }
 }
 
 async function restoreSelectedVersion() {
-    await restoreQueryVersion(selectedVersionHash, { confirm: true });
+    await restoreQueryVersion(getPrimarySelectedHash(), { confirm: true });
 }
 
 // Handle commands from main process context menu (Select All, etc.)

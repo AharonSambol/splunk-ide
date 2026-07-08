@@ -233,17 +233,32 @@
 
         #query-sidebar-resize {
             position: absolute;
-            left: 0;
+            left: -5px;
             top: 0;
             bottom: 0;
-            width: 4px;
-            cursor: col-resize;
+            width: 10px;
+            cursor: ew-resize;
             z-index: 2;
         }
 
-        #query-sidebar-resize:hover,
-        #query-sidebar-resize.dragging {
+        #query-sidebar-resize::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+        }
+
+        #query-sidebar-resize:hover::after,
+        #query-sidebar-resize.dragging::after {
             background: #007acc;
+        }
+
+        body.query-sidebar-resizing,
+        body.query-sidebar-resizing * {
+            cursor: ew-resize !important;
+            user-select: none !important;
         }
 
         #query-history-header {
@@ -311,6 +326,16 @@
 
         .query-version-item.selected {
             background: #094771;
+        }
+
+        .query-version-item.selected-compare-from {
+            background: #0d3d2a;
+            box-shadow: inset 3px 0 0 #4ec9b0;
+        }
+
+        .query-version-item.selected-compare-to {
+            background: #094771;
+            box-shadow: inset 3px 0 0 #3794ff;
         }
 
         .query-version-item.tracked-base {
@@ -457,6 +482,7 @@
 
         #query-history-actions {
             display: flex;
+            flex-wrap: wrap;
             gap: 8px;
             padding: 8px 12px;
             border-top: 1px solid #333;
@@ -464,14 +490,18 @@
         }
 
         #query-save-message {
-            flex: 1;
+            flex: 1 1 100%;
+            width: 100%;
+            box-sizing: border-box;
+            min-height: 64px;
             padding: 6px 8px;
             background: #1e1e1e;
             border: 1px solid #333;
             border-radius: 4px;
             color: #ccc;
             font-size: 0.85rem;
-            min-width: 0;
+            font-family: inherit;
+            resize: vertical;
         }
 
         .query-history-btn {
@@ -1072,7 +1102,7 @@
                 </div>
             </div>
             <div id="query-history-actions">
-                <input id="query-save-message" type="text" placeholder="Version note (optional)..." />
+                <textarea id="query-save-message" rows="3" placeholder="Version note (optional)..."></textarea>
                 <button id="query-save-btn" class="query-history-btn" type="button">Save Version</button>
                 <button id="query-restore-btn" class="query-history-btn secondary" type="button" disabled>Restore</button>
             </div>
