@@ -68,6 +68,7 @@ const sidebar = document.getElementById('sidebar');
 const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
 const sidebarReopenBtn = document.getElementById('sidebar-reopen');
 const querySidebarResize = document.getElementById('query-sidebar-resize');
+const querySidebarDragOverlay = document.getElementById('query-sidebar-drag-overlay');
 const quickSearchOverlay = document.getElementById('quick-search-overlay');
 const quickSearchHint = document.getElementById('quick-search-hint');
 const quickSearchInput = document.getElementById('quick-search-input');
@@ -1865,18 +1866,22 @@ function initializeQuerySidebarResize() {
             moveEvent.preventDefault();
             applyQuerySidebarWidth(startWidth + (startX - moveEvent.clientX));
         };
-        const onMouseUp = () => {
+        const cleanup = () => {
             querySidebarResize.classList.remove('dragging');
             document.body.classList.remove('query-sidebar-resizing');
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+            querySidebarDragOverlay.classList.remove('active');
+            querySidebarDragOverlay.removeEventListener('mousemove', onMouseMove);
+            querySidebarDragOverlay.removeEventListener('mouseup', cleanup);
+            window.removeEventListener('blur', cleanup);
             document.removeEventListener('selectstart', preventSelect);
         };
 
         querySidebarResize.classList.add('dragging');
         document.body.classList.add('query-sidebar-resizing');
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+        querySidebarDragOverlay.classList.add('active');
+        querySidebarDragOverlay.addEventListener('mousemove', onMouseMove);
+        querySidebarDragOverlay.addEventListener('mouseup', cleanup);
+        window.addEventListener('blur', cleanup);
         document.addEventListener('selectstart', preventSelect);
     });
 }

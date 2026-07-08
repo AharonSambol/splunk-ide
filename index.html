@@ -233,7 +233,7 @@
 
         #query-sidebar-resize {
             position: absolute;
-            left: -5px;
+            left: 0;
             top: 0;
             bottom: 0;
             width: 10px;
@@ -244,10 +244,23 @@
         #query-sidebar-resize::after {
             content: '';
             position: absolute;
-            left: 5px;
+            left: 0;
             top: 0;
             bottom: 0;
             width: 2px;
+        }
+
+        #query-sidebar-drag-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            cursor: ew-resize;
+            display: none;
+            user-select: none;
+        }
+
+        #query-sidebar-drag-overlay.active {
+            display: block;
         }
 
         #query-sidebar-resize:hover::after,
@@ -1159,6 +1172,8 @@
             </div>
         </div>
     </div>
+
+    <div id="query-sidebar-drag-overlay"></div>
 
     <script src="./renderer.js"></script>
 </body>
