@@ -163,13 +163,15 @@
             z-index: 30;
             display: none;
             flex-direction: column;
-            gap: 8px;
-            padding: 10px;
+            gap: 10px;
+            padding: 12px;
             background: #1f2124;
-            border: 1px solid #333;
+            border: 1px solid #444;
             border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-            min-width: 200px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            min-width: 280px;
+            width: 280px;
+            box-sizing: border-box;
         }
 
         #tag-popup.visible {
@@ -177,6 +179,9 @@
         }
 
         #tag-popup-input {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
             padding: 8px 10px;
             border: 1px solid #333;
             border-radius: 4px;

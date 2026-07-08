@@ -1513,7 +1513,7 @@ function attachVersionRowContextMenu(item, hash) {
         if (hash === DRAFT_VERSION_HASH) {
             return;
         }
-        if (historySidebarMode !== 'history' && historySidebarMode !== 'tree') {
+        if (historySidebarMode !== 'history' && historySidebarMode !== 'tree' && historySidebarMode !== 'tags') {
             return;
         }
         event.preventDefault();
@@ -1696,6 +1696,8 @@ function renderTagsList() {
         item.appendChild(label);
         item.appendChild(meta);
         item.addEventListener('click', () => selectVersionByHash(entry.hash));
+        item.addEventListener('dblclick', () => restoreQueryVersion(entry.hash, { confirm: false }));
+        attachVersionRowContextMenu(item, entry.hash);
         queryVersionList.appendChild(item);
     }
 }
