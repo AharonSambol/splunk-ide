@@ -10,6 +10,7 @@ const {
     renameQueryFile,
     consumeAutoSave,
     setVersionTag,
+    deleteVersionTag,
     listVersionTags,
     versionTagRef
 } = require('../lib/query-versions');
@@ -413,6 +414,24 @@ describe('version tags', () => {
         assert.equal(mainTags[0].hash, mainVersion.hash);
         assert.equal(otherTags[0].hash, otherVersion.hash);
         assert.notEqual(mainTags[0].hash, otherTags[0].hash);
+    });
+
+    it('deletes a tag while the commit remains in listVersions', async () => {
+        const [version] = await listVersions(git, relativePath);
+        await setVersionTag(git, relativePath, version.hash, 'v1.0');
+
+        const tagsBefore = await listVersionTags(git, relativePath);
+        assert.equal(tagsBefore.length, 1);
+
+        const { ref } = await deleteVersionTag(git, relativePath, 'v1.0');
+        assert.equal(ref, 'search-tag/queries--main.spl/v1.0');
+
+        const tagsAfter = await listVersionTags(git, relativePath);
+        assert.deepEqual(tagsAfter, []);
+
+        const versions = await listVersions(git, relativePath);
+        assert.equal(versions.length, 1);
+        assert.equal(versions[0].hash, version.hash);
     });
 });
 
