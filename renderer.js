@@ -94,7 +94,6 @@ const queryVersionPreviewText = document.getElementById('query-version-preview-t
 const queryPreviewModeBtns = document.querySelectorAll('.preview-mode-btn');
 const querySaveMessage = document.getElementById('query-save-message');
 const querySaveBtn = document.getElementById('query-save-btn');
-const queryTagBtn = document.getElementById('query-tag-btn');
 const queryRestoreBtn = document.getElementById('query-restore-btn');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmModalTitle = document.getElementById('confirm-modal-title');
@@ -151,7 +150,6 @@ queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false
 sidebarCollapseBtn.addEventListener('click', () => setProjectSidebarCollapsed(true));
 sidebarReopenBtn.addEventListener('click', () => setProjectSidebarCollapsed(false));
 querySaveBtn.addEventListener('click', saveQueryVersion);
-queryTagBtn.addEventListener('click', tagSelectedVersion);
 queryRestoreBtn.addEventListener('click', restoreSelectedVersion);
 historyTabs.forEach(tab => {
     tab.addEventListener('click', () => setHistorySidebarMode(tab.dataset.mode));
@@ -1568,31 +1566,10 @@ async function saveTagFromPopup() {
         queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
             applyVersionRowClasses(item, item.dataset.hash);
         });
-        updateTagButtonState();
     } catch (err) {
         queryHistoryStatus.textContent = `Tag failed: ${err.message}`;
         queryHistoryStatus.classList.add('dirty');
     }
-}
-
-function updateTagButtonState() {
-    const canTag = !!selectedVersionHash && selectedVersionHash !== DRAFT_VERSION_HASH;
-    queryTagBtn.disabled = !canTag;
-}
-
-function tagSelectedVersion() {
-    const hash = selectedVersionHash;
-    if (!hash || hash === DRAFT_VERSION_HASH) {
-        return;
-    }
-    const row = queryVersionList.querySelector(`.query-version-item[data-hash="${hash}"]`);
-    if (row) {
-        const rect = row.getBoundingClientRect();
-        openTagPopup(hash, rect.left + 12, rect.bottom + 4);
-        return;
-    }
-    const rect = queryVersionList.getBoundingClientRect();
-    openTagPopup(hash, rect.left + 20, rect.top + 40);
 }
 
 function selectVersionByHash(hash) {
@@ -1940,7 +1917,6 @@ async function refreshQueryHistory() {
         queryHistoryStatus.textContent = '';
         queryRestoreBtn.disabled = true;
         querySaveBtn.disabled = true;
-        updateTagButtonState();
         updateStatusBar();
         versionTags = [];
         return;
@@ -1985,7 +1961,6 @@ async function refreshQueryHistory() {
         renderVersionPreview();
 
         renderHistorySidebarList();
-        updateTagButtonState();
         await refreshQueryDirtyState(file.id);
         updateStatusBar({
             hasChanges: queryHasUnsavedChanges,
@@ -2086,7 +2061,6 @@ function selectDraftVersion() {
     queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
         applyVersionRowClasses(item, item.dataset.hash);
     });
-    updateTagButtonState();
     renderVersionPreview();
 }
 
@@ -2096,7 +2070,6 @@ function selectQueryVersion(version) {
     queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
         applyVersionRowClasses(item, item.dataset.hash);
     });
-    updateTagButtonState();
     renderVersionPreview();
 }
 
