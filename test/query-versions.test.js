@@ -8,7 +8,10 @@ const {
     restoreVersion,
     readCurrentQuery,
     renameQueryFile,
-    consumeAutoSave
+    consumeAutoSave,
+    setVersionTag,
+    listVersionTags,
+    versionTagRef
 } = require('../lib/query-versions');
 const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('./helpers/temp-git-repo');
 
@@ -346,6 +349,70 @@ describe('readCurrentQuery', () => {
     it('returns empty content for missing files', () => {
         const result = readCurrentQuery('/tmp/does-not-exist.spl');
         assert.deepEqual(result, { url: '', query: '' });
+    });
+});
+
+describe('version tags', () => {
+    let repoPath;
+    let git;
+    let relativePath;
+
+    beforeEach(async () => {
+        ({ repoPath, git, relativePath } = await createTempGitRepo('queries/main.spl', SPL_URL_V1));
+        await saveVersion(git, relativePath, 'Initial version');
+    });
+
+    afterEach(() => {
+        cleanupTempRepo(repoPath);
+    });
+
+    it('creates and lists an annotated tag for a commit', async () => {
+        const [version] = await listVersions(git, relativePath);
+        const { ref } = await setVersionTag(git, relativePath, version.hash, 'v1.0');
+
+        assert.equal(ref, 'search-tag/queries--main.spl/v1.0');
+
+        const tags = await listVersionTags(git, relativePath);
+        assert.equal(tags.length, 1);
+        assert.equal(tags[0].name, 'v1.0');
+        assert.equal(tags[0].hash, version.hash);
+        assert.match(tags[0].date, /^\d{4}-\d{2}-\d{2}T/);
+
+        const show = await git.show([ref]);
+        assert.match(show, /^tag search-tag\/queries--main\.spl\/v1\.0/);
+        assert.match(show, /\nv1\.0\n/);
+    });
+
+    it('scopes the same tag name to each relative path', async () => {
+        const otherPath = 'queries/other.spl';
+        writeSplFile(repoPath, otherPath, SPL_URL_V2);
+        await saveVersion(git, otherPath, 'Other version');
+
+        const [mainVersion] = await listVersions(git, relativePath);
+        const [otherVersion] = await listVersions(git, otherPath);
+
+        await setVersionTag(git, relativePath, mainVersion.hash, 'release');
+        await setVersionTag(git, otherPath, otherVersion.hash, 'release');
+
+        assert.equal(
+            versionTagRef(relativePath, 'release'),
+            'search-tag/queries--main.spl/release'
+        );
+        assert.equal(
+            versionTagRef(otherPath, 'release'),
+            'search-tag/queries--other.spl/release'
+        );
+
+        const mainTags = await listVersionTags(git, relativePath);
+        const otherTags = await listVersionTags(git, otherPath);
+
+        assert.equal(mainTags.length, 1);
+        assert.equal(otherTags.length, 1);
+        assert.equal(mainTags[0].name, 'release');
+        assert.equal(otherTags[0].name, 'release');
+        assert.equal(mainTags[0].hash, mainVersion.hash);
+        assert.equal(otherTags[0].hash, otherVersion.hash);
+        assert.notEqual(mainTags[0].hash, otherTags[0].hash);
     });
 });
 

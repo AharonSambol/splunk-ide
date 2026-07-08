@@ -118,8 +118,97 @@
             padding: 10px 12px;
         }
 
-        #explorer.hidden {
+        #query-history-tabs {
+            display: flex;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+        }
+
+        .history-tab {
+            flex: 1;
+            padding: 6px 4px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #8a8a8a;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .history-tab:hover {
+            color: #ccc;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .history-tab.active {
+            color: #9cdcfe;
+            border-bottom-color: #007acc;
+        }
+
+        .version-tag-pill {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: #9cdcfe;
+            background: rgba(156, 220, 254, 0.15);
+            vertical-align: middle;
+        }
+
+        #tag-popup {
+            position: fixed;
+            z-index: 30;
             display: none;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px;
+            background: #1f2124;
+            border: 1px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            min-width: 200px;
+        }
+
+        #tag-popup.visible {
+            display: flex;
+        }
+
+        #tag-popup-input {
+            padding: 8px 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #101214;
+            color: #fff;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        #tag-popup-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+
+        #tag-popup-actions button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        #tag-popup-cancel {
+            background: #3d3d3d;
+            color: #ccc;
+        }
+
+        #tag-popup-save {
+            background: #0e639c;
+            color: #fff;
         }
 
         #query-sidebar {
@@ -962,6 +1051,11 @@
                 <span id="query-history-status"></span>
                 <button id="query-history-close" type="button" title="Collapse timeline">×</button>
             </div>
+            <div id="query-history-tabs">
+                <button type="button" class="history-tab active" data-mode="history">History</button>
+                <button type="button" class="history-tab" data-mode="tree">Tree</button>
+                <button type="button" class="history-tab" data-mode="tags">Tags</button>
+            </div>
             <div id="query-version-list"></div>
             <div id="query-version-preview">
                 <div id="query-version-preview-toolbar">
@@ -975,6 +1069,7 @@
             <div id="query-history-actions">
                 <input id="query-save-message" type="text" placeholder="Version note (optional)..." />
                 <button id="query-save-btn" class="query-history-btn" type="button">Save Version</button>
+                <button id="query-tag-btn" class="query-history-btn secondary" type="button" disabled>Tag</button>
                 <button id="query-restore-btn" class="query-history-btn secondary" type="button" disabled>Restore</button>
             </div>
         </aside>
@@ -1004,6 +1099,14 @@
                 <button id="confirm-cancel" class="modal-button">Cancel</button>
                 <button id="confirm-ok" class="modal-button primary">Confirm</button>
             </div>
+        </div>
+    </div>
+
+    <div id="tag-popup">
+        <input id="tag-popup-input" type="text" placeholder="Tag name..." autocomplete="off" spellcheck="false" />
+        <div id="tag-popup-actions">
+            <button id="tag-popup-cancel" type="button">Cancel</button>
+            <button id="tag-popup-save" type="button">Tag</button>
         </div>
     </div>
 

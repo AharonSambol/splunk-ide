@@ -40,7 +40,9 @@ const {
     saveVersion,
     restoreVersion,
     renameQueryFile,
-    consumeAutoSave
+    consumeAutoSave,
+    setVersionTag,
+    listVersionTags
 } = require('./lib/query-versions');
 const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
@@ -61,6 +63,7 @@ const projectNameLabel = document.getElementById('project-name');
 const tabBar = document.getElementById('tab-bar');
 const viewsContainer = document.getElementById('views-container');
 const explorer = document.getElementById('explorer');
+const historyTabs = document.querySelectorAll('.history-tab');
 const sidebar = document.getElementById('sidebar');
 const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
 const sidebarReopenBtn = document.getElementById('sidebar-reopen');
@@ -83,10 +86,15 @@ const queryHistoryTitle = document.getElementById('query-history-title');
 const queryHistoryStatus = document.getElementById('query-history-status');
 const queryHistoryClose = document.getElementById('query-history-close');
 const queryVersionList = document.getElementById('query-version-list');
+const tagPopup = document.getElementById('tag-popup');
+const tagPopupInput = document.getElementById('tag-popup-input');
+const tagPopupCancel = document.getElementById('tag-popup-cancel');
+const tagPopupSave = document.getElementById('tag-popup-save');
 const queryVersionPreviewText = document.getElementById('query-version-preview-text');
 const queryPreviewModeBtns = document.querySelectorAll('.preview-mode-btn');
 const querySaveMessage = document.getElementById('query-save-message');
 const querySaveBtn = document.getElementById('query-save-btn');
+const queryTagBtn = document.getElementById('query-tag-btn');
 const queryRestoreBtn = document.getElementById('query-restore-btn');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmModalTitle = document.getElementById('confirm-modal-title');
@@ -124,6 +132,9 @@ let selectedVersionHash = null;
 let queryRefreshGeneration = 0;
 let currentQueryText = '';
 let previewMode = 'preview';
+let historySidebarMode = 'history';
+let versionTags = [];
+let tagPopupTargetHash = null;
 let confirmResolve = null;
 const restoreParentByFileId = new Map();
 const forcedDraftByFileId = new Set();
@@ -140,7 +151,28 @@ queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false
 sidebarCollapseBtn.addEventListener('click', () => setProjectSidebarCollapsed(true));
 sidebarReopenBtn.addEventListener('click', () => setProjectSidebarCollapsed(false));
 querySaveBtn.addEventListener('click', saveQueryVersion);
+queryTagBtn.addEventListener('click', tagSelectedVersion);
 queryRestoreBtn.addEventListener('click', restoreSelectedVersion);
+historyTabs.forEach(tab => {
+    tab.addEventListener('click', () => setHistorySidebarMode(tab.dataset.mode));
+});
+tagPopupCancel.addEventListener('click', closeTagPopup);
+tagPopupSave.addEventListener('click', () => saveTagFromPopup());
+tagPopupInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        saveTagFromPopup();
+    }
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeTagPopup();
+    }
+});
+document.addEventListener('mousedown', event => {
+    if (tagPopup.classList.contains('visible') && !tagPopup.contains(event.target)) {
+        closeTagPopup();
+    }
+});
 queryPreviewModeBtns.forEach(btn => {
     btn.addEventListener('click', () => setPreviewMode(btn.dataset.mode));
 });
@@ -1014,7 +1046,8 @@ function handleKeyboardShortcut(d) {
     // Skip if modal or quick search is open
     if (quickSearchOverlay.classList.contains('visible')
         || newFileModal.classList.contains('visible')
-        || confirmModal.classList.contains('visible')) {
+        || confirmModal.classList.contains('visible')
+        || tagPopup.classList.contains('visible')) {
         return;
     }
 
@@ -1108,6 +1141,17 @@ function handleKeyboardShortcut(d) {
             switchToNextTab();
         }
     }
+}
+
+function setHistorySidebarMode(mode) {
+    if (mode !== 'history' && mode !== 'tree' && mode !== 'tags') {
+        return;
+    }
+    historySidebarMode = mode;
+    historyTabs.forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+    renderHistorySidebarList();
 }
 
 function updateExplorer() {
@@ -1453,6 +1497,232 @@ function getRelativePath(file) {
     return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
 }
 
+function getTagsForHash(hash) {
+    return versionTags.filter(tag => tag.hash === hash);
+}
+
+function appendTagPills(labelEl, hash) {
+    for (const tag of getTagsForHash(hash)) {
+        const pill = document.createElement('span');
+        pill.className = 'version-tag-pill';
+        pill.textContent = tag.name;
+        labelEl.appendChild(pill);
+    }
+}
+
+function attachVersionRowContextMenu(item, hash) {
+    item.addEventListener('contextmenu', event => {
+        if (hash === DRAFT_VERSION_HASH) {
+            return;
+        }
+        if (historySidebarMode !== 'history' && historySidebarMode !== 'tree') {
+            return;
+        }
+        event.preventDefault();
+        openTagPopup(hash, event.clientX, event.clientY);
+    });
+}
+
+function openTagPopup(hash, x, y) {
+    if (!hash || hash === DRAFT_VERSION_HASH) {
+        return;
+    }
+    tagPopupTargetHash = hash;
+    tagPopupInput.value = getTagsForHash(hash)[0]?.name || '';
+    tagPopup.style.left = `${x}px`;
+    tagPopup.style.top = `${y}px`;
+    tagPopup.classList.add('visible');
+    tagPopupInput.focus();
+    tagPopupInput.select();
+}
+
+function closeTagPopup() {
+    tagPopup.classList.remove('visible');
+    tagPopupTargetHash = null;
+    tagPopupInput.value = '';
+}
+
+async function saveTagFromPopup() {
+    const name = tagPopupInput.value.trim();
+    const hash = tagPopupTargetHash;
+    if (!name || !hash) {
+        return;
+    }
+    const file = getActiveFile();
+    if (!file || !currentGit) {
+        return;
+    }
+    if (typeof setVersionTag !== 'function') {
+        queryHistoryStatus.textContent = 'Tag helpers not available yet';
+        queryHistoryStatus.classList.add('dirty');
+        return;
+    }
+    const relativePath = getRelativePath(file);
+    const preservedHash = selectedVersionHash;
+    try {
+        await setVersionTag(currentGit, relativePath, hash, name);
+        versionTags = await listVersionTags(currentGit, relativePath);
+        closeTagPopup();
+        renderHistorySidebarList();
+        selectedVersionHash = preservedHash;
+        queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
+            applyVersionRowClasses(item, item.dataset.hash);
+        });
+        updateTagButtonState();
+    } catch (err) {
+        queryHistoryStatus.textContent = `Tag failed: ${err.message}`;
+        queryHistoryStatus.classList.add('dirty');
+    }
+}
+
+function updateTagButtonState() {
+    const canTag = !!selectedVersionHash && selectedVersionHash !== DRAFT_VERSION_HASH;
+    queryTagBtn.disabled = !canTag;
+}
+
+function tagSelectedVersion() {
+    const hash = selectedVersionHash;
+    if (!hash || hash === DRAFT_VERSION_HASH) {
+        return;
+    }
+    const row = queryVersionList.querySelector(`.query-version-item[data-hash="${hash}"]`);
+    if (row) {
+        const rect = row.getBoundingClientRect();
+        openTagPopup(hash, rect.left + 12, rect.bottom + 4);
+        return;
+    }
+    const rect = queryVersionList.getBoundingClientRect();
+    openTagPopup(hash, rect.left + 20, rect.top + 40);
+}
+
+function selectVersionByHash(hash) {
+    if (hash === DRAFT_VERSION_HASH) {
+        selectDraftVersion();
+    } else {
+        const version = queryVersions.find(v => v.hash === hash);
+        if (version) {
+            selectQueryVersion(version);
+        }
+    }
+    const row = queryVersionList.querySelector(`.query-version-item[data-hash="${hash}"]`);
+    if (row) {
+        row.scrollIntoView({ block: 'nearest' });
+    }
+}
+
+function buildVersionTreeRows(versions) {
+    const byHash = new Map(versions.map(v => [v.hash, v]));
+    const children = new Map();
+    for (const version of versions) {
+        const parent = version.parentHash && byHash.has(version.parentHash) ? version.parentHash : null;
+        if (!children.has(parent)) {
+            children.set(parent, []);
+        }
+        children.get(parent).push(version);
+    }
+    const rows = [];
+    function walk(parentHash, prefix, depth) {
+        const kids = children.get(parentHash) || [];
+        kids.forEach((version, index) => {
+            const last = index === kids.length - 1;
+            const connector = depth === 0 ? '' : (last ? '└─ ' : '├─ ');
+            const continuation = depth === 0 ? '' : (last ? '   ' : '│  ');
+            rows.push({ version, glyph: prefix + connector });
+            walk(version.hash, prefix + continuation, depth + 1);
+        });
+    }
+    walk(null, '', 0);
+    return rows;
+}
+
+function renderHistorySidebarList() {
+    if (historySidebarMode === 'tree') {
+        renderVersionTreeList();
+        return;
+    }
+    if (historySidebarMode === 'tags') {
+        renderTagsList();
+        return;
+    }
+    renderQueryVersionList();
+}
+
+function renderVersionTreeList() {
+    queryVersionList.innerHTML = '';
+
+    if (!getActiveFile()) {
+        queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see its version tree.</div>';
+        return;
+    }
+    if (queryVersions.length === 0) {
+        queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">No saved versions yet.</div>';
+        return;
+    }
+
+    for (const { version, glyph } of buildVersionTreeRows(queryVersions)) {
+        const item = document.createElement('div');
+        item.className = 'query-version-item';
+        item.dataset.hash = version.hash;
+        applyVersionRowClasses(item, version.hash);
+
+        const label = document.createElement('div');
+        label.className = 'version-label';
+        label.style.fontFamily = "'Consolas', 'Courier New', monospace";
+        label.textContent = `${glyph}${version.message || 'Saved version'}`;
+        appendTagPills(label, version.hash);
+
+        const meta = document.createElement('div');
+        meta.className = 'version-meta';
+        const when = new Date(version.date).toLocaleString();
+        const shortHash = version.hash.substring(0, 7);
+        meta.textContent = `${shortHash} · ${when}`;
+
+        item.appendChild(label);
+        item.appendChild(meta);
+        item.addEventListener('click', () => selectVersionByHash(version.hash));
+        attachVersionRowContextMenu(item, version.hash);
+        queryVersionList.appendChild(item);
+    }
+}
+
+function renderTagsList() {
+    queryVersionList.innerHTML = '';
+
+    if (!getActiveFile()) {
+        queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see tagged versions.</div>';
+        return;
+    }
+    if (versionTags.length === 0) {
+        queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">No tagged versions. Right-click a commit to tag.</div>';
+        return;
+    }
+
+    const sorted = [...versionTags].sort((a, b) => new Date(b.date) - new Date(a.date));
+    for (const entry of sorted) {
+        const version = queryVersions.find(v => v.hash === entry.hash);
+        const item = document.createElement('div');
+        item.className = 'query-version-item';
+        item.dataset.hash = entry.hash;
+        applyVersionRowClasses(item, entry.hash);
+
+        const label = document.createElement('div');
+        label.className = 'version-label';
+        label.textContent = entry.name;
+
+        const meta = document.createElement('div');
+        meta.className = 'version-meta';
+        const shortHash = entry.hash.substring(0, 7);
+        const taggedWhen = new Date(entry.date).toLocaleString();
+        const commitWhen = version ? new Date(version.date).toLocaleString() : 'unknown';
+        meta.textContent = `${shortHash} · commit ${commitWhen} · tagged ${taggedWhen}`;
+
+        item.appendChild(label);
+        item.appendChild(meta);
+        item.addEventListener('click', () => selectVersionByHash(entry.hash));
+        queryVersionList.appendChild(item);
+    }
+}
+
 function onQueryFileChanged(fileId, { refreshHistory = false } = {}) {
     refreshQueryDirtyState(fileId);
     if (refreshHistory && fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
@@ -1670,7 +1940,9 @@ async function refreshQueryHistory() {
         queryHistoryStatus.textContent = '';
         queryRestoreBtn.disabled = true;
         querySaveBtn.disabled = true;
+        updateTagButtonState();
         updateStatusBar();
+        versionTags = [];
         return;
     }
 
@@ -1680,10 +1952,13 @@ async function refreshQueryHistory() {
     queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Loading...</div>';
 
     try {
-        const [{ hasChanges, status }, versions, current] = await Promise.all([
+        const [{ hasChanges, status }, versions, current, tags] = await Promise.all([
             getFileStatus(currentGit, relativePath),
             listVersions(currentGit, relativePath),
-            Promise.resolve(readCurrentQuery(file.path))
+            Promise.resolve(readCurrentQuery(file.path)),
+            (typeof listVersionTags === 'function'
+                ? listVersionTags(currentGit, relativePath).catch(() => [])
+                : Promise.resolve([]))
         ]);
 
         if (generation !== queryRefreshGeneration) {
@@ -1692,6 +1967,7 @@ async function refreshQueryHistory() {
 
         const preservedHash = selectedVersionHash;
         queryVersions = versions;
+        versionTags = tags;
         queryHasUnsavedChanges = hasChanges || forcedDraftByFileId.has(file.id);
         selectedVersionHash = preservedHash === DRAFT_VERSION_HASH && queryHasUnsavedChanges
             ? DRAFT_VERSION_HASH
@@ -1708,7 +1984,8 @@ async function refreshQueryHistory() {
         }
         renderVersionPreview();
 
-        renderQueryVersionList();
+        renderHistorySidebarList();
+        updateTagButtonState();
         await refreshQueryDirtyState(file.id);
         updateStatusBar({
             hasChanges: queryHasUnsavedChanges,
@@ -1784,6 +2061,7 @@ function renderQueryVersionList() {
         label.className = 'version-label';
         label.textContent = version.message || 'Saved version';
         label.title = version.message;
+        appendTagPills(label, version.hash);
 
         const meta = document.createElement('div');
         meta.className = 'version-meta';
@@ -1797,6 +2075,7 @@ function renderQueryVersionList() {
         item.appendChild(meta);
         item.addEventListener('click', () => selectQueryVersion(version));
         item.addEventListener('dblclick', () => restoreQueryVersion(version.hash, { confirm: false }));
+        attachVersionRowContextMenu(item, version.hash);
         queryVersionList.appendChild(item);
     });
 }
@@ -1807,6 +2086,7 @@ function selectDraftVersion() {
     queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
         applyVersionRowClasses(item, item.dataset.hash);
     });
+    updateTagButtonState();
     renderVersionPreview();
 }
 
@@ -1816,6 +2096,7 @@ function selectQueryVersion(version) {
     queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
         applyVersionRowClasses(item, item.dataset.hash);
     });
+    updateTagButtonState();
     renderVersionPreview();
 }
 
