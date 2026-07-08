@@ -29,6 +29,32 @@
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #sidebar-resize {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 10px;
+            cursor: ew-resize;
+            z-index: 2;
+        }
+
+        #sidebar-resize::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+        }
+
+        #sidebar-resize:hover::after,
+        #sidebar-resize.dragging::after {
+            background: #007acc;
         }
 
         #sidebar.collapsed {
@@ -250,7 +276,7 @@
             width: 2px;
         }
 
-        #query-sidebar-drag-overlay {
+        #sidebar-drag-overlay {
             position: fixed;
             inset: 0;
             z-index: 9999;
@@ -259,7 +285,7 @@
             user-select: none;
         }
 
-        #query-sidebar-drag-overlay.active {
+        #sidebar-drag-overlay.active {
             display: block;
         }
 
@@ -268,8 +294,8 @@
             background: #007acc;
         }
 
-        body.query-sidebar-resizing,
-        body.query-sidebar-resizing * {
+        body.sidebar-resizing,
+        body.sidebar-resizing * {
             cursor: ew-resize !important;
             user-select: none !important;
         }
@@ -1064,6 +1090,7 @@
     <div id="app-shell">
         <button id="sidebar-reopen" type="button" title="Show searches">▶</button>
         <aside id="sidebar">
+            <div id="sidebar-resize" title="Drag to resize"></div>
             <div id="sidebar-header">
                 <span id="sidebar-header-title">Searches</span>
                 <span id="sidebar-header-actions">
@@ -1173,7 +1200,7 @@
         </div>
     </div>
 
-    <div id="query-sidebar-drag-overlay"></div>
+    <div id="sidebar-drag-overlay"></div>
 
     <script src="./renderer.js"></script>
 </body>

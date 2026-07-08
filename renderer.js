@@ -67,8 +67,9 @@ const historyTabs = document.querySelectorAll('.history-tab');
 const sidebar = document.getElementById('sidebar');
 const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
 const sidebarReopenBtn = document.getElementById('sidebar-reopen');
+const sidebarResize = document.getElementById('sidebar-resize');
 const querySidebarResize = document.getElementById('query-sidebar-resize');
-const querySidebarDragOverlay = document.getElementById('query-sidebar-drag-overlay');
+const sidebarDragOverlay = document.getElementById('sidebar-drag-overlay');
 const quickSearchOverlay = document.getElementById('quick-search-overlay');
 const quickSearchHint = document.getElementById('quick-search-hint');
 const quickSearchInput = document.getElementById('quick-search-input');
@@ -108,9 +109,13 @@ const statusVersions = document.getElementById('status-versions');
 const QUERY_SIDEBAR_COLLAPSED_KEY = 'splunk-ide-query-sidebar-collapsed';
 const QUERY_SIDEBAR_WIDTH_KEY = 'splunk-ide-query-sidebar-width';
 const PROJECT_SIDEBAR_COLLAPSED_KEY = 'splunk-ide-project-sidebar-collapsed';
+const PROJECT_SIDEBAR_WIDTH_KEY = 'splunk-ide-project-sidebar-width';
 const QUERY_SIDEBAR_MIN_WIDTH = 220;
 const QUERY_SIDEBAR_MAX_WIDTH = 560;
 const QUERY_SIDEBAR_DEFAULT_WIDTH = 320;
+const PROJECT_SIDEBAR_MIN_WIDTH = 180;
+const PROJECT_SIDEBAR_MAX_WIDTH = 520;
+const PROJECT_SIDEBAR_DEFAULT_WIDTH = 260;
 const DRAFT_VERSION_HASH = '__draft__';
 
 let files = [];
@@ -1849,40 +1854,76 @@ function applyQuerySidebarWidth(width, { persist = true } = {}) {
     return clamped;
 }
 
-function initializeQuerySidebarResize() {
-    const saved = Number.parseInt(localStorage.getItem(QUERY_SIDEBAR_WIDTH_KEY), 10);
-    applyQuerySidebarWidth(Number.isFinite(saved) ? saved : QUERY_SIDEBAR_DEFAULT_WIDTH, { persist: false });
+function clampProjectSidebarWidth(width) {
+    return Math.min(PROJECT_SIDEBAR_MAX_WIDTH, Math.max(PROJECT_SIDEBAR_MIN_WIDTH, width));
+}
 
-    querySidebarResize.addEventListener('mousedown', event => {
-        if (querySidebar.classList.contains('collapsed')) {
+function applyProjectSidebarWidth(width, { persist = true } = {}) {
+    const clamped = clampProjectSidebarWidth(width);
+    sidebar.style.width = `${clamped}px`;
+    if (persist) {
+        localStorage.setItem(PROJECT_SIDEBAR_WIDTH_KEY, String(clamped));
+    }
+    return clamped;
+}
+
+function setupSidebarResizeDrag({ handle, getStartWidth, computeWidth, onWidth, isDisabled }) {
+    handle.addEventListener('mousedown', event => {
+        if (isDisabled()) {
             return;
         }
         event.preventDefault();
         const startX = event.clientX;
-        const startWidth = querySidebar.offsetWidth;
+        const startWidth = getStartWidth();
 
         const preventSelect = e => e.preventDefault();
         const onMouseMove = moveEvent => {
             moveEvent.preventDefault();
-            applyQuerySidebarWidth(startWidth + (startX - moveEvent.clientX));
+            onWidth(computeWidth(startWidth, startX, moveEvent.clientX));
         };
         const cleanup = () => {
-            querySidebarResize.classList.remove('dragging');
-            document.body.classList.remove('query-sidebar-resizing');
-            querySidebarDragOverlay.classList.remove('active');
-            querySidebarDragOverlay.removeEventListener('mousemove', onMouseMove);
-            querySidebarDragOverlay.removeEventListener('mouseup', cleanup);
+            handle.classList.remove('dragging');
+            document.body.classList.remove('sidebar-resizing');
+            sidebarDragOverlay.classList.remove('active');
+            sidebarDragOverlay.removeEventListener('mousemove', onMouseMove);
+            sidebarDragOverlay.removeEventListener('mouseup', cleanup);
             window.removeEventListener('blur', cleanup);
             document.removeEventListener('selectstart', preventSelect);
         };
 
-        querySidebarResize.classList.add('dragging');
-        document.body.classList.add('query-sidebar-resizing');
-        querySidebarDragOverlay.classList.add('active');
-        querySidebarDragOverlay.addEventListener('mousemove', onMouseMove);
-        querySidebarDragOverlay.addEventListener('mouseup', cleanup);
+        handle.classList.add('dragging');
+        document.body.classList.add('sidebar-resizing');
+        sidebarDragOverlay.classList.add('active');
+        sidebarDragOverlay.addEventListener('mousemove', onMouseMove);
+        sidebarDragOverlay.addEventListener('mouseup', cleanup);
         window.addEventListener('blur', cleanup);
         document.addEventListener('selectstart', preventSelect);
+    });
+}
+
+function initializeProjectSidebarResize() {
+    const saved = Number.parseInt(localStorage.getItem(PROJECT_SIDEBAR_WIDTH_KEY), 10);
+    applyProjectSidebarWidth(Number.isFinite(saved) ? saved : PROJECT_SIDEBAR_DEFAULT_WIDTH, { persist: false });
+
+    setupSidebarResizeDrag({
+        handle: sidebarResize,
+        getStartWidth: () => sidebar.offsetWidth,
+        computeWidth: (startWidth, startX, clientX) => startWidth + (clientX - startX),
+        onWidth: applyProjectSidebarWidth,
+        isDisabled: () => sidebar.classList.contains('collapsed'),
+    });
+}
+
+function initializeQuerySidebarResize() {
+    const saved = Number.parseInt(localStorage.getItem(QUERY_SIDEBAR_WIDTH_KEY), 10);
+    applyQuerySidebarWidth(Number.isFinite(saved) ? saved : QUERY_SIDEBAR_DEFAULT_WIDTH, { persist: false });
+
+    setupSidebarResizeDrag({
+        handle: querySidebarResize,
+        getStartWidth: () => querySidebar.offsetWidth,
+        computeWidth: (startWidth, startX, clientX) => startWidth + (startX - clientX),
+        onWidth: applyQuerySidebarWidth,
+        isDisabled: () => querySidebar.classList.contains('collapsed'),
     });
 }
 
@@ -1895,6 +1936,7 @@ function setProjectSidebarCollapsed(collapsed, { persist = true } = {}) {
 }
 
 function initializeLayoutControls() {
+    initializeProjectSidebarResize();
     initializeQuerySidebarResize();
     setProjectSidebarCollapsed(localStorage.getItem(PROJECT_SIDEBAR_COLLAPSED_KEY) === 'true', { persist: false });
 }
