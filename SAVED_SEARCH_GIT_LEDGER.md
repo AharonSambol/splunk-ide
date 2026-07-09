@@ -209,7 +209,7 @@ thing as editor changes.
 | 9 | Done | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
 | 10 | Done | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
 | 11 | Done | Push on saved-search save | `renderer.js`, `lib/git-sync.js` | bare remote/manual smoke |
-| 12 | Open | Conflict and sync status display | `renderer.js` | manual smoke |
+| 12 | Done | Conflict and sync status display | `renderer.js` | manual smoke |
 | 13 | Open | Full two-instance validation | app workflow | checklist at bottom |
 
 ---
@@ -573,6 +573,8 @@ After loop:
 
 - Mark row 12 `Done`.
 - Commit message: `Show saved search sync status`.
+
+**Done (2026-07-09):** Added `SAVED_SEARCH_SYNC_STATUS` labels, remote-changed detection on fetch when a local draft exists, push-rejection classification (`Local version not pushed` vs `Push failed`), and `formatQueryHistoryStatus` for saved-search history/status display separate from dirty state.
 
 ## Loop 13 — full two-instance validation
 
