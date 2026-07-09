@@ -202,7 +202,7 @@ thing as editor changes.
 | 2 | Done | Saved-search commit trailers | `lib/query-versions.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
 | 3 | Done | Explicit git author support for normal and off-HEAD commits | `lib/query-versions.js`, `test/query-versions.test.js` | targeted author tests |
 | 4 | Done | Remote sync helper with exact refspec policy | `lib/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
-| 5 | Open | Two-clone sharing proof | `test/git-sync.test.js` or integration test | repo A push, repo B fetch/list |
+| 5 | Done | Two-clone sharing proof | `test/git-sync.test.js` or integration test | repo A push, repo B fetch/list |
 | 6 | Open | Saved-search open/import service | small new lib, tests | unit test for import/open logic |
 | 7 | Open | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
 | 8 | Open | Persist git remote/author settings | `main.js`, small settings helper/tests | settings read/write check |
@@ -380,6 +380,8 @@ After loop:
 
 - Mark row 5 `Done`.
 - Commit message: `Prove shared saved search history sync`.
+
+**Done (2026-07-09):** Added two-clone integration test: repo A saves canonical saved-search path (head + off-HEAD), pushes; repo B fetches, checks out shared branch, and `listVersions` sees both commits; stash refs stay local-only.
 
 ## Loop 6 — saved-search open/import service
 

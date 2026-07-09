@@ -7,11 +7,13 @@ const { simpleGit } = require('simple-git');
 const { ensureRemote, fetchSharedHistory, pushSharedHistory } = require('../lib/git-sync');
 const {
     saveVersion,
+    listVersions,
     setVersionTag,
     saveDraftStash,
     draftStashRef,
     versionRecordRef
 } = require('../lib/query-versions');
+const { getSavedSearchId, getSavedSearchPath } = require('../lib/saved-search-id');
 const { cleanupTempRepo, writeSplFile } = require('./helpers/temp-git-repo');
 
 const SPL_URL_V1 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
@@ -187,5 +189,71 @@ describe('pushSharedHistory and fetchSharedHistory', () => {
         const bareGit = simpleGit(barePath);
         const bareRefs = await listAllRefs(bareGit);
         assert.ok(!bareRefs.some(ref => ref.startsWith('refs/splunk-ide/stashes/')));
+    });
+});
+
+describe('two-clone saved-search sharing', () => {
+    const SAVED_SEARCH_META = {
+        instance: 'prod',
+        app: 'search',
+        owner: 'nobody',
+        name: 'Error Rate'
+    };
+    const savedSearchId = getSavedSearchId(SAVED_SEARCH_META);
+    const canonicalPath = getSavedSearchPath(SAVED_SEARCH_META);
+
+    let barePath;
+    let repoAPath;
+    let repoBPath;
+    let gitA;
+    let gitB;
+
+    beforeEach(async () => {
+        barePath = await createBareRemote();
+        ({ repoPath: repoAPath, git: gitA } = await createLocalRepo());
+        ({ repoPath: repoBPath, git: gitB } = await createLocalRepo());
+
+        assert.equal((await ensureRemote(gitA, { remoteUrl: barePath })).ok, true);
+        assert.equal((await ensureRemote(gitB, { remoteUrl: barePath })).ok, true);
+    });
+
+    afterEach(() => {
+        cleanupTempRepo(barePath);
+        cleanupTempRepo(repoAPath);
+        cleanupTempRepo(repoBPath);
+    });
+
+    it('shares saved-search history from repo A to repo B without stash refs', async () => {
+        writeSplFile(repoAPath, canonicalPath, SPL_URL_V1);
+        const headVersion = await saveVersion(gitA, canonicalPath, 'Import saved search', undefined, {
+            savedSearch: { ...SAVED_SEARCH_META, id: savedSearchId }
+        });
+
+        writeSplFile(repoAPath, canonicalPath, SPL_URL_V2);
+        const offHeadVersion = await saveVersion(gitA, canonicalPath, 'Off-head save', headVersion.hash);
+
+        writeSplFile(
+            repoAPath,
+            canonicalPath,
+            'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20draft'
+        );
+        await saveDraftStash(gitA, canonicalPath, offHeadVersion.hash);
+        const stashRef = draftStashRef(canonicalPath, offHeadVersion.hash);
+        assert.ok((await gitA.raw(['rev-parse', stashRef])).trim());
+
+        const pushed = await pushSharedHistory(gitA, { sharedBranch: SHARED_BRANCH });
+        assert.equal(pushed.ok, true);
+
+        const fetched = await fetchSharedHistory(gitB);
+        assert.equal(fetched.ok, true);
+        await gitB.checkout(['-B', SHARED_BRANCH, `refs/remotes/origin/${SHARED_BRANCH}`]);
+
+        const versions = await listVersions(gitB, canonicalPath);
+        const hashes = versions.map(version => version.hash);
+        assert.ok(hashes.includes(headVersion.hash), 'repo B sees repo A head commit');
+        assert.ok(hashes.includes(offHeadVersion.hash), 'repo B sees repo A off-head version ref');
+
+        const refsB = await listAllRefs(gitB);
+        assert.ok(!refsB.some(ref => ref.startsWith('refs/splunk-ide/stashes/')));
     });
 });
