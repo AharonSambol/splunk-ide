@@ -30,6 +30,7 @@ const {
 const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl } = require('./lib/url-utils');
 const { getSavedSearchId, getSavedSearchPath } = require('./lib/saved-search-id');
 const { openSavedSearchHistory } = require('./lib/saved-search-open');
+const { ensureRemote, pushSharedHistory } = require('./lib/git-sync');
 const {
     filterQuickSearchResults,
     getQuickSearchEmptyMessage,
@@ -1803,6 +1804,31 @@ function alignFileToCanonicalPath(file, relativePath) {
     updateExplorer();
 }
 
+async function pushSavedSearchHistoryAfterSave(file) {
+    if (!file?.savedSearch || !currentGit) {
+        return;
+    }
+
+    const { remoteUrl, remoteName, sharedBranch } = getGitRemoteSettings();
+    if (!remoteUrl) {
+        return;
+    }
+
+    const remoteResult = await ensureRemote(currentGit, { remoteName, remoteUrl });
+    if (!remoteResult.ok) {
+        file.savedSearchSyncStatus = remoteResult.message || 'Push failed';
+        return;
+    }
+
+    const pushResult = await pushSharedHistory(currentGit, { remoteName, sharedBranch });
+    if (!pushResult.ok) {
+        file.savedSearchSyncStatus = pushResult.message || 'Push failed';
+        return;
+    }
+
+    file.savedSearchSyncStatus = '';
+}
+
 async function enterSavedSearchHistory(file, currentUrl) {
     if (!file?.savedSearch || !currentGit || !currentProjectPath) {
         return;
@@ -2571,7 +2597,18 @@ async function saveQueryVersion() {
     try {
         querySaveBtn.disabled = true;
         const parentHash = restoreParentByFileId.get(file.id);
-        const result = await saveVersion(currentGit, relativePath, label, parentHash);
+        const saveOptions = {};
+        const author = getGitAuthorFromSettings();
+        if (author) {
+            saveOptions.author = author;
+        }
+        if (file.savedSearch) {
+            saveOptions.savedSearch = {
+                ...file.savedSearch,
+                id: getSavedSearchId(file.savedSearch)
+            };
+        }
+        const result = await saveVersion(currentGit, relativePath, label, parentHash, saveOptions);
         if (!result.saved) {
             queryHistoryStatus.textContent = 'No changes to save';
             queryHistoryStatus.classList.remove('dirty');
@@ -2583,6 +2620,9 @@ async function saveQueryVersion() {
             restoreParentByFileId.set(file.id, result.hash);
         }
         querySaveMessage.value = '';
+        if (file.savedSearch) {
+            await pushSavedSearchHistoryAfterSave(file);
+        }
         await refreshQueryHistory();
         if (queryVersions.length > 0) {
             restoreParentByFileId.set(file.id, queryVersions[0].hash);

@@ -208,7 +208,7 @@ thing as editor changes.
 | 8 | Done | Persist git remote/author settings | `main.js`, small settings helper/tests | settings read/write check |
 | 9 | Done | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
 | 10 | Done | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
-| 11 | Open | Push on saved-search save | `renderer.js`, `lib/git-sync.js` | bare remote/manual smoke |
+| 11 | Done | Push on saved-search save | `renderer.js`, `lib/git-sync.js` | bare remote/manual smoke |
 | 12 | Open | Conflict and sync status display | `renderer.js` | manual smoke |
 | 13 | Open | Full two-instance validation | app workflow | checklist at bottom |
 
@@ -555,6 +555,8 @@ After loop:
 
 - Mark row 11 `Done`.
 - Commit message: `Push saved search history on save`.
+
+**Done (2026-07-09):** After local `saveVersion`, saved searches push via `pushSharedHistory` when `remoteUrl` is set; trailers and author passed on save; push failure surfaces in `file.savedSearchSyncStatus` while local commit is kept; history refreshes after push attempt.
 
 ## Loop 12 — conflict and sync status display
 
