@@ -224,6 +224,45 @@ const forcedDraftByFileId = new Set();
 const userDraftByFileId = new Set();
 const savedSearchFetchDone = new Set();
 
+const SAVED_SEARCH_SYNC_STATUS = {
+    REMOTE_CHANGED: 'Remote changed',
+    LOCAL_NOT_PUSHED: 'Local version not pushed',
+    PUSH_FAILED: 'Push failed'
+};
+
+function classifyPushSyncStatus(message) {
+    const normalized = String(message || '').toLowerCase();
+    if (/rejected|non-fast-forward|fetch first|failed to push some refs|would be overwritten/.test(normalized)) {
+        return SAVED_SEARCH_SYNC_STATUS.LOCAL_NOT_PUSHED;
+    }
+    return SAVED_SEARCH_SYNC_STATUS.PUSH_FAILED;
+}
+
+async function getLatestFileCommit(git, ref, relativePath) {
+    try {
+        return (await git.raw(['rev-list', '-1', ref, '--', relativePath])).trim();
+    } catch {
+        return '';
+    }
+}
+
+function formatQueryHistoryStatus(file, { hasUnsavedChanges, syncStatus } = {}) {
+    if (!file?.savedSearch) {
+        return hasUnsavedChanges ? 'Unsaved changes' : 'Up to date';
+    }
+
+    const parts = [];
+    if (hasUnsavedChanges) {
+        parts.push('Unsaved draft');
+    } else if (!syncStatus) {
+        parts.push('Up to date');
+    }
+    if (syncStatus) {
+        parts.push(syncStatus);
+    }
+    return parts.join(' · ') || 'Up to date';
+}
+
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
 copyUrlBtn.addEventListener('click', copyActiveFileUrl);
@@ -1816,13 +1855,13 @@ async function pushSavedSearchHistoryAfterSave(file) {
 
     const remoteResult = await ensureRemote(currentGit, { remoteName, remoteUrl });
     if (!remoteResult.ok) {
-        file.savedSearchSyncStatus = remoteResult.message || 'Push failed';
+        file.savedSearchSyncStatus = SAVED_SEARCH_SYNC_STATUS.PUSH_FAILED;
         return;
     }
 
     const pushResult = await pushSharedHistory(currentGit, { remoteName, sharedBranch });
     if (!pushResult.ok) {
-        file.savedSearchSyncStatus = pushResult.message || 'Push failed';
+        file.savedSearchSyncStatus = classifyPushSyncStatus(pushResult.message);
         return;
     }
 
@@ -1842,7 +1881,15 @@ async function enterSavedSearchHistory(file, currentUrl) {
     const url = currentUrl
         || file.url
         || (fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+    const relativePath = getRelativePath(file);
+    const trackedHash = restoreParentByFileId.get(file.id);
+    let hadLocalDraft = forcedDraftByFileId.has(file.id);
+    if (!hadLocalDraft && trackedHash) {
+        hadLocalDraft = await hasDraftChanges(currentGit, relativePath, trackedHash);
+    }
+    const localCommit = await getLatestFileCommit(currentGit, 'HEAD', relativePath);
     const draftState = await preserveDraftBeforeRemoteSync(file);
+    hadLocalDraft = hadLocalDraft || draftState.stashed;
 
     let result;
     try {
@@ -1855,13 +1902,29 @@ async function enterSavedSearchHistory(file, currentUrl) {
             author: getGitAuthorFromSettings()
         });
     } catch (err) {
-        file.savedSearchSyncStatus = err.message || 'saved search open failed';
+        file.savedSearchSyncStatus = err.message || SAVED_SEARCH_SYNC_STATUS.PUSH_FAILED;
         savedSearchFetchDone.add(searchId);
         return;
     }
 
     savedSearchFetchDone.add(searchId);
-    file.savedSearchSyncStatus = result.warning || '';
+    if (result.warning) {
+        file.savedSearchSyncStatus = result.warning;
+    } else if (result.fetched && hadLocalDraft) {
+        const { remoteName, sharedBranch } = getGitRemoteSettings();
+        const remoteCommit = await getLatestFileCommit(
+            currentGit,
+            `refs/remotes/${remoteName}/${sharedBranch}`,
+            relativePath
+        );
+        if (remoteCommit && localCommit && remoteCommit !== localCommit) {
+            file.savedSearchSyncStatus = SAVED_SEARCH_SYNC_STATUS.REMOTE_CHANGED;
+        } else if (file.savedSearchSyncStatus === SAVED_SEARCH_SYNC_STATUS.REMOTE_CHANGED) {
+            file.savedSearchSyncStatus = '';
+        }
+    } else if (file.savedSearchSyncStatus === SAVED_SEARCH_SYNC_STATUS.REMOTE_CHANGED) {
+        file.savedSearchSyncStatus = '';
+    }
     alignFileToCanonicalPath(file, result.relativePath);
     await restoreDraftAfterRemoteSync(file, draftState);
 }
@@ -2400,7 +2463,14 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
         }
         tab.classList.toggle('dirty', effectiveHasChanges);
         if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
-            queryHistoryStatus.textContent = effectiveHasChanges ? 'Unsaved changes' : 'Up to date';
+            if (file.savedSearch) {
+                queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
+                    hasUnsavedChanges: effectiveHasChanges,
+                    syncStatus: file.savedSearchSyncStatus || ''
+                });
+            } else {
+                queryHistoryStatus.textContent = effectiveHasChanges ? 'Unsaved changes' : 'Up to date';
+            }
             queryHistoryStatus.classList.toggle('dirty', effectiveHasChanges);
             querySaveBtn.disabled = !effectiveHasChanges;
         }
@@ -2469,7 +2539,16 @@ async function refreshQueryHistory() {
         const primary = getPrimarySelectedHash();
         queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
         querySaveBtn.disabled = !queryHasUnsavedChanges;
-        queryHistoryStatus.textContent = queryHasUnsavedChanges ? `Unsaved (${trackedHash ? 'draft' : fileStatus.status})` : 'Up to date';
+        if (file.savedSearch) {
+            queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
+                hasUnsavedChanges: queryHasUnsavedChanges,
+                syncStatus: file.savedSearchSyncStatus || ''
+            });
+        } else {
+            queryHistoryStatus.textContent = queryHasUnsavedChanges
+                ? `Unsaved (${trackedHash ? 'draft' : fileStatus.status})`
+                : 'Up to date';
+        }
         queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
         currentQueryText = current.query || '';
         renderVersionPreview();
