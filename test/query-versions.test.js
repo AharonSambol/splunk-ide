@@ -592,3 +592,71 @@ describe('off-head saves and draft stashes', () => {
         assert.equal(offHead.parentHash, firstHash);
     });
 });
+
+describe('saved-search commit trailers', () => {
+    let repoPath;
+    let git;
+    let relativePath;
+
+    const savedSearchMeta = {
+        instance: 'prod',
+        app: 'search',
+        owner: 'nobody',
+        name: 'Error Rate',
+        id: 'a1b2c3d4e5f6'
+    };
+
+    beforeEach(async () => {
+        ({ repoPath, git, relativePath } = await createTempGitRepo(
+            'saved-searches/prod/search/nobody/error-rate-a1b2c3d4e5f6.spl',
+            SPL_URL_V1
+        ));
+    });
+
+    afterEach(() => {
+        cleanupTempRepo(repoPath);
+    });
+
+    async function getCommitBody(hash) {
+        return (await git.raw(['show', '-s', '--pretty=format:%b', hash])).trim();
+    }
+
+    it('adds trailers on normal saved-search commit', async () => {
+        const result = await saveVersion(git, relativePath, 'Save saved search', undefined, {
+            savedSearch: savedSearchMeta
+        });
+        assert.equal(result.saved, true);
+
+        const body = await getCommitBody(result.hash);
+        assert.match(body, /^Splunk-Instance: prod$/m);
+        assert.match(body, /^Splunk-App: search$/m);
+        assert.match(body, /^Splunk-Owner: nobody$/m);
+        assert.match(body, /^Saved-Search: Error Rate$/m);
+        assert.match(body, /^Saved-Search-Id: a1b2c3d4e5f6$/m);
+    });
+
+    it('adds trailers on off-HEAD saved-search commit', async () => {
+        await saveVersion(git, relativePath, 'First save', undefined, { savedSearch: savedSearchMeta });
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        await saveVersion(git, relativePath, 'Second save', undefined, { savedSearch: savedSearchMeta });
+
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+        await restoreVersion(git, relativePath, firstHash, firstHash, { skipAutoSave: true });
+
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20branch');
+        const result = await saveVersion(git, relativePath, 'Off-head saved search', firstHash, {
+            savedSearch: savedSearchMeta
+        });
+        assert.equal(result.saved, true);
+
+        const body = await getCommitBody(result.hash);
+        assert.match(body, /^Query-Parent: /m);
+        assert.match(body, new RegExp(`^Query-Parent: ${firstHash}$`, 'm'));
+        assert.match(body, /^Splunk-Instance: prod$/m);
+        assert.match(body, /^Splunk-App: search$/m);
+        assert.match(body, /^Splunk-Owner: nobody$/m);
+        assert.match(body, /^Saved-Search: Error Rate$/m);
+        assert.match(body, /^Saved-Search-Id: a1b2c3d4e5f6$/m);
+    });
+});
