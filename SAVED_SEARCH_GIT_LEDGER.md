@@ -203,7 +203,7 @@ thing as editor changes.
 | 3 | Done | Explicit git author support for normal and off-HEAD commits | `lib/query-versions.js`, `test/query-versions.test.js` | targeted author tests |
 | 4 | Done | Remote sync helper with exact refspec policy | `lib/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
 | 5 | Done | Two-clone sharing proof | `test/git-sync.test.js` or integration test | repo A push, repo B fetch/list |
-| 6 | Open | Saved-search open/import service | small new lib, tests | unit test for import/open logic |
+| 6 | Done | Saved-search open/import service | small new lib, tests | unit test for import/open logic |
 | 7 | Open | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
 | 8 | Open | Persist git remote/author settings | `main.js`, small settings helper/tests | settings read/write check |
 | 9 | Open | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
@@ -424,6 +424,8 @@ After loop:
 
 - Mark row 6 `Done`.
 - Commit message: `Add saved search open service`.
+
+**Done (2026-07-09):** Added `openSavedSearchHistory` in `lib/saved-search-open.js` — canonical path, ensureRepo/fetch/checkout, worktree-wins import, git restore, first-open commit with trailers; fetch failure returns warning without blocking local open. Six unit tests pass.
 
 ## Loop 7 — renderer canonical path wiring
 
