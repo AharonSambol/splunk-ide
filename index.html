@@ -947,9 +947,73 @@
         }
 
         #new-file-modal.visible,
-        #confirm-modal.visible {
+        #confirm-modal.visible,
+        #git-sync-settings-modal.visible {
             opacity: 1;
             pointer-events: auto;
+        }
+
+        #git-sync-settings-modal {
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 20, 20, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease;
+        }
+
+        #git-sync-settings-modal-box {
+            width: min(480px, calc(100% - 40px));
+            background: #1f2124;
+            border-radius: 12px;
+            border: 1px solid #333;
+            padding: 22px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        #git-sync-settings-title {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #e0e0e0;
+            margin-bottom: 16px;
+        }
+
+        #git-sync-settings-modal-box label {
+            display: block;
+            margin-bottom: 6px;
+            color: #c9d1d9;
+            font-size: 0.9rem;
+        }
+
+        #git-sync-settings-modal-box input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #101214;
+            color: #ffffff;
+            outline: none;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+        }
+
+        #git-sync-settings-status {
+            min-height: 1.2em;
+            margin-top: 4px;
+            font-size: 0.85rem;
+            color: #8a8a8a;
+        }
+
+        #git-sync-settings-status.error {
+            color: #f48771;
+        }
+
+        #git-sync-settings-status.success {
+            color: #7ec699;
         }
 
         #confirm-modal {
@@ -1118,6 +1182,7 @@
                     <button id="prev-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Back">⬅</button>
                     <button id="next-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Forward">➡</button>
                     <button id="copy-url-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Copy URL of open file">Copy URL</button>
+                    <button id="git-sync-settings-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Git sync settings">⚙</button>
                 </div>
             </div>
 
@@ -1187,6 +1252,37 @@
             <button id="tag-popup-cancel" type="button">Cancel</button>
             <button id="tag-popup-clear" type="button" hidden>Clear Tag</button>
             <button id="tag-popup-save" type="button">Tag</button>
+        </div>
+    </div>
+
+    <div id="git-sync-settings-modal" class="">
+        <div id="git-sync-settings-modal-box">
+            <div id="git-sync-settings-title">Git Sync Settings</div>
+            <div class="modal-row">
+                <label for="git-sync-remote-url">Remote repository URL</label>
+                <input id="git-sync-remote-url" type="text" placeholder="Leave blank for local-only" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="modal-row">
+                <label for="git-sync-remote-name">Remote name</label>
+                <input id="git-sync-remote-name" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="modal-row">
+                <label for="git-sync-shared-branch">Shared branch</label>
+                <input id="git-sync-shared-branch" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="modal-row">
+                <label for="git-sync-user-name">Git author name</label>
+                <input id="git-sync-user-name" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="modal-row">
+                <label for="git-sync-user-email">Git author email</label>
+                <input id="git-sync-user-email" type="email" autocomplete="off" spellcheck="false" />
+            </div>
+            <div id="git-sync-settings-status"></div>
+            <div class="modal-buttons">
+                <button id="git-sync-settings-cancel" class="modal-button" type="button">Cancel</button>
+                <button id="git-sync-settings-save" class="modal-button primary" type="button">Save</button>
+            </div>
         </div>
     </div>
 

@@ -109,6 +109,16 @@ const confirmModalTitle = document.getElementById('confirm-modal-title');
 const confirmModalBody = document.getElementById('confirm-modal-body');
 const confirmCancelBtn = document.getElementById('confirm-cancel');
 const confirmOkBtn = document.getElementById('confirm-ok');
+const gitSyncSettingsBtn = document.getElementById('git-sync-settings-btn');
+const gitSyncSettingsModal = document.getElementById('git-sync-settings-modal');
+const gitSyncRemoteUrlInput = document.getElementById('git-sync-remote-url');
+const gitSyncRemoteNameInput = document.getElementById('git-sync-remote-name');
+const gitSyncSharedBranchInput = document.getElementById('git-sync-shared-branch');
+const gitSyncUserNameInput = document.getElementById('git-sync-user-name');
+const gitSyncUserEmailInput = document.getElementById('git-sync-user-email');
+const gitSyncSettingsStatus = document.getElementById('git-sync-settings-status');
+const gitSyncSettingsCancelBtn = document.getElementById('git-sync-settings-cancel');
+const gitSyncSettingsSaveBtn = document.getElementById('git-sync-settings-save');
 const statusFile = document.getElementById('status-file');
 const statusSave = document.getElementById('status-save');
 const statusVersions = document.getElementById('status-versions');
@@ -138,6 +148,13 @@ let quickSearchMode = 'file';
 let modalMode = 'create';
 let modalTargetFileId = null;
 let currentGit = null;
+let gitSyncSettings = {
+    remoteUrl: '',
+    remoteName: 'origin',
+    sharedBranch: 'main',
+    gitUserName: '',
+    gitUserEmail: ''
+};
 let queryVersions = [];
 let queryHasUnsavedChanges = false;
 let selectedVersionHashes = [];
@@ -210,6 +227,9 @@ copyUrlBtn.addEventListener('click', copyActiveFileUrl);
 newFileBtn.addEventListener('click', openNewFileModal);
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
+gitSyncSettingsBtn.addEventListener('click', openGitSyncSettingsModal);
+gitSyncSettingsCancelBtn.addEventListener('click', closeGitSyncSettingsModal);
+gitSyncSettingsSaveBtn.addEventListener('click', saveGitSyncSettingsFromModal);
 
 queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false));
 sidebarCollapseBtn.addEventListener('click', () => setProjectSidebarCollapsed(true));
@@ -269,12 +289,22 @@ newFileModalInput.addEventListener('keydown', event => {
         closeNewFileModal();
     }
 });
+gitSyncSettingsModal.addEventListener('keydown', event => {
+    if (!gitSyncSettingsModal.classList.contains('visible')) {
+        return;
+    }
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeGitSyncSettingsModal();
+    }
+});
 document.addEventListener('keydown', handleGlobalKeydown);
 quickSearchInput.addEventListener('input', updateQuickSearchResults);
 quickSearchInput.addEventListener('keydown', handleQuickSearchKeydown);
 
 window.onload = async () => {
     initializeLayoutControls();
+    await loadGitSyncSettings();
     const workspacePath = await ipcRenderer.invoke('get-default-workspace');
     await loadProject(workspacePath);
     if (files.length === 0) {
@@ -283,6 +313,65 @@ window.onload = async () => {
         openStartupSearch();
     }
 };
+
+async function loadGitSyncSettings() {
+    gitSyncSettings = await ipcRenderer.invoke('get-git-sync-settings');
+}
+
+function populateGitSyncSettingsForm() {
+    gitSyncRemoteUrlInput.value = gitSyncSettings.remoteUrl || '';
+    gitSyncRemoteNameInput.value = gitSyncSettings.remoteName || 'origin';
+    gitSyncSharedBranchInput.value = gitSyncSettings.sharedBranch || 'main';
+    gitSyncUserNameInput.value = gitSyncSettings.gitUserName || '';
+    gitSyncUserEmailInput.value = gitSyncSettings.gitUserEmail || '';
+}
+
+function setGitSyncSettingsStatus(message, type = '') {
+    gitSyncSettingsStatus.textContent = message;
+    gitSyncSettingsStatus.classList.remove('error', 'success');
+    if (type) {
+        gitSyncSettingsStatus.classList.add(type);
+    }
+}
+
+function openGitSyncSettingsModal() {
+    populateGitSyncSettingsForm();
+    setGitSyncSettingsStatus('');
+    gitSyncSettingsModal.classList.add('visible');
+    setTimeout(() => gitSyncRemoteUrlInput.focus(), 0);
+}
+
+function closeGitSyncSettingsModal() {
+    gitSyncSettingsModal.classList.remove('visible');
+    setGitSyncSettingsStatus('');
+}
+
+async function saveGitSyncSettingsFromModal() {
+    const settings = {
+        remoteUrl: gitSyncRemoteUrlInput.value,
+        remoteName: gitSyncRemoteNameInput.value,
+        sharedBranch: gitSyncSharedBranchInput.value,
+        gitUserName: gitSyncUserNameInput.value,
+        gitUserEmail: gitSyncUserEmailInput.value
+    };
+
+    gitSyncSettingsSaveBtn.disabled = true;
+    setGitSyncSettingsStatus('Saving...');
+
+    try {
+        const result = await ipcRenderer.invoke('set-git-sync-settings', settings);
+        if (!result || !result.ok) {
+            setGitSyncSettingsStatus(result?.message || 'Failed to save settings', 'error');
+            return;
+        }
+        await loadGitSyncSettings();
+        setGitSyncSettingsStatus('Settings saved', 'success');
+    } catch (error) {
+        setGitSyncSettingsStatus(error.message || 'Failed to save settings', 'error');
+    } finally {
+        gitSyncSettingsSaveBtn.disabled = false;
+    }
+}
 
 function openStartupSearch() {
     let fileId = fileMru.find(id => files.some(file => file.id === id));

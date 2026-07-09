@@ -206,7 +206,7 @@ thing as editor changes.
 | 6 | Done | Saved-search open/import service | small new lib, tests | unit test for import/open logic |
 | 7 | Done | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
 | 8 | Done | Persist git remote/author settings | `main.js`, small settings helper/tests | settings read/write check |
-| 9 | Open | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
+| 9 | Done | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
 | 10 | Open | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
 | 11 | Open | Push on saved-search save | `renderer.js`, `lib/git-sync.js` | bare remote/manual smoke |
 | 12 | Open | Conflict and sync status display | `renderer.js` | manual smoke |
@@ -507,6 +507,8 @@ After loop:
 
 - Mark row 9 `Done`.
 - Commit message: `Add git sync settings UI`.
+
+**Done (2026-07-09):** Added gear-button settings modal with remote URL/name, shared branch, and git author fields; loads on startup via IPC, explicit save with error/success status; `gitSyncSettings` kept in renderer state for later loops.
 
 ## Loop 10 — fetch on saved-search open
 
