@@ -210,7 +210,7 @@ thing as editor changes.
 | 10 | Done | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
 | 11 | Done | Push on saved-search save | `renderer.js`, `lib/git-sync.js` | bare remote/manual smoke |
 | 12 | Done | Conflict and sync status display | `renderer.js` | manual smoke |
-| 13 | Open | Full two-instance validation | app workflow | checklist at bottom |
+| 13 | Requires attention | Full two-instance validation | app workflow | checklist at bottom |
 
 ---
 
@@ -591,8 +591,60 @@ Manual checklist:
 
 After loop:
 
-- Mark row 13 `Done`.
+- Mark row 13 `Done` only after manual checklist below passes.
 - Commit message: `Validate shared saved search history workflow` if any docs/test changes are committed.
+
+**Requires attention (2026-07-09):** Automated checks pass (`npm run test:syntax`, 98 unit tests). Manual two-instance GUI validation pending — see checklist below.
+
+## Manual validation checklist (Loop 13)
+
+Run two Splunk IDE instances (A and B) against the same bare remote. Configure different git authors in each instance's settings.
+
+### Setup
+
+- [ ] Instance A: set git author name/email (e.g. `Alice <alice@example.com>`)
+- [ ] Instance B: set git author name/email (e.g. `Bob <bob@example.com>`)
+- [ ] Both instances: same remote URL, remote name, and shared branch in settings
+- [ ] Bare remote is reachable from both machines (or two local userData dirs with same remote)
+
+### A imports and pushes
+
+- [ ] Instance A: open a saved search (not yet in git) — confirm import commit appears in history
+- [ ] Instance A: edit query, save — confirm local history entry with Alice as author
+- [ ] Instance A: confirm sync status shows pushed / up to date (no push failure)
+- [ ] On remote: `git ls-remote <remote>` shows shared branch HEAD advanced
+
+### B sees A and pushes
+
+- [ ] Instance B: open the **same** saved search (same instance/app/owner/name)
+- [ ] Instance B: history shows A's import + save commits with Alice as author
+- [ ] Instance B: edit query, save — confirm Bob as author on new commit
+- [ ] Instance B: confirm push succeeds
+
+### A sees B
+
+- [ ] Instance A: close and reopen the saved search (or switch away and back) to trigger fetch
+- [ ] Instance A: history shows B's commit with Bob as author
+
+### Draft preservation after restore
+
+- [ ] Instance A: restore an older version from history
+- [ ] Instance A: edit the restored content (do not save) — confirm dirty/draft state
+- [ ] Instance A: switch to another tab/file, then switch back to the saved search
+- [ ] Instance A: draft edits are still present locally (not lost to fetch/checkout)
+
+### Remote ref hygiene
+
+On the bare remote, verify:
+
+- [ ] `refs/heads/<sharedBranch>` exists and has expected commits
+- [ ] `refs/tags/search-tag/*` present if tags were created during test
+- [ ] `refs/splunk-ide/versions/*` present if off-HEAD versions were saved
+- [ ] **No** `refs/splunk-ide/stashes/*` on remote (`git ls-remote <remote> 'refs/splunk-ide/stashes/*'` returns empty)
+
+### Pass criteria
+
+All boxes checked → mark Loop 13 `Done` in ledger table and commit status update.
 
 ## Per-loop done definition
 
