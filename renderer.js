@@ -27,7 +27,8 @@ const {
     getNextTab,
     createDuplicateFileName,
 } = require('./lib/tabs');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder } = require('./lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl } = require('./lib/url-utils');
+const { getSavedSearchPath } = require('./lib/saved-search-id');
 const {
     filterQuickSearchResults,
     getQuickSearchEmptyMessage,
@@ -346,16 +347,29 @@ function createFileWithUrl(name, url, parentFolder = '') {
         return;
     }
 
+    const savedSearch = parseSavedSearchFromUrl(url);
     const normalizedFileName = normalizeRelativePath(name);
     const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
     fileCounter++;
 
-    const relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
-    const filePath = getProjectFilePath(relativeFileName);
+    let relativeFileName;
+    let filePath;
+    if (savedSearch) {
+        const canonicalRelative = getSavedSearchPath(savedSearch);
+        relativeFileName = canonicalRelative.replace(/\.spl$/i, '');
+        filePath = path.join(currentProjectPath, ...canonicalRelative.split('/'));
+    } else {
+        relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
+        filePath = getProjectFilePath(relativeFileName);
+    }
+
     ensureDirectoryExists(path.dirname(filePath));
     fs.writeFileSync(filePath, url, 'utf8');
 
     const file = { id: fileId, name: relativeFileName, path: filePath, url };
+    if (savedSearch) {
+        file.savedSearch = savedSearch;
+    }
     files.push(file);
     fileMru.unshift(fileId);
 
@@ -583,15 +597,68 @@ function saveFileUrl(fileId) {
     }
 
     const view = document.getElementById(fileId);
-    if (view) {
-        const url = view.getURL();
-        if (url && url !== file.url) {
-            file.url = url;
-            fs.writeFileSync(file.path, url, 'utf8');
-            userDraftByFileId.add(fileId);
-            onQueryFileChanged(fileId, { refreshHistory: true });
-        }
+    if (!view) {
+        return;
     }
+
+    const url = view.getURL();
+    if (!url || url === file.url) {
+        return;
+    }
+
+    file.url = url;
+    const savedSearch = parseSavedSearchFromUrl(url);
+    if (savedSearch) {
+        void applySavedSearchToFile(file, savedSearch, url);
+        return;
+    }
+
+    fs.writeFileSync(file.path, url, 'utf8');
+    userDraftByFileId.add(fileId);
+    onQueryFileChanged(fileId, { refreshHistory: true });
+}
+
+async function applySavedSearchToFile(file, savedSearch, url) {
+    const oldRelative = path.relative(currentProjectPath, file.path).split(path.sep).join('/');
+    file.savedSearch = savedSearch;
+
+    const canonicalRelative = getSavedSearchPath(savedSearch);
+    const canonicalPath = path.join(currentProjectPath, ...canonicalRelative.split('/'));
+
+    if (file.path === canonicalPath) {
+        fs.writeFileSync(file.path, url, 'utf8');
+        userDraftByFileId.add(file.id);
+        onQueryFileChanged(file.id, { refreshHistory: true });
+        return;
+    }
+
+    ensureDirectoryExists(path.dirname(canonicalPath));
+
+    if (currentGit && oldRelative !== canonicalRelative && fs.existsSync(file.path)) {
+        fs.writeFileSync(file.path, url, 'utf8');
+        await renameQueryFile(currentGit, currentProjectPath, oldRelative, canonicalRelative);
+        file.path = canonicalPath;
+    } else if (fs.existsSync(canonicalPath) && canonicalPath !== file.path) {
+        fs.writeFileSync(canonicalPath, url, 'utf8');
+        if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+        }
+        file.path = canonicalPath;
+    } else if (fs.existsSync(file.path)) {
+        fs.writeFileSync(file.path, url, 'utf8');
+        fs.renameSync(file.path, canonicalPath);
+        file.path = canonicalPath;
+    } else {
+        fs.writeFileSync(canonicalPath, url, 'utf8');
+        file.path = canonicalPath;
+    }
+
+    file.name = canonicalRelative.replace(/\.spl$/i, '');
+    addFolderForPath(getFileFolder(file.name));
+    updateTabLabel(file);
+    updateExplorer();
+    userDraftByFileId.add(file.id);
+    onQueryFileChanged(file.id, { refreshHistory: true });
 }
 
 function populateFolderSelect(selectedValue = '') {
@@ -705,7 +772,12 @@ async function loadProject(projectPath) {
     filePaths.forEach(filePath => {
         const url = fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL;
         const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
-        files.push({ id: `splunk-view-${Date.now()}-${Math.random()}`, name, path: filePath, url });
+        const savedSearch = parseSavedSearchFromUrl(url);
+        const fileRecord = { id: `splunk-view-${Date.now()}-${Math.random()}`, name, path: filePath, url };
+        if (savedSearch) {
+            fileRecord.savedSearch = savedSearch;
+        }
+        files.push(fileRecord);
     });
 
     updateExplorer();
@@ -1561,6 +1633,9 @@ function getActiveFile() {
 }
 
 function getRelativePath(file) {
+    if (file.savedSearch) {
+        return getSavedSearchPath(file.savedSearch);
+    }
     return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
 }
 

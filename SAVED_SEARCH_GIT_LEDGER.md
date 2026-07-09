@@ -204,7 +204,7 @@ thing as editor changes.
 | 4 | Done | Remote sync helper with exact refspec policy | `lib/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
 | 5 | Done | Two-clone sharing proof | `test/git-sync.test.js` or integration test | repo A push, repo B fetch/list |
 | 6 | Done | Saved-search open/import service | small new lib, tests | unit test for import/open logic |
-| 7 | Open | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
+| 7 | Done | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
 | 8 | Open | Persist git remote/author settings | `main.js`, small settings helper/tests | settings read/write check |
 | 9 | Open | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
 | 10 | Open | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
@@ -448,6 +448,8 @@ After loop:
 
 - Mark row 7 `Done`.
 - Commit message: `Use canonical paths for saved searches`.
+
+**Done (2026-07-09):** Added `parseSavedSearchFromUrl` in `url-utils.js`; renderer attaches `file.savedSearch` from Splunk URLs, writes/moves files to canonical paths, and `getRelativePath()` returns `getSavedSearchPath()` when metadata is set. History calls unchanged (already use `getRelativePath`). Three url-utils tests pass; syntax check clean.
 
 ## Loop 8 — settings persistence
 
