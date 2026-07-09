@@ -35,6 +35,10 @@ const {
 } = require('./lib/quick-search');
 const {
     getFileStatus,
+    hasDraftChanges,
+    getDraftStash,
+    saveDraftStash,
+    popDraftStash,
     listVersions,
     readCurrentQuery,
     saveVersion,
@@ -2079,7 +2083,11 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
     try {
         const relativePath = getRelativePath(file);
         const { hasChanges } = await getFileStatus(currentGit, relativePath);
-        const effectiveHasChanges = hasChanges || forcedDraftByFileId.has(fileId);
+        const trackedHash = restoreParentByFileId.get(fileId);
+        const logicalHasChanges = trackedHash
+            ? await hasDraftChanges(currentGit, relativePath, trackedHash)
+            : hasChanges;
+        const effectiveHasChanges = logicalHasChanges || forcedDraftByFileId.has(fileId);
         if (generation !== queryRefreshGeneration && fileId !== activeFileId) {
             return;
         }
@@ -2121,7 +2129,7 @@ async function refreshQueryHistory() {
     queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Loading...</div>';
 
     try {
-        const [{ hasChanges, status }, versions, current, tags] = await Promise.all([
+        const [fileStatus, versions, current, tags] = await Promise.all([
             getFileStatus(currentGit, relativePath),
             listVersions(currentGit, relativePath),
             Promise.resolve(readCurrentQuery(file.path)),
@@ -2137,7 +2145,15 @@ async function refreshQueryHistory() {
         const preservedHashes = [...selectedVersionHashes];
         queryVersions = versions;
         versionTags = tags;
-        queryHasUnsavedChanges = hasChanges || forcedDraftByFileId.has(file.id);
+        let trackedHash = restoreParentByFileId.get(file.id);
+        if (!trackedHash && versions.length > 0) {
+            trackedHash = versions[0].hash;
+            restoreParentByFileId.set(file.id, trackedHash);
+        }
+        const logicalHasChanges = trackedHash
+            ? await hasDraftChanges(currentGit, relativePath, trackedHash)
+            : fileStatus.hasChanges;
+        queryHasUnsavedChanges = logicalHasChanges || forcedDraftByFileId.has(file.id);
         selectedVersionHashes = preservedHashes.filter(hash => (
             hash === DRAFT_VERSION_HASH
                 ? queryHasUnsavedChanges
@@ -2146,19 +2162,16 @@ async function refreshQueryHistory() {
         const primary = getPrimarySelectedHash();
         queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
         querySaveBtn.disabled = !queryHasUnsavedChanges;
-        queryHistoryStatus.textContent = queryHasUnsavedChanges ? `Unsaved (${status})` : 'Up to date';
+        queryHistoryStatus.textContent = queryHasUnsavedChanges ? `Unsaved (${trackedHash ? 'draft' : fileStatus.status})` : 'Up to date';
         queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
         currentQueryText = current.query || '';
-        if (!restoreParentByFileId.has(file.id) && versions.length > 0) {
-            restoreParentByFileId.set(file.id, versions[0].hash);
-        }
         renderVersionPreview();
 
         renderHistorySidebarList();
         await refreshQueryDirtyState(file.id);
         updateStatusBar({
             hasChanges: queryHasUnsavedChanges,
-            status,
+            status: trackedHash ? 'draft' : fileStatus.status,
             versionCount: versions.length
         });
     } catch (err) {
@@ -2285,6 +2298,9 @@ async function saveQueryVersion() {
         }
         forcedDraftByFileId.delete(file.id);
         userDraftByFileId.delete(file.id);
+        if (result.hash) {
+            restoreParentByFileId.set(file.id, result.hash);
+        }
         querySaveMessage.value = '';
         await refreshQueryHistory();
         if (queryVersions.length > 0) {
@@ -2328,23 +2344,44 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         const relativePath = getRelativePath(file);
         const trackedHash = restoreParentByFileId.get(file.id);
         const hasUserDraft = userDraftByFileId.has(file.id);
+
+        if (hasUserDraft && trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
+            await saveDraftStash(currentGit, relativePath, trackedHash);
+            userDraftByFileId.delete(file.id);
+        }
+
+        const draftStash = await getDraftStash(currentGit, relativePath, hash);
         const headHash = version.isAutoSave ? (await currentGit.revparse(['HEAD'])).trim() : '';
         const restored = await restoreVersion(
             currentGit,
             relativePath,
             hash,
             trackedHash,
-            { skipAutoSave: !!version.isAutoSave || !hasUserDraft }
+            { skipAutoSave: true }
         );
-        file.url = restored.url;
-        fs.writeFileSync(file.path, restored.url, 'utf8');
+
+        let finalContent = restored;
+        if (draftStash) {
+            const popped = await popDraftStash(currentGit, relativePath, hash);
+            if (popped) {
+                finalContent = popped;
+            }
+        }
+
+        file.url = finalContent.url;
+        fs.writeFileSync(file.path, finalContent.url, 'utf8');
 
         const view = document.getElementById(file.id);
         if (view) {
-            view.src = restored.url;
+            view.src = finalContent.url;
         }
 
-        if (version.isAutoSave) {
+        if (draftStash) {
+            restoreParentByFileId.set(file.id, hash);
+            forcedDraftByFileId.add(file.id);
+            userDraftByFileId.add(file.id);
+            selectedVersionHashes = [DRAFT_VERSION_HASH];
+        } else if (version.isAutoSave) {
             await consumeAutoSave(currentGit, hash);
             if (hash === headHash) {
                 await currentGit.raw(['reset', '--mixed', `${hash}^`]);

@@ -12,7 +12,13 @@ const {
     setVersionTag,
     deleteVersionTag,
     listVersionTags,
-    versionTagRef
+    versionTagRef,
+    hasDraftChanges,
+    saveDraftStash,
+    popDraftStash,
+    getDraftStash,
+    draftStashRef,
+    versionRecordRef
 } = require('../lib/query-versions');
 const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('./helpers/temp-git-repo');
 
@@ -471,5 +477,118 @@ describe('renameQueryFile', () => {
         assert.equal(require('node:fs').existsSync(require('node:path').join(barePath, oldPath)), false);
 
         cleanupTempRepo(barePath);
+    });
+});
+
+describe('off-head saves and draft stashes', () => {
+    let repoPath;
+    let git;
+    let relativePath;
+
+    beforeEach(async () => {
+        ({ repoPath, git, relativePath } = await createTempGitRepo('queries/main.spl', SPL_URL_V1));
+    });
+
+    afterEach(() => {
+        cleanupTempRepo(repoPath);
+    });
+
+    it('saving from an older base creates a commit whose parent is that older commit', async () => {
+        await saveVersion(git, relativePath, 'First save');
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        await saveVersion(git, relativePath, 'Second save');
+
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+        await restoreVersion(git, relativePath, firstHash, firstHash, { skipAutoSave: true });
+
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20branch');
+        const result = await saveVersion(git, relativePath, 'Branch save', firstHash);
+        assert.equal(result.saved, true);
+
+        const parent = (await git.raw(['rev-parse', `${result.hash}^`])).trim();
+        assert.equal(parent, firstHash);
+
+        const listed = await listVersions(git, relativePath);
+        assert.ok(listed.some(version => version.hash === result.hash));
+    });
+
+    it('saving from an older base uses base content even when working tree matches HEAD', async () => {
+        await saveVersion(git, relativePath, 'First save');
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        await saveVersion(git, relativePath, 'Second save');
+
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+        await restoreVersion(git, relativePath, firstHash, firstHash, { skipAutoSave: true });
+
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        const result = await saveVersion(git, relativePath, 'Back to latest text from old base', firstHash);
+        assert.equal(result.saved, true);
+
+        const parent = (await git.raw(['rev-parse', `${result.hash}^`])).trim();
+        assert.equal(parent, firstHash);
+    });
+
+    it('saving a draft stash creates a hidden IDE ref, not a visible history commit', async () => {
+        await saveVersion(git, relativePath, 'First save');
+        const [base] = await listVersions(git, relativePath);
+
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        assert.equal(await hasDraftChanges(git, relativePath, base.hash), true);
+
+        const beforeLog = await git.log({ file: relativePath });
+        const result = await saveDraftStash(git, relativePath, base.hash);
+        assert.equal(result.saved, true);
+
+        const afterLog = await git.log({ file: relativePath });
+        assert.equal(afterLog.total, beforeLog.total);
+
+        const ref = draftStashRef(relativePath, base.hash);
+        const stashHash = (await git.raw(['rev-parse', ref])).trim();
+        assert.equal(stashHash, result.hash);
+    });
+
+    it('popping the draft stash restores the draft content and deletes the ref', async () => {
+        await saveVersion(git, relativePath, 'First save');
+        const [base] = await listVersions(git, relativePath);
+        const draftUrl = SPL_URL_V2;
+
+        writeSplFile(repoPath, relativePath, draftUrl);
+        const stashResult = await saveDraftStash(git, relativePath, base.hash);
+        assert.equal(stashResult.saved, true, `stash failed: ${JSON.stringify(stashResult)} base=${base?.hash}`);
+
+        writeSplFile(repoPath, relativePath, SPL_URL_V1);
+        const stash = await getDraftStash(git, relativePath, base.hash);
+        assert.ok(stash?.hash, `missing stash ref for base ${base.hash}`);
+
+        const restored = await popDraftStash(git, relativePath, base.hash);
+        assert.equal(restored.url, draftUrl);
+        assert.equal(restored.query, 'index=main error');
+        assert.equal(await getDraftStash(git, relativePath, base.hash), null);
+    });
+
+    it('listVersions includes commits saved via IDE version refs', async () => {
+        await saveVersion(git, relativePath, 'First save');
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        await saveVersion(git, relativePath, 'Second save');
+
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+        await restoreVersion(git, relativePath, firstHash, firstHash, { skipAutoSave: true });
+
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20offhead');
+        const result = await saveVersion(git, relativePath, 'Off-head save', firstHash);
+        assert.equal(result.saved, true);
+
+        const ref = versionRecordRef(relativePath, result.hash);
+        const refHash = (await git.raw(['rev-parse', ref])).trim();
+        assert.equal(refHash, result.hash);
+
+        const listed = await listVersions(git, relativePath);
+        const offHead = listed.find(version => version.hash === result.hash);
+        assert.ok(offHead);
+        assert.equal(offHead.message, 'Off-head save');
+        assert.equal(offHead.parentHash, firstHash);
     });
 });
