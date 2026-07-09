@@ -201,7 +201,7 @@ thing as editor changes.
 | 1 | Done | Canonical saved-search identity/path helper | `lib/saved-search-id.js`, `test/saved-search-id.test.js` | `npm test -- test/saved-search-id.test.js` |
 | 2 | Done | Saved-search commit trailers | `lib/query-versions.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
 | 3 | Done | Explicit git author support for normal and off-HEAD commits | `lib/query-versions.js`, `test/query-versions.test.js` | targeted author tests |
-| 4 | Open | Remote sync helper with exact refspec policy | `lib/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
+| 4 | Done | Remote sync helper with exact refspec policy | `lib/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
 | 5 | Open | Two-clone sharing proof | `test/git-sync.test.js` or integration test | repo A push, repo B fetch/list |
 | 6 | Open | Saved-search open/import service | small new lib, tests | unit test for import/open logic |
 | 7 | Open | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
@@ -350,6 +350,8 @@ After loop:
 
 - Mark row 4 `Done`.
 - Commit message: `Add git sync helpers`.
+
+**Done (2026-07-09):** Added `ensureRemote`, `fetchSharedHistory`, and `pushSharedHistory` with exact saved-search refspec policy; failures return `{ ok: false, message }`. Seven bare-remote tests pass.
 
 ## Loop 5 — two-clone sharing proof
 
