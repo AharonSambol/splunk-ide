@@ -76,6 +76,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createContextMenuTemplate } = require('./lib/main/context-menu');
 const { findInPage, stopFindInPage } = require('./lib/main/find-in-page');
+const { readGitSyncSettings, writeGitSyncSettings } = require('./lib/git-settings');
 
 // app.whenReady().then(() => {
 //   // Set your App User Model ID
@@ -92,6 +93,14 @@ ipcMain.handle('get-default-workspace', () => {
     const workspacePath = path.join(app.getPath('userData'), 'searches');
     fs.mkdirSync(workspacePath, { recursive: true });
     return workspacePath;
+});
+
+ipcMain.handle('get-git-sync-settings', () => {
+    return readGitSyncSettings(app.getPath('userData'));
+});
+
+ipcMain.handle('set-git-sync-settings', (event, settings) => {
+    return writeGitSyncSettings(app.getPath('userData'), settings);
 });
 
 ipcMain.handle('show-context-menu', async (event, info) => {
