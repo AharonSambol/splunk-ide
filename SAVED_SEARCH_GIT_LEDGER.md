@@ -199,7 +199,7 @@ thing as editor changes.
 | --- | --- | --- | --- | --- |
 | 0 | Done | Land off-HEAD versions and draft stashes | `lib/query-versions.js`, `renderer.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
 | 1 | Done | Canonical saved-search identity/path helper | `lib/saved-search-id.js`, `test/saved-search-id.test.js` | `npm test -- test/saved-search-id.test.js` |
-| 2 | Open | Saved-search commit trailers | `lib/query-versions.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
+| 2 | Done | Saved-search commit trailers | `lib/query-versions.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
 | 3 | Open | Explicit git author support for normal and off-HEAD commits | `lib/query-versions.js`, `test/query-versions.test.js` | targeted author tests |
 | 4 | Open | Remote sync helper with exact refspec policy | `lib/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
 | 5 | Open | Two-clone sharing proof | `test/git-sync.test.js` or integration test | repo A push, repo B fetch/list |
@@ -277,6 +277,8 @@ After loop:
 
 - Mark row 2 `Done`.
 - Commit message: `Add saved search commit trailers`.
+
+**Done (2026-07-09):** Added `buildCommitMessage()` for shared trailer assembly; `saveVersion()` accepts optional `savedSearch` metadata for Splunk trailers on normal and off-HEAD commits. Two new tests pass; existing query-file tests unchanged.
 
 ## Loop 3 — explicit git author support
 
