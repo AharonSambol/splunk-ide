@@ -207,7 +207,7 @@ thing as editor changes.
 | 7 | Done | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
 | 8 | Done | Persist git remote/author settings | `main.js`, small settings helper/tests | settings read/write check |
 | 9 | Done | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
-| 10 | Open | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
+| 10 | Done | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
 | 11 | Open | Push on saved-search save | `renderer.js`, `lib/git-sync.js` | bare remote/manual smoke |
 | 12 | Open | Conflict and sync status display | `renderer.js` | manual smoke |
 | 13 | Open | Full two-instance validation | app workflow | checklist at bottom |
@@ -530,6 +530,8 @@ After loop:
 
 - Mark row 10 `Done`.
 - Commit message: `Fetch saved search history on open`.
+
+**Done (2026-07-09):** Wired `openSavedSearchHistory` into renderer via `enterSavedSearchHistory` on tab switch and saved-search URL apply; fetches once per saved-search id when `remoteUrl` is set, stashes/restores dirty drafts around fetch, surfaces warning in `file.savedSearchSyncStatus` / status bar.
 
 ## Loop 11 — push on saved-search save
 

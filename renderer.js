@@ -28,7 +28,8 @@ const {
     createDuplicateFileName,
 } = require('./lib/tabs');
 const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl } = require('./lib/url-utils');
-const { getSavedSearchPath } = require('./lib/saved-search-id');
+const { getSavedSearchId, getSavedSearchPath } = require('./lib/saved-search-id');
+const { openSavedSearchHistory } = require('./lib/saved-search-open');
 const {
     filterQuickSearchResults,
     getQuickSearchEmptyMessage,
@@ -220,6 +221,7 @@ let confirmResolve = null;
 const restoreParentByFileId = new Map();
 const forcedDraftByFileId = new Set();
 const userDraftByFileId = new Set();
+const savedSearchFetchDone = new Set();
 
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
@@ -715,6 +717,7 @@ async function applySavedSearchToFile(file, savedSearch, url) {
     const canonicalPath = path.join(currentProjectPath, ...canonicalRelative.split('/'));
 
     if (file.path === canonicalPath) {
+        await enterSavedSearchHistory(file, url);
         fs.writeFileSync(file.path, url, 'utf8');
         userDraftByFileId.add(file.id);
         onQueryFileChanged(file.id, { refreshHistory: true });
@@ -746,6 +749,7 @@ async function applySavedSearchToFile(file, savedSearch, url) {
     addFolderForPath(getFileFolder(file.name));
     updateTabLabel(file);
     updateExplorer();
+    await enterSavedSearchHistory(file, url);
     userDraftByFileId.add(file.id);
     onQueryFileChanged(file.id, { refreshHistory: true });
 }
@@ -853,6 +857,7 @@ async function loadProject(projectPath) {
     restoreParentByFileId.clear();
     forcedDraftByFileId.clear();
     userDraftByFileId.clear();
+    savedSearchFetchDone.clear();
     clearOpenTabs();
 
     folders = scanProjectFolders(projectPath);
@@ -1211,11 +1216,17 @@ switchToFile = function(targetId) {
     }
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
     refreshQueryDirtyState(targetId);
-    if (!querySidebar.classList.contains('collapsed')) {
-        refreshQueryHistory();
-    } else if (activeFileId && localStorage.getItem(QUERY_SIDEBAR_COLLAPSED_KEY) !== 'true') {
-        setQueryHistoryPanelOpen(true);
-    }
+    void (async () => {
+        const file = files.find(f => f.id === targetId);
+        if (file?.savedSearch) {
+            await enterSavedSearchHistory(file);
+        }
+        if (!querySidebar.classList.contains('collapsed')) {
+            await refreshQueryHistory();
+        } else if (activeFileId && localStorage.getItem(QUERY_SIDEBAR_COLLAPSED_KEY) !== 'true') {
+            setQueryHistoryPanelOpen(true);
+        }
+    })();
 };
 
 function applyTabOrder(tabIds) {
@@ -1728,6 +1739,107 @@ function getRelativePath(file) {
     return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
 }
 
+function getGitAuthorFromSettings() {
+    const name = (gitSyncSettings.gitUserName || '').trim();
+    const email = (gitSyncSettings.gitUserEmail || '').trim();
+    if (name && email) {
+        return { name, email };
+    }
+    if (name) {
+        return { name, email: '' };
+    }
+    return undefined;
+}
+
+function getGitRemoteSettings() {
+    return {
+        remoteUrl: gitSyncSettings.remoteUrl || '',
+        remoteName: gitSyncSettings.remoteName || 'origin',
+        sharedBranch: gitSyncSettings.sharedBranch || 'main'
+    };
+}
+
+async function preserveDraftBeforeRemoteSync(file) {
+    const relativePath = getRelativePath(file);
+    const trackedHash = restoreParentByFileId.get(file.id);
+    const hasUserDraft = userDraftByFileId.has(file.id);
+    if (!hasUserDraft || !trackedHash || !currentGit) {
+        return { stashed: false, trackedHash, relativePath };
+    }
+    const hasChanges = await hasDraftChanges(currentGit, relativePath, trackedHash);
+    if (!hasChanges) {
+        return { stashed: false, trackedHash, relativePath };
+    }
+    await saveDraftStash(currentGit, relativePath, trackedHash);
+    return { stashed: true, trackedHash, relativePath };
+}
+
+async function restoreDraftAfterRemoteSync(file, draftState) {
+    if (!draftState?.stashed || !draftState.trackedHash || !currentGit) {
+        return;
+    }
+    const relativePath = getRelativePath(file);
+    const popped = await popDraftStash(currentGit, relativePath, draftState.trackedHash);
+    if (popped) {
+        fs.writeFileSync(file.path, popped, 'utf8');
+        userDraftByFileId.add(file.id);
+    }
+}
+
+function alignFileToCanonicalPath(file, relativePath) {
+    const canonicalPath = path.join(currentProjectPath, ...relativePath.split('/'));
+    if (file.path === canonicalPath) {
+        return;
+    }
+
+    ensureDirectoryExists(path.dirname(canonicalPath));
+    if (fs.existsSync(file.path) && !fs.existsSync(canonicalPath)) {
+        fs.renameSync(file.path, canonicalPath);
+    }
+    file.path = canonicalPath;
+    file.name = relativePath.replace(/\.spl$/i, '');
+    addFolderForPath(getFileFolder(file.name));
+    updateTabLabel(file);
+    updateExplorer();
+}
+
+async function enterSavedSearchHistory(file, currentUrl) {
+    if (!file?.savedSearch || !currentGit || !currentProjectPath) {
+        return;
+    }
+
+    const searchId = getSavedSearchId(file.savedSearch);
+    if (savedSearchFetchDone.has(searchId)) {
+        return;
+    }
+
+    const url = currentUrl
+        || file.url
+        || (fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+    const draftState = await preserveDraftBeforeRemoteSync(file);
+
+    let result;
+    try {
+        result = await openSavedSearchHistory({
+            git: currentGit,
+            workspaceRoot: currentProjectPath,
+            metadata: file.savedSearch,
+            currentUrl: url,
+            remoteSettings: getGitRemoteSettings(),
+            author: getGitAuthorFromSettings()
+        });
+    } catch (err) {
+        file.savedSearchSyncStatus = err.message || 'saved search open failed';
+        savedSearchFetchDone.add(searchId);
+        return;
+    }
+
+    savedSearchFetchDone.add(searchId);
+    file.savedSearchSyncStatus = result.warning || '';
+    alignFileToCanonicalPath(file, result.relativePath);
+    await restoreDraftAfterRemoteSync(file, draftState);
+}
+
 function getTagsForHash(hash) {
     return versionTags.filter(tag => tag.hash === hash);
 }
@@ -2203,7 +2315,7 @@ function toggleQueryHistoryPanel() {
     setQueryHistoryPanelOpen(!isOpen);
 }
 
-function updateStatusBar({ hasChanges, status, versionCount } = {}) {
+function updateStatusBar({ hasChanges, status, versionCount, syncStatus } = {}) {
     const file = getActiveFile();
     if (!file) {
         statusFile.textContent = 'No query open';
@@ -2214,13 +2326,18 @@ function updateStatusBar({ hasChanges, status, versionCount } = {}) {
     }
 
     statusFile.textContent = file.name.split('/').pop();
+    const effectiveSyncStatus = syncStatus ?? file.savedSearchSyncStatus ?? '';
     if (hasChanges !== undefined) {
         statusSave.textContent = hasChanges ? 'Unsaved changes' : 'Saved';
         statusSave.classList.toggle('dirty', hasChanges);
     }
     if (versionCount !== undefined) {
         const label = versionCount === 1 ? 'version' : 'versions';
-        statusVersions.textContent = `${versionCount} ${label}`;
+        statusVersions.textContent = effectiveSyncStatus
+            ? `${versionCount} ${label} · ${effectiveSyncStatus}`
+            : `${versionCount} ${label}`;
+    } else if (effectiveSyncStatus) {
+        statusVersions.textContent = effectiveSyncStatus;
     }
 }
 
