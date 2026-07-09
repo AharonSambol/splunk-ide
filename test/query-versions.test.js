@@ -660,3 +660,83 @@ describe('saved-search commit trailers', () => {
         assert.match(body, /^Saved-Search-Id: a1b2c3d4e5f6$/m);
     });
 });
+
+describe('git author support', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const os = require('node:os');
+    const { simpleGit } = require('simple-git');
+
+    async function getCommitAuthor(git, hash) {
+        const raw = await git.raw(['show', '-s', '--pretty=format:%an%x00%ae', hash]);
+        const [name, email] = raw.split('\0');
+        return { name, email };
+    }
+
+    it('uses app-provided author on normal commit in a new repo', async () => {
+        const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'splunk-ide-author-normal-'));
+        const git = simpleGit(repoPath);
+        const relativePath = 'queries/main.spl';
+        writeSplFile(repoPath, relativePath, SPL_URL_V1);
+
+        const result = await saveVersion(git, relativePath, 'Save with author', undefined, {
+            author: { name: 'Alice Dev', email: 'alice@example.com' }
+        });
+        assert.equal(result.saved, true);
+
+        const author = await getCommitAuthor(git, result.hash);
+        assert.equal(author.name, 'Alice Dev');
+        assert.equal(author.email, 'alice@example.com');
+
+        const configName = (await git.getConfig('user.name')).value;
+        const configEmail = (await git.getConfig('user.email')).value;
+        assert.equal(configName, 'Alice Dev');
+        assert.equal(configEmail, 'alice@example.com');
+
+        cleanupTempRepo(repoPath);
+    });
+
+    it('uses app-provided author on off-HEAD commit in a new repo', async () => {
+        const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'splunk-ide-author-offhead-'));
+        const git = simpleGit(repoPath);
+        const relativePath = 'queries/main.spl';
+        const authorOption = { author: { name: 'Alice Dev', email: 'alice@example.com' } };
+        writeSplFile(repoPath, relativePath, SPL_URL_V1);
+
+        await saveVersion(git, relativePath, 'First save', undefined, authorOption);
+        writeSplFile(repoPath, relativePath, SPL_URL_V2);
+        await saveVersion(git, relativePath, 'Second save', undefined, authorOption);
+
+        const versions = await listVersions(git, relativePath);
+        const firstHash = versions[1].hash;
+        await restoreVersion(git, relativePath, firstHash, firstHash, { skipAutoSave: true });
+
+        writeSplFile(repoPath, relativePath, 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20branch');
+        const result = await saveVersion(git, relativePath, 'Off-head save', firstHash, authorOption);
+        assert.equal(result.saved, true);
+
+        const author = await getCommitAuthor(git, result.hash);
+        assert.equal(author.name, 'Alice Dev');
+        assert.equal(author.email, 'alice@example.com');
+
+        cleanupTempRepo(repoPath);
+    });
+
+    it('does not overwrite existing repo author when fallback author is passed', async () => {
+        const { repoPath, git, relativePath } = await createTempGitRepo('queries/main.spl', SPL_URL_V1);
+
+        const result = await saveVersion(git, relativePath, 'Save with ignored author', undefined, {
+            author: { name: 'Bob Override', email: 'bob@example.com' }
+        });
+        assert.equal(result.saved, true);
+
+        const author = await getCommitAuthor(git, result.hash);
+        assert.equal(author.name, 'Test User');
+        assert.equal(author.email, 'test@example.com');
+
+        const configName = (await git.getConfig('user.name')).value;
+        assert.equal(configName, 'Test User');
+
+        cleanupTempRepo(repoPath);
+    });
+});
