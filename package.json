@@ -4,6 +4,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron-forge start",
+    "start:user-a": "electron-forge start -- --user-data-dir=/tmp/splunk-ide-user-a",
+    "start:user-b": "electron-forge start -- --user-data-dir=/tmp/splunk-ide-user-b",
     "test": "npm run test:unit",
     "test:unit": "node --test test/**/*.test.js",
     "test:smoke": "playwright test",
