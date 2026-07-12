@@ -158,6 +158,41 @@ describe('openSavedSearchHistory', () => {
         assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_IMPORT);
     });
 
+    it('fetches remote history when untracked canonical file already exists in worktree', async () => {
+        const barePath = await createBareRemote();
+        const { repoPath: repoAPath, git: gitA } = await createLocalRepo();
+        try {
+            writeSplFile(repoAPath, canonicalPath, SPL_URL_IMPORT);
+            await gitA.add(canonicalPath);
+            await gitA.commit('Import saved search');
+            assert.equal((await ensureRemote(gitA, { remoteUrl: barePath })).ok, true);
+            assert.equal((await pushSharedHistory(gitA, { sharedBranch: SHARED_BRANCH })).ok, true);
+
+            writeSplFile(repoPath, canonicalPath, SPL_URL_OTHER);
+
+            const result = await openSavedSearchHistory({
+                git,
+                workspaceRoot: repoPath,
+                metadata: SAVED_SEARCH_META,
+                currentUrl: SPL_URL_OTHER,
+                remoteSettings: { remoteUrl: barePath, sharedBranch: SHARED_BRANCH },
+                author: { name: 'Test User', email: 'test@example.com' }
+            });
+
+            assert.equal(result.imported, false);
+            assert.equal(result.fetched, true);
+            assert.equal(result.warning, '');
+            assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_OTHER);
+
+            const versions = await listVersions(git, canonicalPath);
+            assert.equal(versions.length, 1);
+            assert.equal(versions[0].message, 'Import saved search');
+        } finally {
+            cleanupTempRepo(barePath);
+            cleanupTempRepo(repoAPath);
+        }
+    });
+
     it('fetches remote history without importing when file already exists remotely', async () => {
         const barePath = await createBareRemote();
         const { repoPath: repoAPath, git: gitA } = await createLocalRepo();

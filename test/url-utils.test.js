@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl } = require('../lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl, urlsMatchForDraft } = require('../lib/url-utils');
 
 describe('decodeSearchText', () => {
     it('decodes percent-encoded text', () => {
@@ -46,6 +46,16 @@ describe('parseSavedSearchFromUrl', () => {
         });
     });
 
+    it('extracts saved-search metadata from servicesNS s param', () => {
+        const url = 'http://localhost:8010/en-US/app/search/search?s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Fmy%2520saved%2520search%2520a&q=search%20index%3Dmain';
+        assert.deepEqual(parseSavedSearchFromUrl(url), {
+            instance: 'localhost',
+            app: 'search',
+            owner: 'nobody',
+            name: 'my saved search a'
+        });
+    });
+
     it('returns null for ad-hoc search URLs without s param', () => {
         const url = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
         assert.equal(parseSavedSearchFromUrl(url), null);
@@ -53,6 +63,20 @@ describe('parseSavedSearchFromUrl', () => {
 
     it('returns null for blank input', () => {
         assert.equal(parseSavedSearchFromUrl(''), null);
+    });
+});
+
+describe('urlsMatchForDraft', () => {
+    it('treats same query and saved search as equal despite sid differences', () => {
+        const base = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain&s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Fnicolas&sid=1';
+        const live = 'http://localhost:8010/en-US/app/search/search?s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Fnicolas&q=search%20index%3Dmain&sid=2';
+        assert.equal(urlsMatchForDraft(base, live), true);
+    });
+
+    it('detects real query changes', () => {
+        const base = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain&s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Fnicolas';
+        const changed = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20nicolas%3D8&s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Fnicolas';
+        assert.equal(urlsMatchForDraft(base, changed), false);
     });
 });
 

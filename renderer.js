@@ -222,7 +222,6 @@ let confirmResolve = null;
 const restoreParentByFileId = new Map();
 const forcedDraftByFileId = new Set();
 const userDraftByFileId = new Set();
-const savedSearchFetchDone = new Set();
 
 const SAVED_SEARCH_SYNC_STATUS = {
     REMOTE_CHANGED: 'Remote changed',
@@ -415,7 +414,7 @@ async function saveGitSyncSettingsFromModal() {
             return;
         }
         await loadGitSyncSettings();
-        setGitSyncSettingsStatus('Settings saved', 'success');
+        closeGitSyncSettingsModal();
     } catch (error) {
         setGitSyncSettingsStatus(error.message || 'Failed to save settings', 'error');
     } finally {
@@ -758,7 +757,6 @@ function saveFileUrl(fileId) {
 }
 
 async function applySavedSearchToFile(file, savedSearch, url) {
-    const oldRelative = path.relative(currentProjectPath, file.path).split(path.sep).join('/');
     file.savedSearch = savedSearch;
 
     const canonicalRelative = getSavedSearchPath(savedSearch);
@@ -767,28 +765,25 @@ async function applySavedSearchToFile(file, savedSearch, url) {
     if (file.path === canonicalPath) {
         await enterSavedSearchHistory(file, url);
         fs.writeFileSync(file.path, url, 'utf8');
-        userDraftByFileId.add(file.id);
+        await syncSavedSearchTrackedBase(file);
         onQueryFileChanged(file.id, { refreshHistory: true });
         return;
     }
 
     ensureDirectoryExists(path.dirname(canonicalPath));
 
-    if (currentGit && oldRelative !== canonicalRelative && fs.existsSync(file.path)) {
+    if (fs.existsSync(file.path)) {
         fs.writeFileSync(file.path, url, 'utf8');
-        await renameQueryFile(currentGit, currentProjectPath, oldRelative, canonicalRelative);
-        file.path = canonicalPath;
-    } else if (fs.existsSync(canonicalPath) && canonicalPath !== file.path) {
-        fs.writeFileSync(canonicalPath, url, 'utf8');
+    }
+    if (fs.existsSync(canonicalPath) && canonicalPath !== file.path) {
         if (fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
         }
         file.path = canonicalPath;
-    } else if (fs.existsSync(file.path)) {
-        fs.writeFileSync(file.path, url, 'utf8');
+    } else if (fs.existsSync(file.path) && file.path !== canonicalPath) {
         fs.renameSync(file.path, canonicalPath);
         file.path = canonicalPath;
-    } else {
+    } else if (!fs.existsSync(canonicalPath)) {
         fs.writeFileSync(canonicalPath, url, 'utf8');
         file.path = canonicalPath;
     }
@@ -798,7 +793,7 @@ async function applySavedSearchToFile(file, savedSearch, url) {
     updateTabLabel(file);
     updateExplorer();
     await enterSavedSearchHistory(file, url);
-    userDraftByFileId.add(file.id);
+    await syncSavedSearchTrackedBase(file);
     onQueryFileChanged(file.id, { refreshHistory: true });
 }
 
@@ -905,22 +900,37 @@ async function loadProject(projectPath) {
     restoreParentByFileId.clear();
     forcedDraftByFileId.clear();
     userDraftByFileId.clear();
-    savedSearchFetchDone.clear();
     clearOpenTabs();
 
     folders = scanProjectFolders(projectPath);
 
     const filePaths = scanProjectFiles(currentProjectPath);
-    filePaths.forEach(filePath => {
+    const sortedPaths = [...filePaths].sort((left, right) => {
+        const leftCanonical = left.includes(`${path.sep}saved-searches${path.sep}`) ? 0 : 1;
+        const rightCanonical = right.includes(`${path.sep}saved-searches${path.sep}`) ? 0 : 1;
+        return leftCanonical - rightCanonical;
+    });
+    const seenSavedSearchIds = new Set();
+    for (const filePath of sortedPaths) {
         const url = fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL;
         const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
         const savedSearch = parseSavedSearchFromUrl(url);
+        if (savedSearch) {
+            const searchId = getSavedSearchId(savedSearch);
+            if (seenSavedSearchIds.has(searchId)) {
+                continue;
+            }
+            seenSavedSearchIds.add(searchId);
+        }
         const fileRecord = { id: `splunk-view-${Date.now()}-${Math.random()}`, name, path: filePath, url };
         if (savedSearch) {
             fileRecord.savedSearch = savedSearch;
+            files.push(fileRecord);
+            await applySavedSearchToFile(fileRecord, savedSearch, url);
+        } else {
+            files.push(fileRecord);
         }
-        files.push(fileRecord);
-    });
+    }
 
     updateExplorer();
 }
@@ -1810,6 +1820,20 @@ function getRelativePath(file) {
     return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
 }
 
+function resolveSavedSearchFromFile(file, currentUrl) {
+    if (file?.savedSearch) {
+        return file.savedSearch;
+    }
+    const rawUrl = currentUrl
+        || file?.url
+        || (file?.path && fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+    const savedSearch = parseSavedSearchFromUrl(rawUrl);
+    if (savedSearch && file) {
+        file.savedSearch = savedSearch;
+    }
+    return savedSearch || null;
+}
+
 function getGitAuthorFromSettings() {
     const name = (gitSyncSettings.gitUserName || '').trim();
     const email = (gitSyncSettings.gitUserEmail || '').trim();
@@ -1874,13 +1898,35 @@ function alignFileToCanonicalPath(file, relativePath) {
     updateExplorer();
 }
 
+async function syncSavedSearchTrackedBase(file) {
+    if (!file?.savedSearch || !currentGit) {
+        return;
+    }
+
+    const relativePath = getRelativePath(file);
+    const versions = await listVersions(currentGit, relativePath, 1);
+    if (versions.length === 0) {
+        return;
+    }
+
+    const latestHash = versions[0].hash;
+    restoreParentByFileId.set(file.id, latestHash);
+    const hasChanges = await hasDraftChanges(currentGit, relativePath, latestHash);
+    if (!hasChanges) {
+        userDraftByFileId.delete(file.id);
+        forcedDraftByFileId.delete(file.id);
+    }
+}
+
 async function pushSavedSearchHistoryAfterSave(file) {
+    resolveSavedSearchFromFile(file);
     if (!file?.savedSearch || !currentGit) {
         return;
     }
 
     const { remoteUrl, remoteName, sharedBranch } = getGitRemoteSettings();
     if (!remoteUrl) {
+        file.savedSearchSyncStatus = SAVED_SEARCH_SYNC_STATUS.LOCAL_NOT_PUSHED;
         return;
     }
 
@@ -1900,12 +1946,8 @@ async function pushSavedSearchHistoryAfterSave(file) {
 }
 
 async function enterSavedSearchHistory(file, currentUrl) {
+    resolveSavedSearchFromFile(file, currentUrl);
     if (!file?.savedSearch || !currentGit || !currentProjectPath) {
-        return;
-    }
-
-    const searchId = getSavedSearchId(file.savedSearch);
-    if (savedSearchFetchDone.has(searchId)) {
         return;
     }
 
@@ -1934,11 +1976,9 @@ async function enterSavedSearchHistory(file, currentUrl) {
         });
     } catch (err) {
         file.savedSearchSyncStatus = err.message || SAVED_SEARCH_SYNC_STATUS.PUSH_FAILED;
-        savedSearchFetchDone.add(searchId);
         return;
     }
 
-    savedSearchFetchDone.add(searchId);
     if (result.warning) {
         file.savedSearchSyncStatus = result.warning;
     } else if (result.fetched && hadLocalDraft) {
@@ -1958,6 +1998,7 @@ async function enterSavedSearchHistory(file, currentUrl) {
     }
     alignFileToCanonicalPath(file, result.relativePath);
     await restoreDraftAfterRemoteSync(file, draftState);
+    await syncSavedSearchTrackedBase(file);
 }
 
 function getTagsForHash(hash) {
@@ -2426,7 +2467,13 @@ function setQueryHistoryPanelOpen(open, { persist = true } = {}) {
         localStorage.setItem(QUERY_SIDEBAR_COLLAPSED_KEY, String(!open));
     }
     if (open) {
-        refreshQueryHistory();
+        void (async () => {
+            const file = getActiveFile();
+            if (file?.savedSearch) {
+                await enterSavedSearchHistory(file);
+            }
+            await refreshQueryHistory();
+        })();
     } else {
         updateStatusBar();
     }
@@ -2705,6 +2752,12 @@ async function saveQueryVersion() {
     }
 
     saveFileUrl(file.id);
+    const fileUrl = file.url
+        || (fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+    const savedSearch = resolveSavedSearchFromFile(file, fileUrl);
+    if (savedSearch) {
+        await applySavedSearchToFile(file, savedSearch, fileUrl);
+    }
     const relativePath = getRelativePath(file);
     const note = querySaveMessage.value.trim();
     const label = note || `Update ${file.name.split('/').pop()}`;

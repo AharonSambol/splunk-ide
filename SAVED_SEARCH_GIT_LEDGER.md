@@ -606,6 +606,7 @@ Run two Splunk IDE instances (A and B) against the same bare remote. Configure d
 - [ ] Instance B: set git author name/email (e.g. `Bob <bob@example.com>`)
 - [ ] Both instances: same remote URL, remote name, and shared branch in settings
 - [ ] Bare remote is reachable from both machines (or two local userData dirs with same remote)
+- [ ] Launch with isolated userData: `npm run start:user-a` and `npm run start:user-b` (or `npm start -- -- --user-data-dir=/tmp/splunk-ide-user-a`)
 
 ### A imports and pushes
 
