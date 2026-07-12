@@ -277,6 +277,14 @@ queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false
 sidebarCollapseBtn.addEventListener('click', () => setProjectSidebarCollapsed(true));
 sidebarReopenBtn.addEventListener('click', () => setProjectSidebarCollapsed(false));
 querySaveBtn.addEventListener('click', saveQueryVersion);
+querySaveMessage.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        if (!querySaveBtn.disabled) {
+            saveQueryVersion();
+        }
+    }
+});
 queryRestoreBtn.addEventListener('click', restoreSelectedVersion);
 historyTabs.forEach(tab => {
     tab.addEventListener('click', () => setHistorySidebarMode(tab.dataset.mode));
