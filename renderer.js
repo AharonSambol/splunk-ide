@@ -1173,10 +1173,17 @@ function createView(file) {
         }
     };
 
+    const syncUrlFromView = () => {
+        saveFileUrl(file.id);
+    };
+
     view.addEventListener('did-navigate', updateNavState);
     view.addEventListener('did-navigate-in-page', updateNavState);
     view.addEventListener('did-stop-loading', updateNavState);
     view.addEventListener('dom-ready', updateNavState);
+    view.addEventListener('did-navigate-in-page', syncUrlFromView);
+    view.addEventListener('did-navigate', syncUrlFromView);
+    view.addEventListener('did-stop-loading', syncUrlFromView);
     const injectorCode = [
         fs.readFileSync(path.join(__dirname, 'injector.js'), 'utf8'),
         fs.readFileSync(path.join(__dirname, 'injector-selection-cleanup.js'), 'utf8'),
@@ -1772,6 +1779,22 @@ function getActiveFile() {
     return files.find(f => f.id === activeFileId) || null;
 }
 
+function getLiveQueryText(file = getActiveFile()) {
+    if (!file) {
+        return '';
+    }
+    const view = document.getElementById(file.id);
+    if (!view) {
+        return '';
+    }
+    try {
+        const url = view.getURL();
+        return url ? extractQueryFromUrl(url) : '';
+    } catch {
+        return '';
+    }
+}
+
 function getRelativePath(file) {
     if (file.savedSearch) {
         return getSavedSearchPath(file.savedSearch);
@@ -2204,6 +2227,9 @@ function renderTagsList() {
 
 function onQueryFileChanged(fileId, { refreshHistory = false } = {}) {
     refreshQueryDirtyState(fileId);
+    if (fileId === activeFileId) {
+        renderVersionPreview();
+    }
     if (refreshHistory && fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
         refreshQueryHistory();
     }
@@ -2255,8 +2281,9 @@ function renderVersionPreview() {
         if (isDraftSelected) {
             const baseHash = getTrackedBaseHash();
             const baseVersion = baseHash ? queryVersions.find(v => v.hash === baseHash) : null;
+            const draftQuery = getLiveQueryText() || currentQueryText || '';
             if (baseVersion) {
-                const diff = diffLines(baseVersion.query || '', currentQueryText || '');
+                const diff = diffLines(baseVersion.query || '', draftQuery);
                 queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
             } else {
                 queryVersionPreviewText.textContent = 'No saved base version to compare against.';
@@ -2276,7 +2303,8 @@ function renderVersionPreview() {
     }
 
     if (isDraftSelected || !primary) {
-        queryVersionPreviewText.textContent = currentQueryText || '(empty query)';
+        const draftQuery = isDraftSelected ? (getLiveQueryText() || currentQueryText) : currentQueryText;
+        queryVersionPreviewText.textContent = draftQuery || '(empty query)';
         return;
     }
 
