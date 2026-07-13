@@ -50,7 +50,8 @@ const {
     consumeAutoSave,
     setVersionTag,
     deleteVersionTag,
-    listVersionTags
+    listVersionTags,
+    formatSplunkSaveTagName
 } = require('./lib/query-versions');
 const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
@@ -728,32 +729,145 @@ function scanProjectFolders(directory) {
     return scanProjectFoldersOnDisk(fs, path, directory, currentProjectPath);
 }
 
-function saveFileUrl(fileId) {
+function getViewUrl(fileId) {
+    const view = document.getElementById(fileId);
+    if (!view) {
+        return '';
+    }
+    try {
+        return view.getURL() || '';
+    } catch {
+        return '';
+    }
+}
+
+function renderEmptySavedSearchHistory() {
+    queryHistoryTitle.textContent = 'Query History';
+    queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a saved search to see its history.</div>';
+    currentQueryText = '';
+    queryHasUnsavedChanges = false;
+    queryVersions = [];
+    versionTags = [];
+    selectedVersionHashes = [];
+    renderVersionPreview();
+    queryHistoryStatus.textContent = '';
+    queryHistoryStatus.classList.remove('dirty');
+    queryRestoreBtn.disabled = true;
+    querySaveBtn.disabled = true;
+    updateStatusBar({ versionCount: 0, hasChanges: false });
+}
+
+function clearSavedSearchContext(file, url) {
+    delete file.savedSearch;
+    file.savedSearchSyncStatus = '';
+    forcedDraftByFileId.delete(file.id);
+    userDraftByFileId.delete(file.id);
+    restoreParentByFileId.delete(file.id);
+    if (url && url !== file.url) {
+        file.url = url;
+        if (fs.existsSync(file.path)) {
+            fs.writeFileSync(file.path, url, 'utf8');
+        }
+        userDraftByFileId.add(file.id);
+    }
+    selectedVersionHashes = [];
+    if (file.id === activeFileId) {
+        renderEmptySavedSearchHistory();
+    }
+    onQueryFileChanged(file.id);
+}
+
+async function syncFileFromViewUrl(fileId) {
     const file = files.find(f => f.id === fileId);
     if (!file?.path) {
         return;
     }
 
-    const view = document.getElementById(fileId);
-    if (!view) {
+    const url = getViewUrl(fileId);
+    if (!url) {
         return;
     }
 
-    const url = view.getURL();
-    if (!url || url === file.url) {
-        return;
-    }
-
-    file.url = url;
     const savedSearch = parseSavedSearchFromUrl(url);
-    if (savedSearch) {
-        void applySavedSearchToFile(file, savedSearch, url);
+    if (!savedSearch) {
+        if (file.savedSearch) {
+            clearSavedSearchContext(file, url);
+        } else if (url !== file.url) {
+            file.url = url;
+            fs.writeFileSync(file.path, url, 'utf8');
+            userDraftByFileId.add(fileId);
+            onQueryFileChanged(fileId, { refreshHistory: true });
+        }
         return;
     }
 
-    fs.writeFileSync(file.path, url, 'utf8');
-    userDraftByFileId.add(fileId);
-    onQueryFileChanged(fileId, { refreshHistory: true });
+    const prevId = file.savedSearch ? getSavedSearchId(file.savedSearch) : '';
+    const nextId = getSavedSearchId(savedSearch);
+    const urlChanged = url !== file.url;
+    const contextChanged = !file.savedSearch || prevId !== nextId;
+
+    if (urlChanged) {
+        file.url = url;
+    }
+
+    if (contextChanged || urlChanged) {
+        await applySavedSearchToFile(file, savedSearch, url);
+        return;
+    }
+
+    if (fileId === activeFileId) {
+        await enterSavedSearchHistory(file, url);
+        onQueryFileChanged(fileId, { refreshHistory: true });
+    }
+}
+
+function saveFileUrl(fileId) {
+    void syncFileFromViewUrl(fileId);
+}
+
+async function handleSplunkSave(fileId) {
+    const file = files.find(f => f.id === fileId);
+    if (!file?.savedSearch || !currentGit) {
+        return;
+    }
+
+    await syncFileFromViewUrl(fileId);
+    const relativePath = getRelativePath(file);
+    const parentHash = restoreParentByFileId.get(file.id);
+    const author = getGitAuthorFromSettings();
+    const saveOptions = {
+        author,
+        savedSearch: {
+            ...file.savedSearch,
+            id: getSavedSearchId(file.savedSearch)
+        }
+    };
+
+    try {
+        const result = await saveVersion(currentGit, relativePath, 'Splunk save', parentHash, saveOptions);
+        let hash = parentHash;
+        if (result.saved && result.hash) {
+            hash = result.hash;
+            restoreParentByFileId.set(file.id, hash);
+            forcedDraftByFileId.delete(file.id);
+            userDraftByFileId.delete(file.id);
+            await pushSavedSearchHistoryAfterSave(file);
+        } else if (!hash) {
+            const versions = await listVersions(currentGit, relativePath, 1);
+            hash = versions[0]?.hash;
+        }
+        if (!hash) {
+            return;
+        }
+
+        const tagName = formatSplunkSaveTagName(gitSyncSettings.gitUserName, hash);
+        await setVersionTag(currentGit, relativePath, hash, tagName);
+        if (fileId === activeFileId) {
+            await refreshQueryHistory();
+        }
+    } catch (err) {
+        console.error('Splunk save tag failed', err);
+    }
 }
 
 async function applySavedSearchToFile(file, savedSearch, url) {
@@ -1146,8 +1260,9 @@ function createView(file) {
         if (event.channel === 'webview-keydown') {
             handleKeyboardShortcut(event.args[0] || {});
         } else if (event.channel === 'save-file') {
-            // Save file when Enter is pressed in search interface
             saveFileUrl(file.id);
+        } else if (event.channel === 'splunk-save') {
+            void handleSplunkSave(file.id);
         } else if (event.channel === 'webview-contextmenu') {
             // Forward to main process to show native menu
             try {
@@ -1192,7 +1307,7 @@ function createView(file) {
     };
 
     const syncUrlFromView = () => {
-        saveFileUrl(file.id);
+        void syncFileFromViewUrl(file.id);
     };
 
     view.addEventListener('did-navigate', updateNavState);
@@ -1282,10 +1397,7 @@ switchToFile = function(targetId) {
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
     refreshQueryDirtyState(targetId);
     void (async () => {
-        const file = files.find(f => f.id === targetId);
-        if (file?.savedSearch) {
-            await enterSavedSearchHistory(file);
-        }
+        await syncFileFromViewUrl(targetId);
         if (!querySidebar.classList.contains('collapsed')) {
             await refreshQueryHistory();
         } else if (activeFileId && localStorage.getItem(QUERY_SIDEBAR_COLLAPSED_KEY) !== 'true') {
@@ -2469,8 +2581,8 @@ function setQueryHistoryPanelOpen(open, { persist = true } = {}) {
     if (open) {
         void (async () => {
             const file = getActiveFile();
-            if (file?.savedSearch) {
-                await enterSavedSearchHistory(file);
+            if (file) {
+                await syncFileFromViewUrl(file.id);
             }
             await refreshQueryHistory();
         })();
@@ -2546,16 +2658,16 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
         }
         tab.classList.toggle('dirty', effectiveHasChanges);
         if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
-            if (file.savedSearch) {
+            if (!file.savedSearch) {
+                renderEmptySavedSearchHistory();
+            } else {
                 queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
                     hasUnsavedChanges: effectiveHasChanges,
                     syncStatus: file.savedSearchSyncStatus || ''
                 });
-            } else {
-                queryHistoryStatus.textContent = effectiveHasChanges ? 'Unsaved changes' : 'Up to date';
+                queryHistoryStatus.classList.toggle('dirty', effectiveHasChanges);
+                querySaveBtn.disabled = !effectiveHasChanges;
             }
-            queryHistoryStatus.classList.toggle('dirty', effectiveHasChanges);
-            querySaveBtn.disabled = !effectiveHasChanges;
         }
         if (fileId === activeFileId) {
             updateStatusBar({ hasChanges: effectiveHasChanges });
@@ -2569,17 +2681,12 @@ async function refreshQueryHistory() {
     const generation = ++queryRefreshGeneration;
     const file = getActiveFile();
     if (!file || !currentGit || !currentProjectPath) {
-        queryHistoryTitle.textContent = 'Query History';
-        queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see its history.</div>';
-        currentQueryText = '';
-        queryHasUnsavedChanges = false;
-        selectedVersionHashes = [];
-        renderVersionPreview();
-        queryHistoryStatus.textContent = '';
-        queryRestoreBtn.disabled = true;
-        querySaveBtn.disabled = true;
-        updateStatusBar();
-        versionTags = [];
+        renderEmptySavedSearchHistory();
+        return;
+    }
+
+    if (!file.savedSearch) {
+        renderEmptySavedSearchHistory();
         return;
     }
 
@@ -2622,16 +2729,10 @@ async function refreshQueryHistory() {
         const primary = getPrimarySelectedHash();
         queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
         querySaveBtn.disabled = !queryHasUnsavedChanges;
-        if (file.savedSearch) {
-            queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
-                hasUnsavedChanges: queryHasUnsavedChanges,
-                syncStatus: file.savedSearchSyncStatus || ''
-            });
-        } else {
-            queryHistoryStatus.textContent = queryHasUnsavedChanges
-                ? `Unsaved (${trackedHash ? 'draft' : fileStatus.status})`
-                : 'Up to date';
-        }
+        queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
+            hasUnsavedChanges: queryHasUnsavedChanges,
+            syncStatus: file.savedSearchSyncStatus || ''
+        });
         queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
         currentQueryText = current.query || '';
         renderVersionPreview();

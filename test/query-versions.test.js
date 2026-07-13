@@ -12,6 +12,7 @@ const {
     setVersionTag,
     deleteVersionTag,
     listVersionTags,
+    formatSplunkSaveTagName,
     versionTagRef,
     hasDraftChanges,
     saveDraftStash,
@@ -738,5 +739,12 @@ describe('git author support', () => {
         assert.equal(configName, 'Test User');
 
         cleanupTempRepo(repoPath);
+    });
+});
+
+describe('formatSplunkSaveTagName', () => {
+    it('builds date-time_user_hash tag labels', () => {
+        const tag = formatSplunkSaveTagName('Alice Dev', 'abc1234567890', new Date('2026-07-12T11:45:30.000Z'));
+        assert.equal(tag, '2026-07-12_11-45-30_Alice-Dev_abc1234');
     });
 });
