@@ -11,7 +11,7 @@ new work. That ledger remains history for completed loops 0–13.
 
 - Worktree: `/Users/ilais/Projects/kedem/splunk-ide-git-overhaul`
 - Branch: `git-overhaul`
-- Current base commit: `3a07064 Fix shared saved-search history sync between instances.`
+- Current base commit: `70d922e Tag Splunk UI saves and add native object versioning ledger.`
 - Do **not** create real git branches per saved search / dashboard.
 - Do **not** force-push.
 - Do **not** push draft stashes.
@@ -385,11 +385,18 @@ Keep sync status separate from draft dirty state.
 
 # Loop specs
 
+Each loop: implement only that row, run its check, mark `Done`, commit with the
+given message. Do not start the next loop until DoD is met.
+
+---
+
 ## Loop 0 — conf stanza parse / extract / upsert
 
-Pure module. No git, no renderer.
+**Rationale:** Every later op (save, restore, history filter, recompose) needs
+safe stanza surgery on a shared conf. Wrong parse = duplicate searches or
+sibling corruption. Pure module first so git/UI cannot paper over parser bugs.
 
-Suggested exports:
+**Scope:** New `lib/conf-stanza.js` only. No git, no renderer, no REST.
 
 ```js
 extractStanza(confText, name) → string | null
@@ -397,176 +404,405 @@ upsertStanza(confText, name, stanzaText) → string
 listStanzaNames(confText) → string[]
 ```
 
-Requirements:
+**Requirements:**
 
-- Exact name match for `Error Rate` (case-sensitive).
-- `upsertStanza` on existing name replaces in place; conf must contain exactly one
-  `[Error Rate]` after upsert.
-- Upsert of missing name appends one stanza (for import).
-- Preserve other stanzas byte-stable enough that unchanged siblings stay equal.
+- Exact name match for `Error Rate` (case-sensitive; not slug; not `[Error Rate]`).
+- Existing name → replace in place; afterward exactly one `[Error Rate]` header.
+- Missing name → append once (import/create only).
+- Unchanged siblings stay equal (byte-stable enough for git no-op).
+- Stanza boundaries only at `^[name]` lines; do not split inside values.
 
-Tests:
+**DoD:**
 
-- replace in place (no duplicate headers)
-- extract missing → null
-- names with spaces / dots
-- multiple stanzas; upsert middle
+- [ ] Exports above exist and are documented in module header
+- [ ] Unit tests cover: replace-in-place, no duplicate, missing→null, spaces/dots,
+      upsert middle of multi-stanza conf
+- [ ] `npm test -- test/conf-stanza.test.js` passes
+- [ ] No other files changed
 
-Commit message: `Add conf stanza extract/upsert helper`.
+**Commit:** `Add conf stanza extract/upsert helper`
+
+---
 
 ## Loop 1 — native path helpers
 
-Map metadata → conf path and dashboard view path. Reuse slug only for path
-segments, not for identity matching.
+**Rationale:** Watchdog and IDE must land on the same paths. Wrong path =
+parallel histories. Separate from Loop 0 so path policy (apps vs users,
+instance prefix) can change without touching the parser.
 
-Tests:
+**Scope:** Path helpers only (`lib/object-paths.js` or extend
+`lib/saved-search-id.js`). Slug for path segments only — never for stanza match.
 
-- `nobody` / app-shared → `apps/<app>/local/savedsearches.conf`
-- user owner → `users/<owner>/<app>/local/savedsearches.conf` (document chosen rule)
-- dashboard path includes views dir + extension
-- instance prefix behavior
+```js
+getSavedSearchConfPath({ instance, app, owner })
+getDashboardViewPath({ instance, app, owner, name, ext })
+```
 
-Commit message: `Add native Splunk object path helpers`.
+**Requirements:**
 
-## Loop 2 — per-stanza draft refs + recompose
+- Document apps-shared vs user-private rule (`nobody` → `apps/…`, else `users/…`
+  — or match watchdog layout exactly if known).
+- Instance prefix included unless documented otherwise.
+- Dashboard paths under `…/local/data/ui/views/<name>.{xml,json}`.
 
-Extend stash refs with stanza slug. Store stanza-only blob. `recompose` writes
-worktree conf from HEAD + all drafts for that path.
+**DoD:**
 
-Tests:
+- [ ] Helpers return stable relative paths for given metadata
+- [ ] Unit tests: apps vs users, dashboard ext, instance prefix
+- [ ] Explicit comment/test that slug is not used for stanza identity
+- [ ] Targeted path tests pass
 
-- two drafts coexist
-- restart simulation: load refs → recompose
-- draft body is stanza-only
+**Commit:** `Add native Splunk object path helpers`
 
-Commit message: `Add per-stanza durable draft stashes`.
+---
+
+## Loop 2 — per-stanza draft stash refs + recompose
+
+**Rationale:** Multi-tab WIP must be durable and independent without per-search
+branches. File-scoped stashes today couple siblings on one conf. Per-stanza local
+refs + recompose is Model A’s core.
+
+**Scope:** Extend stash ref shape; store stanza-only blob; `recompose(head,
+drafts)` → worktree conf text. Prefer extending existing stash helpers over a
+new storage system.
+
+```txt
+refs/splunk-ide/stashes/<conf-slug>/<stanza-slug>/<baseHash>
+```
+
+**Requirements:**
+
+- Draft body = stanza text only (not whole conf)
+- Two drafts on same conf coexist
+- Recompose = HEAD conf + upsert each draft by exact name
+- Refs remain local-only (still not in push refspec)
+
+**DoD:**
+
+- [ ] Save/load/delete draft by `(confPath, stanzaName, baseHash)`
+- [ ] Recompose roundtrip test: HEAD + drafts A,B → worktree has both
+- [ ] Restart simulation: write refs, new process/load, recompose matches
+- [ ] Draft blob assertion: no sibling stanzas inside draft body
+- [ ] Targeted tests pass; drafts still not pushed
+
+**Commit:** `Add per-stanza durable draft stashes`
+
+---
 
 ## Loop 3 — stanza-filtered history
 
-`listVersions(git, path, maxCount?, { stanza })` filters commits by stanza text
-change. Diff helper returns stanza text for UI.
+**Rationale:** Watchdog/IDE commits touch the whole conf. Without filtering,
+Search A’s timeline is noise from every other search. UX grain is stanza;
+storage grain stays file.
 
-Tests:
+**Scope:** Extend `listVersions` (and a small diff/read helper) with optional
+`{ stanza }`. No UI wiring yet.
 
-- commit touching only Other Search hidden when listing Error Rate
-- commit touching Error Rate shown
-- dashboards / no stanza option keeps file-scoped behavior
+**Requirements:**
 
-Commit message: `Filter version history by conf stanza`.
+- Keep commit iff `extract(commit) !== extract(parent)` for that exact name
+- Omit `{ stanza }` → current file-scoped behavior (dashboards / later)
+- Diff text for UI = stanza body (not whole conf, not URL extract)
+
+**DoD:**
+
+- [ ] `listVersions(git, confPath, n, { stanza: 'Error Rate' })` API works
+- [ ] Test: sibling-only commit hidden; Error Rate commit shown
+- [ ] Test: no-stanza option unchanged for plain file history
+- [ ] Targeted tests pass
+
+**Commit:** `Filter version history by conf stanza`
+
+---
 
 ## Loop 4 — single-stanza save
 
-Save builds commit blob from `upsert(HEAD, active, draft)`, not from dirty
-worktree. Clear only that draft; recompose after.
+**Rationale:** Composed worktree includes all tab drafts. Staging that file on
+save would commit sibling WIP. Save must build `upsert(HEAD, active, draft)` via
+temp index (same idea as `commitFileOnParent`).
 
-Tests:
+**Scope:** Save/commit path for conf+stanza. Clear only active draft; recompose
+after. No renderer yet if callable from lib tests.
 
-- with drafts A+B dirty, save A → commit blob has new A + HEAD B
-- B draft ref still present after save A
+**Requirements:**
 
-Commit message: `Commit only the active saved-search stanza`.
+- Commit blob siblings come from HEAD, not sibling drafts
+- Active draft cleared after successful save
+- Other draft refs untouched
+- No-op when active stanza unchanged vs HEAD (`no-changes`)
+
+**DoD:**
+
+- [ ] With drafts A+B dirty, save A → commit has new A + HEAD B
+- [ ] After save A, draft B still loadable
+- [ ] Worktree recomposed: A=HEAD, B=draft
+- [ ] Targeted tests pass
+
+**Commit:** `Commit only the active saved-search stanza`
+
+---
 
 ## Loop 5 — restore to draft
 
-Restore extracts historical stanza into draft ref; recomposes; does not commit;
-does not whole-file checkout.
+**Rationale:** Today’s whole-file checkout rewinds every search in the conf.
+Product needs same feel as now (become old content, stay unsaved, edit/run,
+save later) but only for one stanza — replace, never create a second search.
 
-Tests:
+**Scope:** Restore API writes draft from historical extract; recomposes; no
+commit/push/REST.
 
-- sibling stanzas in worktree remain HEAD (or their drafts)
-- still dirty / unsaved after restore
-- missing historical stanza → error
+**Requirements:**
 
-Commit message: `Restore saved search as stanza draft`.
+- Never `git checkout <hash> -- savedsearches.conf`
+- Exact-name replace into draft + worktree
+- Missing historical stanza → error (do not invent)
+- Remains dirty / unsaved until Loop 4 save
 
-## Loop 6 — reset one draft
+**DoD:**
 
-Delete one draft ref; recompose.
+- [ ] Restore H for A: worktree A matches H; siblings unchanged (or keep their drafts)
+- [ ] No new commit created
+- [ ] Missing stanza → explicit failure
+- [ ] Targeted tests pass
 
-Tests:
+**Commit:** `Restore saved search as stanza draft`
 
-- reset A keeps draft B
-- A matches HEAD after reset
+---
 
-Commit message: `Discard a single stanza draft`.
+## Loop 6 — reset / discard one draft
 
-## Loop 7 — serialize per conf
+**Rationale:** Per-tab discard must not wipe other tabs’ WIP. Symmetric to save
+clearing only the active draft.
 
-Queue/mutex so concurrent tab save/reset/recompose cannot drop sibling drafts.
+**Scope:** Delete one draft ref + recompose.
 
-Tests:
+**DoD:**
 
-- overlapping save A + save B do not lose either commit or draft incorrectly
-  (deterministic queue acceptance test)
+- [ ] Reset A keeps draft B
+- [ ] After reset, extract(worktree, A) === extract(HEAD, A)
+- [ ] Targeted tests pass
 
-Commit message: `Serialize stanza ops per conf file`.
+**Commit:** `Discard a single stanza draft`
 
-## Loop 8 — stale baseHash
+---
 
-When HEAD moves under a draft, surface `Stale draft base` (or auto-rebase draft
-onto new HEAD keeping draft text — pick one rule and test it).
+## Loop 7 — serialize ops per conf
 
-Recommended v1: keep draft text; update status; on save still
-`upsert(newHEAD, name, draftText)` (content-winning save). Prompt only if remote
-stanza also changed vs draft base (Loop 13 can deepen).
+**Rationale:** Composer/terra/luna all flagged races: concurrent tab
+save/reset/recompose can drop sibling drafts. Mutex/queue per conf path is the
+lazy fix (not per-search branches).
 
-Commit message: `Detect stale stanza draft bases`.
+**Scope:** Single queue/mutex wrapping recompose + save + reset + draft write
+for a given conf path. Document `# ponytail: global per-conf lock; finer locks
+if contention matters`.
+
+**DoD:**
+
+- [ ] Overlapping save A + save B deterministic: both commits correct, no lost draft
+- [ ] Overlapping reset/save does not corrupt conf (no duplicate headers)
+- [ ] Acceptance test for queued ops passes
+
+**Commit:** `Serialize stanza ops per conf file`
+
+---
+
+## Loop 8 — stale baseHash detection
+
+**Rationale:** After another tab save or watchdog fetch, HEAD moves under an
+existing draft. Ignoring that hides “you’re editing against an old base.”
+Full conflict UI waits for Loop 13; v1 only needs detection + safe save rule.
+
+**Scope:** Status when draft `baseHash` is not current tip for that stanza’s
+history (or not ancestor of HEAD as defined in tests).
+
+**v1 rule (lock this):** Keep draft text; mark `Stale draft base`; save still
+`upsert(newHEAD, name, draftText)` (content wins). Deeper “remote stanza also
+changed” prompts → Loop 13.
+
+**DoD:**
+
+- [ ] Status exposed when base is stale
+- [ ] Save still succeeds with content-winning upsert on new HEAD
+- [ ] Unit test for stale detection
+- [ ] Targeted tests pass
+
+**Commit:** `Detect stale stanza draft bases`
+
+---
 
 ## Loop 9 — REST GET mirror
 
-Minimal client: auth + GET saved search → stanza-ish text; GET view → body.
-Normalize key order enough that identical Splunk state → identical bytes when
-possible (document normalization).
+**Rationale:** IDE has no `$SPLUNK_HOME`. Watchdog dumps native files; IDE must
+produce comparable content via REST so both writers share one tree. GET-only in
+this loop (write-back optional later).
 
-Tests with mocked HTTP.
+**Scope:** `lib/splunk-rest.js` — auth + GET saved search → stanza-ish text; GET
+view → body. Mocked HTTP tests. Document key normalization so identical Splunk
+state tends toward identical bytes (reduces noisy midnight commits).
 
-Commit message: `Add Splunk REST export helpers`.
+**DoD:**
+
+- [ ] GET saved search returns text usable by `upsertStanza`
+- [ ] GET view returns raw XML/JSON body
+- [ ] Mock tests for success + auth failure
+- [ ] Normalization documented in module comment
+- [ ] No live Splunk required for CI
+
+**Commit:** `Add Splunk REST export helpers`
+
+---
 
 ## Loop 10 — open/import on conf paths
 
-Adapt open flow to conf path + stanza; import via REST + upsert + optional commit.
+**Rationale:** Bridge identity (URL metadata) to native paths + drafts. First
+place REST + conf + git meet. Without this, Loops 0–8 are unreachable from the
+product open flow.
 
-Commit message: `Open saved searches from native conf paths`.
+**Scope:** Adapt `lib/saved-search-open.js` (or successor): resolve conf path,
+fetch if needed, upsert missing stanza, optional import commit, return path +
+stanza context.
+
+**DoD:**
+
+- [ ] Open with existing HEAD stanza → no unnecessary import commit if unchanged
+- [ ] Open missing stanza → REST GET → upsert → import commit (or documented skip)
+- [ ] Existing draft preferred over HEAD on open
+- [ ] Unit tests with temp repo + mocked REST
+- [ ] Targeted tests pass
+
+**Commit:** `Open saved searches from native conf paths`
+
+---
 
 ## Loop 11 — renderer multi-tab wiring
 
-Wire save / restore / reset / draft status to stanza APIs. Multiple tabs on
-different searches must stay independent.
+**Rationale:** Product surface. Lib isolation is useless if UI still whole-file
+checkouts or commits dirty worktree. Wire save/restore/reset/history/status to
+stanza APIs; tabs on different searches stay independent.
 
-Commit message: `Wire stanza drafts into the editor UI`.
+**Scope:** `renderer.js` (+ minimal HTML if status strings need it). Prefer
+calling lib APIs; no new business logic in the renderer.
+
+**DoD:**
+
+- [ ] Save / restore / discard / history use stanza APIs for saved searches
+- [ ] History panel shows stanza-filtered list + stanza diff text
+- [ ] Status strings include draft / stale / sync as already modeled
+- [ ] Manual smoke notes in commit body or checklist tick where automatable
+- [ ] No regression: syntax/load OK; existing non-conf flows don’t crash
+
+**Commit:** `Wire stanza drafts into the editor UI`
+
+---
 
 ## Loop 12 — dashboards
 
-Path + open/save/history for view files. File-scoped drafts OK.
+**Rationale:** Same watchdog tree includes `data/ui/views/*`. Dashboards are
+already one-file-per-object — reuse file-scoped versioning, don’t force stanza
+machinery.
 
-Commit message: `Version dashboards as native view files`.
+**Scope:** Path helper usage + open/save/history for view files. File-scoped
+drafts OK. URL parse for dashboards as needed.
+
+**DoD:**
+
+- [ ] Dashboard open resolves native view path
+- [ ] Save/history/restore work file-scoped
+- [ ] Unit or integration roundtrip for a sample `.xml`/`.json` view
+- [ ] Does not break saved-search stanza path
+
+**Commit:** `Version dashboards as native view files`
+
+---
 
 ## Loop 13 — reconcile on diverge
 
-Non-ff push/fetch path: REST re-export → commit if needed → push. Preserve
-unrelated local drafts via recompose.
+**Rationale:** Dual writers (IDE + watchdog) will non-ff occasionally. Hand-merging
+conf is a bug farm; Splunk live state is semantic truth. REST re-export then
+commit keeps the ledger honest without three-way merge.
 
-Commit message: `Reconcile shared conf history from Splunk REST`.
+**Scope:** On fetch/push non-ff (or explicit reconcile): REST re-export affected
+apps → write native paths → commit if changed → push. Recompose so unrelated
+local drafts survive. Same-stanza remote+local draft → `Stanza conflict` status
+(keep / take remote / diff) — minimal UI ok.
+
+**DoD:**
+
+- [ ] Simulated diverge path runs re-export + commit + push (test or scripted)
+- [ ] Unrelated local draft still present after reconcile
+- [ ] Same-stanza conflict surfaced (not silently overwritten without status)
+- [ ] No three-way conf merge code
+
+**Commit:** `Reconcile shared conf history from Splunk REST`
+
+---
 
 ## Loop 14 — trailers and tags
 
-Object-Type + Saved-Search trailers; tag paths include stanza slug.
+**Rationale:** Stanza filter works from file content alone, but trailers/tags
+make IDE commits greppable and prevent search-tag collisions across all
+searches sharing one conf slug.
 
-Commit message: `Tag and trailer native object commits`.
+**Scope:** Extend commit trailers (`Object-Type`, existing Splunk_* /
+Saved-Search_*). Tag paths include stanza slug. Watchdog commits may omit
+trailers — still fine.
+
+**DoD:**
+
+- [ ] IDE saved-search save writes Object-Type + Saved-Search trailers
+- [ ] Tag ref/path includes stanza slug (two searches don’t share one tag namespace)
+- [ ] Unit tests for trailer/tag format
+- [ ] Targeted tests pass
+
+**Commit:** `Tag and trailer native object commits`
+
+---
 
 ## Loop 15 — remove `.spl` hot path
 
-Stop writing canonical `saved-searches/...spl` for saved searches. Leave orphan
-file cleanup optional / later.
+**Rationale:** Dual formats = dual bugs. Design dropped `.spl` truth; leaving the
+canonical URL-file writer active will keep creating the old tree beside native
+conf.
 
-Commit message: `Stop using URL .spl files for saved searches`.
+**Scope:** Stop writing/using `saved-searches/...spl` for saved searches in open
+and save hot paths. Orphan cleanup optional/later (YAGNI unless it confuses UI).
+
+**DoD:**
+
+- [ ] Saving/opening a saved search does not create new `.spl` canonical files
+- [ ] Grep/hot-path check: no `getSavedSearchPath` → `.spl` for new saves
+- [ ] Smoke or unit proving conf path is used instead
+- [ ] Old `.spl` files may still exist on disk without breaking open (ignore OK)
+
+**Commit:** `Stop using URL .spl files for saved searches`
+
+---
 
 ## Loop 16 — two-tab independence proof
 
-Automated test: dirty A+B; save A; assert commit + draft B; reset B; assert A
-unaffected.
+**Rationale:** End-to-end acceptance for the product promise. Unit tests per loop
+can miss cross-op bugs; one integration test locks the contract composer/terra/luna
+said to ship.
 
-Commit message: `Prove multi-tab stanza draft isolation`.
+**Scope:** Automated test only (temp repo, no Electron required if APIs are
+lib-exposed). Scenario:
+
+```txt
+dirty A + dirty B
+→ save A
+→ assert commit blob + draft B intact
+→ reset B
+→ assert A still at saved content / no draft A
+```
+
+**DoD:**
+
+- [ ] Integration test implements the scenario above
+- [ ] Also asserts: restore A does not duplicate stanza headers
+- [ ] Test passes under `npm test` (targeted file)
+- [ ] Smoke checklist below reviewed; unchecked items filed or done
+
+**Commit:** `Prove multi-tab stanza draft isolation`
 
 ---
 
