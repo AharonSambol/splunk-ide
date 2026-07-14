@@ -154,4 +154,30 @@ search = index=main | stats count
         assert.equal(result.saved, false);
         assert.equal(result.reason, 'missing-stanza');
     });
+
+    it('seeds first commit on empty HEAD', async () => {
+        const emptyRepo = await createTempGitRepo();
+        try {
+            const result = await saveStanzaVersion(emptyRepo.git, CONF_PATH, 'Error Rate', 'First save', {
+                seedSearchText: 'index=_audi'
+            });
+            assert.equal(result.saved, true);
+            assert.ok(result.hash);
+
+            const onDisk = fs.readFileSync(path.join(emptyRepo.repoPath, CONF_PATH), 'utf8');
+            assert.match(onDisk, /search = index=_audi/);
+        } finally {
+            cleanupTempRepo(emptyRepo.repoPath);
+        }
+    });
+
+    it('updates existing stanza search from seedSearchText', async () => {
+        const result = await saveStanzaVersion(git, CONF_PATH, 'Error Rate', 'Update search', {
+            seedSearchText: 'index=main | stats count'
+        });
+        assert.equal(result.saved, true);
+
+        const commitConf = await git.show([`${result.hash}:${CONF_PATH}`]);
+        assert.match(extractStanza(commitConf, 'Error Rate'), /search = index=main \| stats count/);
+    });
 });
