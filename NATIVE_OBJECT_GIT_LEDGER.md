@@ -370,7 +370,7 @@ Keep sync status separate from draft dirty state.
 | 4 | Done | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
 | 5 | Done | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
 | 6 | Done | Reset / discard one draft | drafts module, tests | other drafts survive |
-| 7 | Open | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
+| 7 | Done | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
 | 8 | Open | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
 | 9 | Open | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
 | 10 | Open | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
@@ -612,11 +612,13 @@ if contention matters`.
 
 **DoD:**
 
-- [ ] Overlapping save A + save B deterministic: both commits correct, no lost draft
-- [ ] Overlapping reset/save does not corrupt conf (no duplicate headers)
-- [ ] Acceptance test for queued ops passes
+- [x] Overlapping save A + save B deterministic: both commits correct, no lost draft
+- [x] Overlapping reset/save does not corrupt conf (no duplicate headers)
+- [x] Acceptance test for queued ops passes
 
 **Commit:** `Serialize stanza ops per conf file`
+
+**Done 2026-07-14:** Added `lib/conf-lock.js` (`withConfLock`), wrapped stanza mutators in `lib/stanza-drafts.js` and `lib/query-versions.js`, `test/stanza-conf-lock.test.js`. `node --test test/stanza-conf-lock.test.js` → 2 pass; full `node --test test/*.test.js` → 236 pass, exit 0.
 
 ---
 
