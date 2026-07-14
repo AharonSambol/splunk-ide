@@ -368,7 +368,7 @@ Keep sync status separate from draft dirty state.
 | 2 | Done | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
 | 3 | Done | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
 | 4 | Done | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
-| 5 | Open | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
+| 5 | Done | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
 | 6 | Open | Reset / discard one draft | drafts module, tests | other drafts survive |
 | 7 | Open | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
 | 8 | Open | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
@@ -570,12 +570,14 @@ commit/push/REST.
 
 **DoD:**
 
-- [ ] Restore H for A: worktree A matches H; siblings unchanged (or keep their drafts)
-- [ ] No new commit created
-- [ ] Missing stanza → explicit failure
-- [ ] Targeted tests pass
+- [x] Restore H for A: worktree A matches H; siblings unchanged (or keep their drafts)
+- [x] No new commit created
+- [x] Missing stanza → explicit failure
+- [x] Targeted tests pass
 
 **Commit:** `Restore saved search as stanza draft`
+
+**Done 2026-07-14:** Added `restoreStanzaVersion` in `lib/query-versions.js`, `test/stanza-restore-version.test.js`. `node --test test/stanza-restore-version.test.js` → 5 pass; full `node --test test/*.test.js` → 231 pass, exit 0.
 
 ---
 
