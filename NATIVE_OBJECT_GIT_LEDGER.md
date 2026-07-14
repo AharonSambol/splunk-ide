@@ -374,7 +374,7 @@ Keep sync status separate from draft dirty state.
 | 8 | Done | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
 | 9 | Done | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
 | 10 | Done | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
-| 11 | Open | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
+| 11 | Done | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
 | 12 | Open | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
 | 13 | Open | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
 | 14 | Open | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
@@ -707,13 +707,15 @@ calling lib APIs; no new business logic in the renderer.
 
 **DoD:**
 
-- [ ] Save / restore / discard / history use stanza APIs for saved searches
-- [ ] History panel shows stanza-filtered list + stanza diff text
-- [ ] Status strings include draft / stale / sync as already modeled
-- [ ] Manual smoke notes in commit body or checklist tick where automatable
-- [ ] No regression: syntax/load OK; existing non-conf flows don’t crash
+- [x] Save / restore / discard / history use stanza APIs for saved searches
+- [x] History panel shows stanza-filtered list + stanza diff text
+- [x] Status strings include draft / stale / sync as already modeled
+- [x] Manual smoke notes in commit body or checklist tick where automatable
+- [x] No regression: syntax/load OK; existing non-conf flows don’t crash
 
 **Commit:** `Wire stanza drafts into the editor UI`
+
+**Done 2026-07-14:** Wired `renderer.js` to `saveStanzaVersion`, `restoreStanzaVersion`, `discardStanzaDraft`, stanza-filtered `listVersions`, and `getStanzaDraftStatus`. Git ops use `getSavedSearchConfPath`; tab URL files stay on `.spl`. `node --check renderer.js` OK; `node --test test/*.test.js` → 249 pass. Manual smoke: open saved search → history stanza-filtered; restore creates draft; restore tracked-base discards draft; save commits one stanza; stale base in status when HEAD moved under draft. REST import on open skipped (no `restSettings` in git sync modal yet).
 
 ---
 
