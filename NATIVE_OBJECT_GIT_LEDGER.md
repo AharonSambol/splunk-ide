@@ -367,7 +367,7 @@ Keep sync status separate from draft dirty state.
 | 1 | Done | Native path helpers (conf + dashboard) | `lib/saved-search-id.js` or `lib/object-paths.js`, tests | unit: apps vs users, slug not used for match |
 | 2 | Done | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
 | 3 | Done | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
-| 4 | Open | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
+| 4 | Done | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
 | 5 | Open | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
 | 6 | Open | Reset / discard one draft | drafts module, tests | other drafts survive |
 | 7 | Open | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
@@ -541,12 +541,14 @@ after. No renderer yet if callable from lib tests.
 
 **DoD:**
 
-- [ ] With drafts A+B dirty, save A → commit has new A + HEAD B
-- [ ] After save A, draft B still loadable
-- [ ] Worktree recomposed: A=HEAD, B=draft
-- [ ] Targeted tests pass
+- [x] With drafts A+B dirty, save A → commit has new A + HEAD B
+- [x] After save A, draft B still loadable
+- [x] Worktree recomposed: A=HEAD, B=draft
+- [x] Targeted tests pass
 
 **Commit:** `Commit only the active saved-search stanza`
+
+**Done 2026-07-14:** Added `saveStanzaVersion` and `commitFileContentOnParent` in `lib/query-versions.js`, `test/stanza-save-version.test.js`. `node --test test/stanza-save-version.test.js` → 5 pass; full `node --test test/*.test.js` → 226 pass, exit 0.
 
 ---
 
