@@ -378,7 +378,7 @@ Keep sync status separate from draft dirty state.
 | 12 | Done | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
 | 13 | Done | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
 | 14 | Done | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
-| 15 | Open | Drop `.spl` canonical save path from hot path | renderer, open helpers | no new `.spl` writes for saved searches |
+| 15 | Done | Drop `.spl` canonical save path from hot path | renderer, open helpers | no new `.spl` writes for saved searches |
 | 16 | Open | Two-tab independence proof test | integration test | save A leaves B draft intact |
 
 ---
@@ -799,12 +799,14 @@ and save hot paths. Orphan cleanup optional/later (YAGNI unless it confuses UI).
 
 **DoD:**
 
-- [ ] Saving/opening a saved search does not create new `.spl` canonical files
-- [ ] Grep/hot-path check: no `getSavedSearchPath` → `.spl` for new saves
-- [ ] Smoke or unit proving conf path is used instead
-- [ ] Old `.spl` files may still exist on disk without breaking open (ignore OK)
+- [x] Saving/opening a saved search does not create new `.spl` canonical files
+- [x] Grep/hot-path check: no `getSavedSearchPath` → `.spl` for new saves
+- [x] Smoke or unit proving conf path is used instead
+- [x] Old `.spl` files may still exist on disk without breaking open (ignore OK)
 
 **Commit:** `Stop using URL .spl files for saved searches`
+
+**Done 2026-07-14:** Removed `getSavedSearchPath` from `renderer.js` hot paths; `createFileWithUrl` / `applySavedSearchToFile` keep tab URL on user-named `.spl` files; git ops still use `getSavedSearchConfPath` via `getRelativePath`. Added `test/saved-search-no-canonical-spl.test.js`. `node --test test/saved-search-no-canonical-spl.test.js` → 2 pass; full `npm test` → exit 0.
 
 ---
 

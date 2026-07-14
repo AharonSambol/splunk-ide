@@ -28,7 +28,7 @@ const {
     createDuplicateFileName,
 } = require('./lib/tabs');
 const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl, parseDashboardFromUrl } = require('./lib/url-utils');
-const { getSavedSearchId, getSavedSearchPath } = require('./lib/saved-search-id');
+const { getSavedSearchId } = require('./lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
 const { getStanzaDraftStatus } = require('./lib/stanza-drafts');
 const { openSavedSearchHistory } = require('./lib/saved-search-open');
@@ -360,9 +360,6 @@ async function resolveEffectiveUnsavedChanges(file, trackedHash, fileStatus) {
 }
 
 function getDiskRelativePath(file) {
-    if (file.savedSearch) {
-        return getSavedSearchPath(file.savedSearch);
-    }
     if (file.dashboard) {
         return getDashboardViewRelativePath(file.dashboard);
     }
@@ -597,16 +594,8 @@ function createFileWithUrl(name, url, parentFolder = '') {
     const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
     fileCounter++;
 
-    let relativeFileName;
-    let filePath;
-    if (savedSearch) {
-        const canonicalRelative = getSavedSearchPath(savedSearch);
-        relativeFileName = canonicalRelative.replace(/\.spl$/i, '');
-        filePath = path.join(currentProjectPath, ...canonicalRelative.split('/'));
-    } else {
-        relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
-        filePath = getProjectFilePath(relativeFileName);
-    }
+    const relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
+    const filePath = getProjectFilePath(relativeFileName);
 
     ensureDirectoryExists(path.dirname(filePath));
     fs.writeFileSync(filePath, url, 'utf8');
@@ -1052,40 +1041,11 @@ async function handleSplunkSave(fileId) {
 async function applySavedSearchToFile(file, savedSearch, url) {
     file.savedSearch = savedSearch;
     delete file.dashboard;
+    file.url = url;
 
-    const canonicalRelative = getSavedSearchPath(savedSearch);
-    const canonicalPath = path.join(currentProjectPath, ...canonicalRelative.split('/'));
+    ensureDirectoryExists(path.dirname(file.path));
+    fs.writeFileSync(file.path, url, 'utf8');
 
-    if (file.path === canonicalPath) {
-        await enterSavedSearchHistory(file, url);
-        fs.writeFileSync(file.path, url, 'utf8');
-        await syncSavedSearchTrackedBase(file);
-        onQueryFileChanged(file.id, { refreshHistory: true });
-        return;
-    }
-
-    ensureDirectoryExists(path.dirname(canonicalPath));
-
-    if (fs.existsSync(file.path)) {
-        fs.writeFileSync(file.path, url, 'utf8');
-    }
-    if (fs.existsSync(canonicalPath) && canonicalPath !== file.path) {
-        if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-        }
-        file.path = canonicalPath;
-    } else if (fs.existsSync(file.path) && file.path !== canonicalPath) {
-        fs.renameSync(file.path, canonicalPath);
-        file.path = canonicalPath;
-    } else if (!fs.existsSync(canonicalPath)) {
-        fs.writeFileSync(canonicalPath, url, 'utf8');
-        file.path = canonicalPath;
-    }
-
-    file.name = canonicalRelative.replace(/\.spl$/i, '');
-    addFolderForPath(getFileFolder(file.name));
-    updateTabLabel(file);
-    updateExplorer();
     await enterSavedSearchHistory(file, url);
     await syncSavedSearchTrackedBase(file);
     onQueryFileChanged(file.id, { refreshHistory: true });
