@@ -373,7 +373,7 @@ Keep sync status separate from draft dirty state.
 | 7 | Done | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
 | 8 | Done | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
 | 9 | Done | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
-| 10 | Open | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
+| 10 | Done | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
 | 11 | Open | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
 | 12 | Open | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
 | 13 | Open | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
@@ -684,13 +684,15 @@ stanza context.
 
 **DoD:**
 
-- [ ] Open with existing HEAD stanza → no unnecessary import commit if unchanged
-- [ ] Open missing stanza → REST GET → upsert → import commit (or documented skip)
-- [ ] Existing draft preferred over HEAD on open
-- [ ] Unit tests with temp repo + mocked REST
-- [ ] Targeted tests pass
+- [x] Open with existing HEAD stanza → no unnecessary import commit if unchanged
+- [x] Open missing stanza → REST GET → upsert → import commit (or documented skip)
+- [x] Existing draft preferred over HEAD on open
+- [x] Unit tests with temp repo + mocked REST
+- [x] Targeted tests pass
 
 **Commit:** `Open saved searches from native conf paths`
+
+**Done 2026-07-14:** Adapted `lib/saved-search-open.js` to `getSavedSearchConfPath`, draft-first recompose, HEAD stanza reuse, REST import via injectable `fetchSavedSearchStanza`. Rewrote `test/saved-search-open.test.js`. `node --test test/saved-search-open.test.js` → 9 pass; full `node --test test/*.test.js` → 249 pass, exit 0.
 
 ---
 
