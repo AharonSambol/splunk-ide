@@ -375,7 +375,7 @@ Keep sync status separate from draft dirty state.
 | 9 | Done | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
 | 10 | Done | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
 | 11 | Done | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
-| 12 | Open | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
+| 12 | Done | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
 | 13 | Open | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
 | 14 | Open | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
 | 15 | Open | Drop `.spl` canonical save path from hot path | renderer, open helpers | no new `.spl` writes for saved searches |
@@ -730,12 +730,14 @@ drafts OK. URL parse for dashboards as needed.
 
 **DoD:**
 
-- [ ] Dashboard open resolves native view path
-- [ ] Save/history/restore work file-scoped
-- [ ] Unit or integration roundtrip for a sample `.xml`/`.json` view
-- [ ] Does not break saved-search stanza path
+- [x] Dashboard open resolves native view path
+- [x] Save/history/restore work file-scoped
+- [x] Unit or integration roundtrip for a sample `.xml`/`.json` view
+- [x] Does not break saved-search stanza path
 
 **Commit:** `Version dashboards as native view files`
+
+**Done 2026-07-14:** Added `parseDashboardFromUrl` in `lib/url-utils.js`, `lib/dashboard-open.js`, `test/dashboard-open.test.js`, `test/dashboard-url-utils.test.js`. Thin `renderer.js` wiring for dashboard open/history/save/restore via native view paths. `node --test test/dashboard-open.test.js test/dashboard-url-utils.test.js` → 11 pass; full `node --test test/*.test.js` → 260 pass, exit 0. Smoke gap: live Splunk dashboard edits are not mirrored into view file bytes until REST write-back (Loop 13+).
 
 ---
 

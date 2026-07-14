@@ -27,11 +27,12 @@ const {
     getNextTab,
     createDuplicateFileName,
 } = require('./lib/tabs');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl } = require('./lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl, parseDashboardFromUrl } = require('./lib/url-utils');
 const { getSavedSearchId, getSavedSearchPath } = require('./lib/saved-search-id');
-const { getSavedSearchConfPath } = require('./lib/object-paths');
+const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
 const { getStanzaDraftStatus } = require('./lib/stanza-drafts');
 const { openSavedSearchHistory } = require('./lib/saved-search-open');
+const { openDashboardHistory } = require('./lib/dashboard-open');
 const { ensureRemote, pushSharedHistory } = require('./lib/git-sync');
 const {
     filterQuickSearchResults,
@@ -275,6 +276,24 @@ function isSavedSearchFile(file) {
     return Boolean(file?.savedSearch);
 }
 
+function isDashboardFile(file) {
+    return Boolean(file?.dashboard);
+}
+
+function isVersionedObjectFile(file) {
+    return isSavedSearchFile(file) || isDashboardFile(file);
+}
+
+function getDashboardViewRelativePath(dashboard) {
+    return getDashboardViewPath({
+        instance: dashboard.instance,
+        app: dashboard.app,
+        owner: dashboard.owner,
+        name: dashboard.name,
+        ext: dashboard.ext || 'xml'
+    });
+}
+
 function getSavedSearchStanzaName(file) {
     return String(file?.savedSearch?.name ?? '').trim();
 }
@@ -288,7 +307,14 @@ function versionPreviewText(version) {
     if (!version) {
         return '';
     }
-    return version.stanzaText || version.query || '';
+    if (version.stanzaText) {
+        return version.stanzaText;
+    }
+    const raw = String(version.url || '').trim();
+    if (raw.startsWith('<') || raw.startsWith('{') || raw.startsWith('[')) {
+        return raw;
+    }
+    return version.query || raw;
 }
 
 async function getSavedSearchDraftStatus(file) {
@@ -318,6 +344,9 @@ async function resolveEffectiveUnsavedChanges(file, trackedHash, fileStatus) {
 function getDiskRelativePath(file) {
     if (file.savedSearch) {
         return getSavedSearchPath(file.savedSearch);
+    }
+    if (file.dashboard) {
+        return getDashboardViewRelativePath(file.dashboard);
     }
     return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
 }
@@ -802,7 +831,7 @@ function getViewUrl(fileId) {
 
 function renderEmptySavedSearchHistory() {
     queryHistoryTitle.textContent = 'Query History';
-    queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a saved search to see its history.</div>';
+    queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a saved search or dashboard to see its history.</div>';
     currentQueryText = '';
     queryHasUnsavedChanges = false;
     queryVersions = [];
@@ -814,6 +843,25 @@ function renderEmptySavedSearchHistory() {
     queryRestoreBtn.disabled = true;
     querySaveBtn.disabled = true;
     updateStatusBar({ versionCount: 0, hasChanges: false });
+}
+
+function clearDashboardContext(file, url) {
+    delete file.dashboard;
+    forcedDraftByFileId.delete(file.id);
+    userDraftByFileId.delete(file.id);
+    restoreParentByFileId.delete(file.id);
+    if (url && url !== file.url) {
+        file.url = url;
+        if (fs.existsSync(file.path)) {
+            fs.writeFileSync(file.path, url, 'utf8');
+        }
+        userDraftByFileId.add(file.id);
+    }
+    selectedVersionHashes = [];
+    if (file.id === activeFileId) {
+        renderEmptySavedSearchHistory();
+    }
+    onQueryFileChanged(file.id);
 }
 
 function clearSavedSearchContext(file, url) {
@@ -849,8 +897,44 @@ async function syncFileFromViewUrl(fileId) {
 
     const savedSearch = parseSavedSearchFromUrl(url);
     if (!savedSearch) {
+        const dashboard = parseDashboardFromUrl(url);
+        if (dashboard) {
+            if (file.dashboard) {
+                const prevName = file.dashboard.name;
+                const nextName = dashboard.name;
+                const urlChanged = url !== file.url;
+                const contextChanged = prevName !== nextName
+                    || file.dashboard.app !== dashboard.app
+                    || file.dashboard.owner !== dashboard.owner
+                    || file.dashboard.instance !== dashboard.instance;
+                if (urlChanged) {
+                    file.url = url;
+                }
+                if (contextChanged || urlChanged) {
+                    await applyDashboardToFile(file, dashboard, url);
+                    return;
+                }
+                if (fileId === activeFileId) {
+                    await enterDashboardHistory(file, url);
+                    onQueryFileChanged(fileId, { refreshHistory: true });
+                }
+            } else {
+                if (file.savedSearch) {
+                    clearSavedSearchContext(file, url);
+                } else if (url !== file.url) {
+                    file.url = url;
+                    fs.writeFileSync(file.path, url, 'utf8');
+                    userDraftByFileId.add(fileId);
+                    onQueryFileChanged(fileId, { refreshHistory: true });
+                }
+                await applyDashboardToFile(file, dashboard, url);
+            }
+            return;
+        }
         if (file.savedSearch) {
             clearSavedSearchContext(file, url);
+        } else if (file.dashboard) {
+            clearDashboardContext(file, url);
         } else if (url !== file.url) {
             file.url = url;
             fs.writeFileSync(file.path, url, 'utf8');
@@ -943,6 +1027,7 @@ async function handleSplunkSave(fileId) {
 
 async function applySavedSearchToFile(file, savedSearch, url) {
     file.savedSearch = savedSearch;
+    delete file.dashboard;
 
     const canonicalRelative = getSavedSearchPath(savedSearch);
     const canonicalPath = path.join(currentProjectPath, ...canonicalRelative.split('/'));
@@ -979,6 +1064,125 @@ async function applySavedSearchToFile(file, savedSearch, url) {
     updateExplorer();
     await enterSavedSearchHistory(file, url);
     await syncSavedSearchTrackedBase(file);
+    onQueryFileChanged(file.id, { refreshHistory: true });
+}
+
+function resolveDashboardFromFile(file, currentUrl) {
+    if (file?.dashboard) {
+        return file.dashboard;
+    }
+    const rawUrl = currentUrl
+        || file?.url
+        || (file?.path && fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+    const dashboard = parseDashboardFromUrl(rawUrl);
+    if (dashboard && file) {
+        file.dashboard = dashboard;
+    }
+    return dashboard || null;
+}
+
+async function syncDashboardTrackedBase(file) {
+    if (!file?.dashboard || !currentGit) {
+        return;
+    }
+
+    const relativePath = getRelativePath(file);
+    const versions = await listVersions(currentGit, relativePath, 1);
+    if (versions.length === 0) {
+        return;
+    }
+
+    const latestHash = versions[0].hash;
+    restoreParentByFileId.set(file.id, latestHash);
+    if (!userDraftByFileId.has(file.id) && !forcedDraftByFileId.has(file.id)) {
+        userDraftByFileId.delete(file.id);
+        forcedDraftByFileId.delete(file.id);
+    }
+}
+
+async function enterDashboardHistory(file, currentUrl) {
+    resolveDashboardFromFile(file, currentUrl);
+    if (!file?.dashboard || !currentGit || !currentProjectPath) {
+        return;
+    }
+
+    const url = currentUrl
+        || file.url
+        || (fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+
+    try {
+        const result = await openDashboardHistory({
+            git: currentGit,
+            workspaceRoot: currentProjectPath,
+            metadata: file.dashboard,
+            remoteSettings: getGitRemoteSettings(),
+            author: getGitAuthorFromSettings()
+        });
+        if (result.dashboard) {
+            file.dashboard = result.dashboard;
+        }
+        if (result.warning) {
+            file.dashboardSyncStatus = result.warning;
+        } else {
+            file.dashboardSyncStatus = '';
+        }
+    } catch (err) {
+        file.dashboardSyncStatus = err.message || 'dashboard open failed';
+        return;
+    }
+
+    await syncDashboardTrackedBase(file);
+}
+
+async function applyDashboardToFile(file, dashboard, url) {
+    if (!currentGit || !currentProjectPath) {
+        file.dashboard = dashboard;
+        file.url = url;
+        return;
+    }
+
+    file.dashboard = dashboard;
+    delete file.savedSearch;
+    file.savedSearchSyncStatus = '';
+
+    const result = await openDashboardHistory({
+        git: currentGit,
+        workspaceRoot: currentProjectPath,
+        metadata: dashboard,
+        remoteSettings: getGitRemoteSettings(),
+        author: getGitAuthorFromSettings()
+    });
+    if (result.dashboard) {
+        file.dashboard = result.dashboard;
+    }
+    if (result.warning) {
+        file.dashboardSyncStatus = result.warning;
+    }
+
+    const viewPath = result.viewPath || getDashboardViewRelativePath(file.dashboard);
+    const absoluteViewPath = path.join(currentProjectPath, viewPath);
+
+    if (file.path !== absoluteViewPath) {
+        ensureDirectoryExists(path.dirname(absoluteViewPath));
+        if (fs.existsSync(file.path) && file.path !== absoluteViewPath) {
+            try {
+                fs.unlinkSync(file.path);
+            } catch {
+                // Best-effort cleanup of old URL pointer file.
+            }
+        }
+        if (!fs.existsSync(absoluteViewPath) && result.viewSource === 'missing') {
+            fs.writeFileSync(absoluteViewPath, '', 'utf8');
+        }
+        file.path = absoluteViewPath;
+    }
+
+    file.name = viewPath;
+    file.url = url;
+    addFolderForPath(getFileFolder(file.name));
+    updateTabLabel(file);
+    updateExplorer();
+    await syncDashboardTrackedBase(file);
     onQueryFileChanged(file.id, { refreshHistory: true });
 }
 
@@ -2000,6 +2204,9 @@ function getRelativePath(file) {
     if (file.savedSearch) {
         return getSavedSearchConfPath(file.savedSearch);
     }
+    if (file.dashboard) {
+        return getDashboardViewRelativePath(file.dashboard);
+    }
     return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
 }
 
@@ -2722,12 +2929,13 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
         }
         tab.classList.toggle('dirty', effectiveHasChanges);
         if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
-            if (!file.savedSearch) {
+            if (!isVersionedObjectFile(file)) {
                 renderEmptySavedSearchHistory();
             } else {
+                const syncStatus = file.savedSearchSyncStatus || file.dashboardSyncStatus || '';
                 queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
                     hasUnsavedChanges: effectiveHasChanges,
-                    syncStatus: file.savedSearchSyncStatus || '',
+                    syncStatus,
                     draftStatus
                 });
                 queryHistoryStatus.classList.toggle('dirty', effectiveHasChanges);
@@ -2750,26 +2958,31 @@ async function refreshQueryHistory() {
         return;
     }
 
-    if (!file.savedSearch) {
+    if (!isVersionedObjectFile(file)) {
         renderEmptySavedSearchHistory();
         return;
     }
 
     const relativePath = getRelativePath(file);
     const listOptions = getListVersionsOptions(file);
-    const displayName = file.name.split('/').pop();
+    const displayName = isDashboardFile(file)
+        ? file.dashboard.name
+        : file.name.split('/').pop();
     queryHistoryTitle.textContent = `History: ${displayName}`;
     queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Loading...</div>';
 
     try {
+        const readPath = isDashboardFile(file)
+            ? path.join(currentProjectPath, relativePath)
+            : file.path;
         const [fileStatus, versions, current, tags, draftStatus] = await Promise.all([
             getFileStatus(currentGit, relativePath),
             listVersions(currentGit, relativePath, 30, listOptions),
-            Promise.resolve(readCurrentQuery(file.path)),
+            Promise.resolve(readCurrentQuery(readPath)),
             (typeof listVersionTags === 'function'
                 ? listVersionTags(currentGit, relativePath).catch(() => [])
                 : Promise.resolve([])),
-            getSavedSearchDraftStatus(file)
+            isSavedSearchFile(file) ? getSavedSearchDraftStatus(file) : Promise.resolve(null)
         ]);
 
         if (generation !== queryRefreshGeneration) {
@@ -2796,11 +3009,13 @@ async function refreshQueryHistory() {
         querySaveBtn.disabled = !queryHasUnsavedChanges;
         queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
             hasUnsavedChanges: queryHasUnsavedChanges,
-            syncStatus: file.savedSearchSyncStatus || '',
+            syncStatus: file.savedSearchSyncStatus || file.dashboardSyncStatus || '',
             draftStatus
         });
         queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
-        currentQueryText = current.query || '';
+        currentQueryText = isDashboardFile(file)
+            ? (current.url || current.query || '')
+            : (current.query || '');
         renderVersionPreview();
 
         renderHistorySidebarList();
@@ -3028,6 +3243,29 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             }
             forcedDraftByFileId.add(file.id);
             restoreParentByFileId.set(file.id, restored.baseHash || hash);
+            selectedVersionHashes = [DRAFT_VERSION_HASH];
+            onQueryFileChanged(file.id, { refreshHistory: true });
+            await refreshQueryHistory();
+            return;
+        }
+
+        if (isDashboardFile(file)) {
+            const trackedHash = restoreParentByFileId.get(file.id);
+            const hasUserDraft = userDraftByFileId.has(file.id);
+            if (hasUserDraft && trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
+                await saveDraftStash(currentGit, relativePath, trackedHash);
+                userDraftByFileId.delete(file.id);
+            }
+
+            await restoreVersion(
+                currentGit,
+                relativePath,
+                hash,
+                trackedHash,
+                { skipAutoSave: true }
+            );
+            forcedDraftByFileId.add(file.id);
+            restoreParentByFileId.set(file.id, hash);
             selectedVersionHashes = [DRAFT_VERSION_HASH];
             onQueryFileChanged(file.id, { refreshHistory: true });
             await refreshQueryHistory();
