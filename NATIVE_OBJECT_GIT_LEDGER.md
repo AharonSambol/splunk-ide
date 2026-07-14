@@ -363,7 +363,7 @@ Keep sync status separate from draft dirty state.
 
 | ID | Status | Commit goal | Primary files | Required check |
 | --- | --- | --- | --- | --- |
-| 0 | Open | Conf stanza parse / extract / upsert | `lib/conf-stanza.js`, `test/conf-stanza.test.js` | unit: Error Rate replace-in-place, no duplicate |
+| 0 | Done | Conf stanza parse / extract / upsert | `lib/conf-stanza.js`, `test/conf-stanza.test.js` | unit: Error Rate replace-in-place, no duplicate |
 | 1 | Open | Native path helpers (conf + dashboard) | `lib/saved-search-id.js` or `lib/object-paths.js`, tests | unit: apps vs users, slug not used for match |
 | 2 | Open | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
 | 3 | Open | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
@@ -414,13 +414,15 @@ listStanzaNames(confText) → string[]
 
 **DoD:**
 
-- [ ] Exports above exist and are documented in module header
-- [ ] Unit tests cover: replace-in-place, no duplicate, missing→null, spaces/dots,
+- [x] Exports above exist and are documented in module header
+- [x] Unit tests cover: replace-in-place, no duplicate, missing→null, spaces/dots,
       upsert middle of multi-stanza conf
-- [ ] `npm test -- test/conf-stanza.test.js` passes
-- [ ] No other files changed
+- [x] `npm test -- test/conf-stanza.test.js` passes
+- [x] No other files changed
 
 **Commit:** `Add conf stanza extract/upsert helper`
+
+**Done 2026-07-14:** Added `lib/conf-stanza.js`, `test/conf-stanza.test.js`. `npm test -- test/conf-stanza.test.js` → 13 pass; full `npm test` → exit 0, no regressions.
 
 ---
 
