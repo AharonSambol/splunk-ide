@@ -379,7 +379,7 @@ Keep sync status separate from draft dirty state.
 | 13 | Done | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
 | 14 | Done | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
 | 15 | Done | Drop `.spl` canonical save path from hot path | renderer, open helpers | no new `.spl` writes for saved searches |
-| 16 | Open | Two-tab independence proof test | integration test | save A leaves B draft intact |
+| 16 | Done | Two-tab independence proof test | integration test | save A leaves B draft intact |
 
 ---
 
@@ -829,12 +829,24 @@ dirty A + dirty B
 
 **DoD:**
 
-- [ ] Integration test implements the scenario above
-- [ ] Also asserts: restore A does not duplicate stanza headers
-- [ ] Test passes under `npm test` (targeted file)
-- [ ] Smoke checklist below reviewed; unchecked items filed or done
+- [x] Integration test implements the scenario above
+- [x] Also asserts: restore A does not duplicate stanza headers
+- [x] Test passes under `npm test` (targeted file)
+- [x] Smoke checklist below reviewed; unchecked items filed or done
 
 **Commit:** `Prove multi-tab stanza draft isolation`
+
+**Done 2026-07-14:** Added `test/stanza-multi-tab-isolation.test.js` — dirty A+B → save A → draft B intact → reset B → A committed/no draft A → restore A no duplicate header. `node --test test/stanza-multi-tab-isolation.test.js` → 1 pass; `node --test test/*.test.js` → 270 pass, exit 0.
+
+**Smoke checklist (post-review):**
+- [ ] Two tabs, two searches, independent dirty drafts survive restart — needs Electron/manual (Loop 2 covers ref restart simulation only)
+- [x] Save tab A does not commit tab B's draft — Loops 4, 16
+- [x] Restore old A → edit → save replaces A only; no duplicate stanza — Loops 5, 16 (header assert); edit→save via Loop 4
+- [x] Reset A leaves B draft — Loop 6 (Loop 16 covers inverse: reset B leaves A)
+- [x] History for A hides commits that only changed B — Loop 3
+- [x] Simulated watchdog commit on conf appears in A's history only if A changed — Loop 3
+- [x] Dashboard view file save/history works — Loop 12
+- [x] Diverged remote + local draft reconciles without losing unrelated drafts — Loop 13
 
 ---
 
@@ -850,11 +862,11 @@ dirty A + dirty B
 
 ## Smoke checklist (after loop 16)
 
-- [ ] Two tabs, two searches, independent dirty drafts survive restart
-- [ ] Save tab A does not commit tab B’s draft
-- [ ] Restore old A → edit → save replaces A only; no duplicate stanza
-- [ ] Reset A leaves B draft
-- [ ] History for A hides commits that only changed B
-- [ ] Simulated watchdog commit on conf appears in A’s history only if A changed
-- [ ] Dashboard view file save/history works
-- [ ] Diverged remote + local draft reconciles without losing unrelated drafts
+- [ ] Two tabs, two searches, independent dirty drafts survive restart — manual/Electron only (Loop 2 ref restart simulation)
+- [x] Save tab A does not commit tab B’s draft — Loops 4, 16
+- [x] Restore old A → edit → save replaces A only; no duplicate stanza — Loops 5, 16
+- [x] Reset A leaves B draft — Loop 6
+- [x] History for A hides commits that only changed B — Loop 3
+- [x] Simulated watchdog commit on conf appears in A’s history only if A changed — Loop 3
+- [x] Dashboard view file save/history works — Loop 12
+- [x] Diverged remote + local draft reconciles without losing unrelated drafts — Loop 13
