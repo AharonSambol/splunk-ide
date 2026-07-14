@@ -377,7 +377,7 @@ Keep sync status separate from draft dirty state.
 | 11 | Done | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
 | 12 | Done | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
 | 13 | Done | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
-| 14 | Open | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
+| 14 | Done | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
 | 15 | Open | Drop `.spl` canonical save path from hot path | renderer, open helpers | no new `.spl` writes for saved searches |
 | 16 | Open | Two-tab independence proof test | integration test | save A leaves B draft intact |
 
@@ -777,12 +777,14 @@ trailers — still fine.
 
 **DoD:**
 
-- [ ] IDE saved-search save writes Object-Type + Saved-Search trailers
-- [ ] Tag ref/path includes stanza slug (two searches don’t share one tag namespace)
-- [ ] Unit tests for trailer/tag format
-- [ ] Targeted tests pass
+- [x] IDE saved-search save writes Object-Type + Saved-Search trailers
+- [x] Tag ref/path includes stanza slug (two searches don’t share one tag namespace)
+- [x] Unit tests for trailer/tag format
+- [x] Targeted tests pass
 
 **Commit:** `Tag and trailer native object commits`
+
+**Done 2026-07-14:** Extended `buildCommitMessage` with `Object-Type` for savedsearch/dashboard; stanza-scoped `versionTagRef`/`setVersionTag`/`listVersionTags`; renderer passes stanza on tag ops. `test/native-object-trailers-tags.test.js` + updated `test/query-versions.test.js`. `node --test test/*.test.js` → 267 pass, exit 0.
 
 ---
 

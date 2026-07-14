@@ -312,6 +312,10 @@ function getSavedSearchStanzaName(file) {
     return String(file?.savedSearch?.name ?? '').trim();
 }
 
+function getVersionTagStanzaName(file) {
+    return isSavedSearchFile(file) ? getSavedSearchStanzaName(file) : undefined;
+}
+
 function getListVersionsOptions(file) {
     const stanza = getSavedSearchStanzaName(file);
     return stanza ? { stanza } : {};
@@ -1030,7 +1034,13 @@ async function handleSplunkSave(fileId) {
         }
 
         const tagName = formatSplunkSaveTagName(gitSyncSettings.gitUserName, hash);
-        await setVersionTag(currentGit, relativePath, hash, tagName);
+        await setVersionTag(
+            currentGit,
+            relativePath,
+            hash,
+            tagName,
+            getVersionTagStanzaName(file)
+        );
         if (fileId === activeFileId) {
             await refreshQueryHistory();
         }
@@ -2505,10 +2515,11 @@ async function saveTagFromPopup() {
         return;
     }
     const relativePath = getRelativePath(file);
+    const tagStanza = getVersionTagStanzaName(file);
     const preservedHashes = [...selectedVersionHashes];
     try {
-        await setVersionTag(currentGit, relativePath, hash, name);
-        versionTags = await listVersionTags(currentGit, relativePath);
+        await setVersionTag(currentGit, relativePath, hash, name, tagStanza);
+        versionTags = await listVersionTags(currentGit, relativePath, tagStanza);
         closeTagPopup();
         renderHistorySidebarList();
         selectedVersionHashes = preservedHashes;
@@ -2537,10 +2548,11 @@ async function clearTagFromPopup() {
         return;
     }
     const relativePath = getRelativePath(file);
+    const tagStanza = getVersionTagStanzaName(file);
     const preservedHashes = [...selectedVersionHashes];
     try {
-        await deleteVersionTag(currentGit, relativePath, name);
-        versionTags = await listVersionTags(currentGit, relativePath);
+        await deleteVersionTag(currentGit, relativePath, name, tagStanza);
+        versionTags = await listVersionTags(currentGit, relativePath, tagStanza);
         closeTagPopup();
         renderHistorySidebarList();
         selectedVersionHashes = preservedHashes;
@@ -3013,7 +3025,7 @@ async function refreshQueryHistory() {
             listVersions(currentGit, relativePath, 30, listOptions),
             Promise.resolve(readCurrentQuery(readPath)),
             (typeof listVersionTags === 'function'
-                ? listVersionTags(currentGit, relativePath).catch(() => [])
+                ? listVersionTags(currentGit, relativePath, getVersionTagStanzaName(file)).catch(() => [])
                 : Promise.resolve([])),
             isSavedSearchFile(file) ? getSavedSearchDraftStatus(file) : Promise.resolve(null)
         ]);
@@ -3190,6 +3202,9 @@ async function saveQueryVersion() {
                 ...file.savedSearch,
                 id: getSavedSearchId(file.savedSearch)
             };
+        }
+        if (file.dashboard) {
+            saveOptions.dashboard = file.dashboard;
         }
         const result = isSavedSearchFile(file)
             ? await saveStanzaVersion(
