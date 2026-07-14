@@ -33,7 +33,7 @@ const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-p
 const { getStanzaDraftStatus } = require('./lib/stanza-drafts');
 const { openSavedSearchHistory } = require('./lib/saved-search-open');
 const { openDashboardHistory } = require('./lib/dashboard-open');
-const { ensureRemote, pushSharedHistory } = require('./lib/git-sync');
+const { ensureRemote, pushSharedHistoryWithReconcile } = require('./lib/git-sync');
 const {
     filterQuickSearchResults,
     getQuickSearchEmptyMessage,
@@ -233,8 +233,22 @@ const userDraftByFileId = new Set();
 const SAVED_SEARCH_SYNC_STATUS = {
     REMOTE_CHANGED: 'Remote changed',
     LOCAL_NOT_PUSHED: 'Local version not pushed',
-    PUSH_FAILED: 'Push failed'
+    PUSH_FAILED: 'Push failed',
+    STANZA_CONFLICT: 'Stanza conflict'
 };
+
+function splunkUiUrlToRestBase(uiUrl) {
+    try {
+        const parsed = new URL(String(uiUrl));
+        parsed.port = '8089';
+        parsed.pathname = '';
+        parsed.search = '';
+        parsed.hash = '';
+        return parsed.origin;
+    } catch {
+        return '';
+    }
+}
 
 function classifyPushSyncStatus(message) {
     const normalized = String(message || '').toLowerCase();
@@ -2314,9 +2328,28 @@ async function pushSavedSearchHistoryAfterSave(file) {
         return;
     }
 
-    const pushResult = await pushSharedHistory(currentGit, { remoteName, sharedBranch });
+    const pushResult = await pushSharedHistoryWithReconcile(currentGit, {
+        remoteName,
+        sharedBranch,
+        reconcile: {
+            confPath: getSavedSearchConfPath(file.savedSearch),
+            metadata: file.savedSearch,
+            stanzas: [file.savedSearch.name],
+            restSettings: { baseUrl: splunkUiUrlToRestBase(SPLUNK_URL) },
+            author: getGitAuthorFromSettings(),
+            remoteSettings: { remoteName, sharedBranch }
+        }
+    });
     if (!pushResult.ok) {
         file.savedSearchSyncStatus = classifyPushSyncStatus(pushResult.message);
+        return;
+    }
+
+    const stanzaConflict = (pushResult.conflicts || []).find(
+        (entry) => entry.name === file.savedSearch.name && entry.status === SAVED_SEARCH_SYNC_STATUS.STANZA_CONFLICT
+    );
+    if (stanzaConflict) {
+        file.savedSearchSyncStatus = SAVED_SEARCH_SYNC_STATUS.STANZA_CONFLICT;
         return;
     }
 

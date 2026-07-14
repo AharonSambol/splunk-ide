@@ -376,7 +376,7 @@ Keep sync status separate from draft dirty state.
 | 10 | Done | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
 | 11 | Done | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
 | 12 | Done | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
-| 13 | Open | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
+| 13 | Done | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
 | 14 | Open | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
 | 15 | Open | Drop `.spl` canonical save path from hot path | renderer, open helpers | no new `.spl` writes for saved searches |
 | 16 | Open | Two-tab independence proof test | integration test | save A leaves B draft intact |
@@ -754,12 +754,14 @@ local drafts survive. Same-stanza remote+local draft → `Stanza conflict` statu
 
 **DoD:**
 
-- [ ] Simulated diverge path runs re-export + commit + push (test or scripted)
-- [ ] Unrelated local draft still present after reconcile
-- [ ] Same-stanza conflict surfaced (not silently overwritten without status)
-- [ ] No three-way conf merge code
+- [x] Simulated diverge path runs re-export + commit + push (test or scripted)
+- [x] Unrelated local draft still present after reconcile
+- [x] Same-stanza conflict surfaced (not silently overwritten without status)
+- [x] No three-way conf merge code
 
 **Commit:** `Reconcile shared conf history from Splunk REST`
+
+**Done 2026-07-14:** Added `lib/reconcile.js` (`reconcileConfFromRest`, `detectStanzaConflicts`), `pushSharedHistoryWithReconcile` in `lib/git-sync.js`, thin renderer push wiring, fixed `isCommitAncestor` to use `execFile` (simple-git `raw` ignored exit 1). `node --test test/reconcile.test.js` → 2 pass; full `node --test test/*.test.js` → 262 pass, exit 0.
 
 ---
 
