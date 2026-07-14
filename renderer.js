@@ -250,6 +250,11 @@ function splunkUiUrlToRestBase(uiUrl) {
     }
 }
 
+function getSplunkRestSettings(url) {
+    const baseUrl = splunkUiUrlToRestBase(url || SPLUNK_URL);
+    return baseUrl ? { baseUrl } : {};
+}
+
 function classifyPushSyncStatus(message) {
     const normalized = String(message || '').toLowerCase();
     if (/rejected|non-fast-forward|fetch first|failed to push some refs|would be overwritten/.test(normalized)) {
@@ -1099,6 +1104,7 @@ async function enterDashboardHistory(file, currentUrl) {
             git: currentGit,
             workspaceRoot: currentProjectPath,
             metadata: file.dashboard,
+            restSettings: getSplunkRestSettings(url),
             remoteSettings: getGitRemoteSettings(),
             author: getGitAuthorFromSettings()
         });
@@ -1133,6 +1139,7 @@ async function applyDashboardToFile(file, dashboard, url) {
         git: currentGit,
         workspaceRoot: currentProjectPath,
         metadata: dashboard,
+        restSettings: getSplunkRestSettings(url),
         remoteSettings: getGitRemoteSettings(),
         author: getGitAuthorFromSettings()
     });
@@ -2352,6 +2359,7 @@ async function enterSavedSearchHistory(file, currentUrl) {
             workspaceRoot: currentProjectPath,
             metadata: file.savedSearch,
             currentUrl: url,
+            restSettings: getSplunkRestSettings(url),
             remoteSettings: getGitRemoteSettings(),
             author: getGitAuthorFromSettings()
         });
@@ -3166,6 +3174,9 @@ async function saveQueryVersion() {
         if (file.dashboard) {
             saveOptions.dashboard = file.dashboard;
         }
+        if (file.savedSearch) {
+            saveOptions.seedSearchText = getLiveQueryText(file) || extractQueryFromUrl(fileUrl);
+        }
         const result = isSavedSearchFile(file)
             ? await saveStanzaVersion(
                 currentGit,
@@ -3176,7 +3187,13 @@ async function saveQueryVersion() {
             )
             : await saveVersion(currentGit, relativePath, label, parentHash, saveOptions);
         if (!result.saved) {
-            queryHistoryStatus.textContent = 'No changes to save';
+            if (result.reason === 'missing-stanza') {
+                queryHistoryStatus.textContent = 'Nothing to commit: saved search not in git yet';
+            } else if (result.reason === 'missing-query') {
+                queryHistoryStatus.textContent = 'Nothing to commit: no search query to save';
+            } else {
+                queryHistoryStatus.textContent = 'No changes to save';
+            }
             queryHistoryStatus.classList.remove('dirty');
             return;
         }
