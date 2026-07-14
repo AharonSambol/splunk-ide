@@ -116,4 +116,42 @@ describe('saveStanzaVersion', () => {
         assert.equal(result.saved, false);
         assert.equal(result.reason, 'no-changes');
     });
+
+    it('creates conf stanza from seedSearchText when stanza missing from HEAD', async () => {
+        writeConf(repoPath, extractStanza(HEAD_CONF, 'Other Search'));
+        await saveVersion(git, CONF_PATH, 'Other search only');
+        const seededStanza = `[Error Rate]
+search = index=main | stats count
+
+`;
+
+        const result = await saveStanzaVersion(git, CONF_PATH, 'Error Rate', 'First save', {
+            seedSearchText: 'index=main | stats count'
+        });
+        assert.equal(result.saved, true);
+
+        const onDisk = fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8');
+        assert.equal(extractStanza(onDisk, 'Error Rate'), seededStanza);
+        assert.ok(extractStanza(onDisk, 'Other Search'));
+    });
+
+    it('returns missing-query when seedSearchText is empty and stanza missing', async () => {
+        writeConf(repoPath, extractStanza(HEAD_CONF, 'Other Search'));
+        await saveVersion(git, CONF_PATH, 'Other search only');
+
+        const result = await saveStanzaVersion(git, CONF_PATH, 'Error Rate', 'First save', {
+            seedSearchText: '   '
+        });
+        assert.equal(result.saved, false);
+        assert.equal(result.reason, 'missing-query');
+    });
+
+    it('returns missing-stanza when no stanza and no seedSearchText', async () => {
+        writeConf(repoPath, extractStanza(HEAD_CONF, 'Other Search'));
+        await saveVersion(git, CONF_PATH, 'Other search only');
+
+        const result = await saveStanzaVersion(git, CONF_PATH, 'Error Rate', 'First save');
+        assert.equal(result.saved, false);
+        assert.equal(result.reason, 'missing-stanza');
+    });
 });
