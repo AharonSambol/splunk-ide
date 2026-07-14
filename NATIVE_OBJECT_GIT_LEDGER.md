@@ -371,7 +371,7 @@ Keep sync status separate from draft dirty state.
 | 5 | Done | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
 | 6 | Done | Reset / discard one draft | drafts module, tests | other drafts survive |
 | 7 | Done | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
-| 8 | Open | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
+| 8 | Done | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
 | 9 | Open | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
 | 10 | Open | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
 | 11 | Open | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
@@ -637,12 +637,14 @@ changed” prompts → Loop 13.
 
 **DoD:**
 
-- [ ] Status exposed when base is stale
-- [ ] Save still succeeds with content-winning upsert on new HEAD
-- [ ] Unit test for stale detection
-- [ ] Targeted tests pass
+- [x] Status exposed when base is stale
+- [x] Save still succeeds with content-winning upsert on new HEAD
+- [x] Unit test for stale detection
+- [x] Targeted tests pass
 
 **Commit:** `Detect stale stanza draft bases`
+
+**Done 2026-07-14:** Added `getStanzaDraftStatus` and `isCommitAncestor` in `lib/stanza-drafts.js`, `test/stanza-draft-status.test.js`. Stale rule: draft exists and `baseHash !== HEAD`. `node --test test/stanza-draft-status.test.js` → 4 pass; full `node --test test/*.test.js` → 240 pass, exit 0.
 
 ---
 
