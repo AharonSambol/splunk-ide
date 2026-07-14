@@ -364,7 +364,7 @@ Keep sync status separate from draft dirty state.
 | ID | Status | Commit goal | Primary files | Required check |
 | --- | --- | --- | --- | --- |
 | 0 | Done | Conf stanza parse / extract / upsert | `lib/conf-stanza.js`, `test/conf-stanza.test.js` | unit: Error Rate replace-in-place, no duplicate |
-| 1 | Open | Native path helpers (conf + dashboard) | `lib/saved-search-id.js` or `lib/object-paths.js`, tests | unit: apps vs users, slug not used for match |
+| 1 | Done | Native path helpers (conf + dashboard) | `lib/saved-search-id.js` or `lib/object-paths.js`, tests | unit: apps vs users, slug not used for match |
 | 2 | Open | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
 | 3 | Open | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
 | 4 | Open | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
@@ -449,12 +449,14 @@ getDashboardViewPath({ instance, app, owner, name, ext })
 
 **DoD:**
 
-- [ ] Helpers return stable relative paths for given metadata
-- [ ] Unit tests: apps vs users, dashboard ext, instance prefix
-- [ ] Explicit comment/test that slug is not used for stanza identity
-- [ ] Targeted path tests pass
+- [x] Helpers return stable relative paths for given metadata
+- [x] Unit tests: apps vs users, dashboard ext, instance prefix
+- [x] Explicit comment/test that slug is not used for stanza identity
+- [x] Targeted path tests pass
 
 **Commit:** `Add native Splunk object path helpers`
+
+**Done 2026-07-14:** Added `lib/object-paths.js`, `test/object-paths.test.js`. `npm test -- test/object-paths.test.js` → 8 pass; full `npm test` → 244 pass, exit 0.
 
 ---
 
