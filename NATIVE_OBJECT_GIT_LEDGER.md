@@ -365,7 +365,7 @@ Keep sync status separate from draft dirty state.
 | --- | --- | --- | --- | --- |
 | 0 | Done | Conf stanza parse / extract / upsert | `lib/conf-stanza.js`, `test/conf-stanza.test.js` | unit: Error Rate replace-in-place, no duplicate |
 | 1 | Done | Native path helpers (conf + dashboard) | `lib/saved-search-id.js` or `lib/object-paths.js`, tests | unit: apps vs users, slug not used for match |
-| 2 | Open | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
+| 2 | Done | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
 | 3 | Open | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
 | 4 | Open | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
 | 5 | Open | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
@@ -483,13 +483,15 @@ refs/splunk-ide/stashes/<conf-slug>/<stanza-slug>/<baseHash>
 
 **DoD:**
 
-- [ ] Save/load/delete draft by `(confPath, stanzaName, baseHash)`
-- [ ] Recompose roundtrip test: HEAD + drafts A,B → worktree has both
-- [ ] Restart simulation: write refs, new process/load, recompose matches
-- [ ] Draft blob assertion: no sibling stanzas inside draft body
-- [ ] Targeted tests pass; drafts still not pushed
+- [x] Save/load/delete draft by `(confPath, stanzaName, baseHash)`
+- [x] Recompose roundtrip test: HEAD + drafts A,B → worktree has both
+- [x] Restart simulation: write refs, new process/load, recompose matches
+- [x] Draft blob assertion: no sibling stanzas inside draft body
+- [x] Targeted tests pass; drafts still not pushed
 
 **Commit:** `Add per-stanza durable draft stashes`
+
+**Done 2026-07-14:** Added `lib/stanza-drafts.js`, `test/stanza-drafts.test.js`. `node --test test/stanza-drafts.test.js` → 6 pass; full suite → 250 pass, exit 0.
 
 ---
 
