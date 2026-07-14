@@ -372,7 +372,7 @@ Keep sync status separate from draft dirty state.
 | 6 | Done | Reset / discard one draft | drafts module, tests | other drafts survive |
 | 7 | Done | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
 | 8 | Done | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
-| 9 | Open | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
+| 9 | Done | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
 | 10 | Open | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
 | 11 | Open | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
 | 12 | Open | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
@@ -660,13 +660,15 @@ state tends toward identical bytes (reduces noisy midnight commits).
 
 **DoD:**
 
-- [ ] GET saved search returns text usable by `upsertStanza`
-- [ ] GET view returns raw XML/JSON body
-- [ ] Mock tests for success + auth failure
-- [ ] Normalization documented in module comment
-- [ ] No live Splunk required for CI
+- [x] GET saved search returns text usable by `upsertStanza`
+- [x] GET view returns raw XML/JSON body
+- [x] Mock tests for success + auth failure
+- [x] Normalization documented in module comment
+- [x] No live Splunk required for CI
 
 **Commit:** `Add Splunk REST export helpers`
+
+**Done 2026-07-14:** Added `lib/splunk-rest.js`, `test/splunk-rest.test.js`. `node --test test/splunk-rest.test.js` → 7 pass; full `node --test test/*.test.js` → 247 pass, exit 0.
 
 ---
 
