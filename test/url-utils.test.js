@@ -33,6 +33,11 @@ describe('extractQueryFromUrl', () => {
     it('returns empty string for blank input', () => {
         assert.equal(extractQueryFromUrl('   '), '');
     });
+
+    it('returns empty string for saved-search URL without q param', () => {
+        const url = 'http://localhost:8010/en-US/app/search/search?s=%5Bnobody%3Asearch%3AError%20Rate%5D';
+        assert.equal(extractQueryFromUrl(url), '');
+    });
 });
 
 describe('parseSavedSearchFromUrl', () => {

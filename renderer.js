@@ -47,6 +47,7 @@ const {
     popDraftStash,
     listVersions,
     readCurrentQuery,
+    readVersionStanza,
     saveVersion,
     saveStanzaVersion,
     restoreVersion,
@@ -229,6 +230,8 @@ let confirmResolve = null;
 const restoreParentByFileId = new Map();
 const forcedDraftByFileId = new Set();
 const userDraftByFileId = new Set();
+const liveAceQueryByFileId = new Map();
+const liveDraftDebounceByFileId = new Map();
 
 const SAVED_SEARCH_SYNC_STATUS = {
     REMOTE_CHANGED: 'Remote changed',
@@ -1524,7 +1527,13 @@ function createView(file) {
     // Listen for key events forwarded from the webview preload
     view.addEventListener('ipc-message', async (event) => {
         if (event.channel === 'webview-keydown') {
-            handleKeyboardShortcut(event.args[0] || {});
+            const keyInfo = event.args[0] || {};
+            if (shouldRefreshLiveDraftOnKey(keyInfo)) {
+                scheduleRefreshLiveDraftState(file.id);
+            }
+            handleKeyboardShortcut(keyInfo);
+        } else if (event.channel === 'webview-beforeinput') {
+            scheduleRefreshLiveDraftState(file.id);
         } else if (event.channel === 'save-file') {
             saveFileUrl(file.id);
         } else if (event.channel === 'splunk-save') {
@@ -2179,6 +2188,10 @@ function getLiveQueryText(file = getActiveFile()) {
     if (!file) {
         return '';
     }
+    const cached = liveAceQueryByFileId.get(file.id);
+    if (cached) {
+        return cached;
+    }
     const view = document.getElementById(file.id);
     if (!view) {
         return '';
@@ -2189,6 +2202,123 @@ function getLiveQueryText(file = getActiveFile()) {
     } catch {
         return '';
     }
+}
+
+async function getAceQueryText(file = getActiveFile()) {
+    if (!file) {
+        return '';
+    }
+    const view = document.getElementById(file.id);
+    if (!view?.executeJavaScript) {
+        return '';
+    }
+    try {
+        const text = await view.executeJavaScript(`(() => {
+            const el = document.querySelector('.ace_editor');
+            return el?.env?.editor?.getValue?.() ?? '';
+        })()`) || '';
+        if (text) {
+            liveAceQueryByFileId.set(file.id, text);
+        }
+        return text;
+    } catch {
+        return '';
+    }
+}
+
+function extractSearchFromStanza(stanzaText) {
+    if (!stanzaText) {
+        return '';
+    }
+    const match = stanzaText.match(/^search\s*=\s*(.*)$/m);
+    return match ? match[1].trim() : '';
+}
+
+async function getLiveAceOrUrlQuery(file) {
+    const ace = await getAceQueryText(file);
+    if (ace) {
+        return ace;
+    }
+    return getLiveQueryText(file);
+}
+
+async function getQueryBaseline(file) {
+    if (!isSavedSearchFile(file) || !currentGit) {
+        const fileUrl = file.url
+            || (file.path && fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+        return extractQueryFromUrl(fileUrl);
+    }
+
+    const relativePath = getRelativePath(file);
+    const stanzaName = getSavedSearchStanzaName(file);
+    const trackedHash = restoreParentByFileId.get(file.id);
+    const versionHash = queryVersions[0]?.hash;
+    const hash = trackedHash || versionHash;
+    if (hash) {
+        const stanza = await readVersionStanza(currentGit, relativePath, hash, stanzaName);
+        if (stanza) {
+            return extractSearchFromStanza(stanza);
+        }
+    }
+
+    const fileUrl = file.url
+        || (file.path && fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+    return extractQueryFromUrl(fileUrl);
+}
+
+function shouldRefreshLiveDraftOnKey({ key, ctrl, meta, alt }) {
+    if (ctrl || meta || alt) {
+        return false;
+    }
+    return key === 'Enter' || key === 'Backspace' || key === 'Delete' || key?.length === 1;
+}
+
+function scheduleRefreshLiveDraftState(fileId) {
+    const prev = liveDraftDebounceByFileId.get(fileId);
+    if (prev) {
+        clearTimeout(prev);
+    }
+    liveDraftDebounceByFileId.set(fileId, setTimeout(() => {
+        liveDraftDebounceByFileId.delete(fileId);
+        void refreshLiveDraftState(fileId);
+    }, 200));
+}
+
+async function refreshLiveDraftState(fileId) {
+    const file = files.find(f => f.id === fileId);
+    if (!file || !isVersionedObjectFile(file)) {
+        return;
+    }
+
+    const live = (await getLiveAceOrUrlQuery(file)).trim();
+    const baseline = (await getQueryBaseline(file)).trim();
+    if (live !== baseline) {
+        userDraftByFileId.add(fileId);
+        onQueryFileChanged(fileId, { refreshHistory: true });
+        return;
+    }
+
+    if (forcedDraftByFileId.has(fileId)) {
+        return;
+    }
+
+    if (isSavedSearchFile(file) && currentGit) {
+        const draftStatus = await getSavedSearchDraftStatus(file);
+        if (draftStatus.hasDraft) {
+            return;
+        }
+    }
+
+    userDraftByFileId.delete(fileId);
+    onQueryFileChanged(fileId, { refreshHistory: true });
+}
+
+function seedQueryFromSources(file, fileUrl) {
+    const fromUrl = extractQueryFromUrl(fileUrl);
+    if (/^https?:\/\//i.test(fromUrl.trim())) {
+        return '';
+    }
+    return fromUrl;
 }
 
 function getRelativePath(file) {
@@ -3146,7 +3276,7 @@ async function saveQueryVersion() {
         return;
     }
 
-    saveFileUrl(file.id);
+    await syncFileFromViewUrl(file.id);
     const fileUrl = file.url
         || (fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
     const savedSearch = resolveSavedSearchFromFile(file, fileUrl);
@@ -3175,7 +3305,10 @@ async function saveQueryVersion() {
             saveOptions.dashboard = file.dashboard;
         }
         if (file.savedSearch) {
-            saveOptions.seedSearchText = getLiveQueryText(file) || extractQueryFromUrl(fileUrl);
+            const aceQuery = await getAceQueryText(file);
+            saveOptions.seedSearchText = aceQuery
+                || getLiveQueryText(file)
+                || seedQueryFromSources(file, fileUrl);
         }
         const result = isSavedSearchFile(file)
             ? await saveStanzaVersion(
@@ -3199,8 +3332,19 @@ async function saveQueryVersion() {
         }
         forcedDraftByFileId.delete(file.id);
         userDraftByFileId.delete(file.id);
+        liveAceQueryByFileId.delete(file.id);
         if (result.hash) {
             restoreParentByFileId.set(file.id, result.hash);
+        }
+        if (file.savedSearch && result.hash) {
+            const tagName = formatSplunkSaveTagName(gitSyncSettings.gitUserName, result.hash);
+            await setVersionTag(
+                currentGit,
+                relativePath,
+                result.hash,
+                tagName,
+                getVersionTagStanzaName(file)
+            );
         }
         querySaveMessage.value = '';
         if (file.savedSearch) {
