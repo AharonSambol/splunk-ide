@@ -366,7 +366,7 @@ Keep sync status separate from draft dirty state.
 | 0 | Done | Conf stanza parse / extract / upsert | `lib/conf-stanza.js`, `test/conf-stanza.test.js` | unit: Error Rate replace-in-place, no duplicate |
 | 1 | Done | Native path helpers (conf + dashboard) | `lib/saved-search-id.js` or `lib/object-paths.js`, tests | unit: apps vs users, slug not used for match |
 | 2 | Done | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
-| 3 | Open | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
+| 3 | Done | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
 | 4 | Open | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
 | 5 | Open | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
 | 6 | Open | Reset / discard one draft | drafts module, tests | other drafts survive |
@@ -512,12 +512,14 @@ storage grain stays file.
 
 **DoD:**
 
-- [ ] `listVersions(git, confPath, n, { stanza: 'Error Rate' })` API works
-- [ ] Test: sibling-only commit hidden; Error Rate commit shown
-- [ ] Test: no-stanza option unchanged for plain file history
-- [ ] Targeted tests pass
+- [x] `listVersions(git, confPath, n, { stanza: 'Error Rate' })` API works
+- [x] Test: sibling-only commit hidden; Error Rate commit shown
+- [x] Test: no-stanza option unchanged for plain file history
+- [x] Targeted tests pass
 
 **Commit:** `Filter version history by conf stanza`
+
+**Done 2026-07-14:** Extended `listVersions` with optional `{ stanza }` filter and `readVersionStanza` helper. `node --test test/stanza-list-versions.test.js` → 4 pass; full suite → exit 0.
 
 ---
 
