@@ -5,10 +5,13 @@ const os = require('node:os');
 const path = require('node:path');
 const { simpleGit } = require('simple-git');
 const { openSavedSearchHistory } = require('../lib/saved-search-open');
-const { getSavedSearchId, getSavedSearchPath } = require('../lib/saved-search-id');
+const { getSavedSearchId } = require('../lib/saved-search-id');
+const { getSavedSearchConfPath } = require('../lib/object-paths');
+const { extractStanza } = require('../lib/conf-stanza');
 const { listVersions } = require('../lib/query-versions');
-const { ensureRemote, fetchSharedHistory, pushSharedHistory } = require('../lib/git-sync');
-const { cleanupTempRepo, writeSplFile } = require('./helpers/temp-git-repo');
+const { saveStanzaDraft } = require('../lib/stanza-drafts');
+const { ensureRemote, pushSharedHistory } = require('../lib/git-sync');
+const { cleanupTempRepo } = require('./helpers/temp-git-repo');
 
 const SAVED_SEARCH_META = {
     instance: 'prod',
@@ -16,9 +19,39 @@ const SAVED_SEARCH_META = {
     owner: 'nobody',
     name: 'Error Rate'
 };
-const SPL_URL_IMPORT = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
-const SPL_URL_OTHER = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20other';
+const CONF_PATH = getSavedSearchConfPath(SAVED_SEARCH_META);
+const savedSearchId = getSavedSearchId(SAVED_SEARCH_META);
 const SHARED_BRANCH = 'main';
+
+const ERROR_RATE_STANZA = `[Error Rate]
+search = index=main
+disabled = 0
+
+`;
+
+const ERROR_RATE_STANZA_IMPORTED = `[Error Rate]
+search = index=main | stats count
+disabled = 0
+
+`;
+
+const OTHER_STANZA = `[Other Search]
+search = index=other
+disabled = 1
+
+`;
+
+const HEAD_CONF = `${ERROR_RATE_STANZA}${OTHER_STANZA}`;
+
+function writeConf(repoPath, content) {
+    const absolutePath = path.join(repoPath, CONF_PATH);
+    fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+    fs.writeFileSync(absolutePath, content, 'utf8');
+}
+
+function mockFetchStanza(stanzaText) {
+    return async () => stanzaText;
+}
 
 async function createBareRemote() {
     const barePath = fs.mkdtempSync(path.join(os.tmpdir(), 'splunk-ide-bare-'));
@@ -41,11 +74,9 @@ async function commitCount(git) {
     }
 }
 
-describe('openSavedSearchHistory', () => {
+describe('openSavedSearchHistory (conf paths)', () => {
     let repoPath;
     let git;
-    const canonicalPath = getSavedSearchPath(SAVED_SEARCH_META);
-    const savedSearchId = getSavedSearchId(SAVED_SEARCH_META);
 
     beforeEach(async () => {
         ({ repoPath, git } = await createLocalRepo());
@@ -55,89 +86,148 @@ describe('openSavedSearchHistory', () => {
         cleanupTempRepo(repoPath);
     });
 
-    it('imports on first open with trailers', async () => {
+    it('imports missing stanza via REST with trailers', async () => {
         const result = await openSavedSearchHistory({
             git,
             workspaceRoot: repoPath,
             metadata: SAVED_SEARCH_META,
-            currentUrl: SPL_URL_IMPORT,
+            restSettings: { baseUrl: 'https://splunk.example.com:8089' },
+            fetchSavedSearchStanza: mockFetchStanza(ERROR_RATE_STANZA_IMPORTED),
             author: { name: 'Test User', email: 'test@example.com' }
         });
 
-        assert.equal(result.relativePath, canonicalPath);
+        assert.equal(result.relativePath, CONF_PATH);
+        assert.equal(result.confPath, CONF_PATH);
+        assert.equal(result.stanzaName, 'Error Rate');
         assert.equal(result.imported, true);
+        assert.equal(result.stanzaSource, 'import');
         assert.equal(result.fetched, false);
         assert.equal(result.warning, '');
 
-        const absolutePath = path.join(repoPath, canonicalPath);
-        assert.equal(fs.readFileSync(absolutePath, 'utf8'), SPL_URL_IMPORT);
+        const confText = fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8');
+        assert.equal(extractStanza(confText, 'Error Rate'), ERROR_RATE_STANZA_IMPORTED);
         assert.equal(await commitCount(git), 1);
 
-        const versions = await listVersions(git, canonicalPath);
+        const versions = await listVersions(git, CONF_PATH, 10, { stanza: 'Error Rate' });
         assert.equal(versions.length, 1);
         assert.equal(versions[0].message, 'Import saved search');
         const body = await git.show(['-s', '--format=%b', versions[0].hash]);
         assert.match(body, /Splunk-Instance: prod/);
-        assert.match(body, /Saved-Search-Id: /);
         assert.match(body, new RegExp(`Saved-Search-Id: ${savedSearchId}`));
     });
 
-    it('does not import again on reopen', async () => {
-        await openSavedSearchHistory({
-            git,
-            workspaceRoot: repoPath,
-            metadata: SAVED_SEARCH_META,
-            currentUrl: SPL_URL_IMPORT,
-            author: { name: 'Test User', email: 'test@example.com' }
-        });
-        const commitsAfterFirst = await commitCount(git);
+    it('does not import again when stanza already in HEAD', async () => {
+        writeConf(repoPath, HEAD_CONF);
+        await git.add(CONF_PATH);
+        await git.commit('Seed conf');
 
         const result = await openSavedSearchHistory({
             git,
             workspaceRoot: repoPath,
             metadata: SAVED_SEARCH_META,
-            currentUrl: SPL_URL_OTHER,
+            restSettings: { baseUrl: 'https://splunk.example.com:8089' },
+            fetchSavedSearchStanza: async () => {
+                throw new Error('REST should not be called');
+            },
             author: { name: 'Test User', email: 'test@example.com' }
         });
 
         assert.equal(result.imported, false);
-        assert.equal(await commitCount(git), commitsAfterFirst);
-        assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_IMPORT);
-    });
-
-    it('keeps existing worktree file over current Splunk content', async () => {
-        writeSplFile(repoPath, canonicalPath, SPL_URL_IMPORT);
-
-        const result = await openSavedSearchHistory({
-            git,
-            workspaceRoot: repoPath,
-            metadata: SAVED_SEARCH_META,
-            currentUrl: SPL_URL_OTHER,
-            author: { name: 'Test User', email: 'test@example.com' }
-        });
-
-        assert.equal(result.imported, false);
-        assert.equal(await commitCount(git), 0);
-        assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_IMPORT);
-    });
-
-    it('restores from git when worktree file is missing', async () => {
-        writeSplFile(repoPath, canonicalPath, SPL_URL_IMPORT);
-        await git.add(canonicalPath);
-        await git.commit('Seed saved search');
-        fs.unlinkSync(path.join(repoPath, canonicalPath));
-
-        const result = await openSavedSearchHistory({
-            git,
-            workspaceRoot: repoPath,
-            metadata: SAVED_SEARCH_META,
-            currentUrl: SPL_URL_OTHER,
-            author: { name: 'Test User', email: 'test@example.com' }
-        });
-
-        assert.equal(result.imported, false);
+        assert.equal(result.stanzaSource, 'head');
         assert.equal(await commitCount(git), 1);
-        assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_IMPORT);
+        assert.equal(
+            extractStanza(fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8'), 'Error Rate'),
+            ERROR_RATE_STANZA
+        );
+    });
+
+    it('prefers existing draft over HEAD on open', async () => {
+        writeConf(repoPath, HEAD_CONF);
+        await git.add(CONF_PATH);
+        await git.commit('Seed conf');
+        const baseHash = (await git.revparse(['HEAD'])).trim();
+
+        const draftStanza = `[Error Rate]
+search = index=main | stats count by host
+disabled = 0
+
+`;
+        await saveStanzaDraft(git, CONF_PATH, 'Error Rate', baseHash, draftStanza);
+
+        const result = await openSavedSearchHistory({
+            git,
+            workspaceRoot: repoPath,
+            metadata: SAVED_SEARCH_META,
+            author: { name: 'Test User', email: 'test@example.com' }
+        });
+
+        assert.equal(result.imported, false);
+        assert.equal(result.stanzaSource, 'draft');
+        assert.equal(await commitCount(git), 1);
+        assert.equal(
+            extractStanza(fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8'), 'Error Rate'),
+            draftStanza
+        );
+    });
+
+    it('keeps existing worktree conf over HEAD when no draft', async () => {
+        writeConf(repoPath, HEAD_CONF);
+        await git.add(CONF_PATH);
+        await git.commit('Seed conf');
+
+        const worktreeOnly = `${ERROR_RATE_STANZA.replace('index=main', 'index=worktree')}${OTHER_STANZA}`;
+        writeConf(repoPath, worktreeOnly);
+
+        const result = await openSavedSearchHistory({
+            git,
+            workspaceRoot: repoPath,
+            metadata: SAVED_SEARCH_META,
+            author: { name: 'Test User', email: 'test@example.com' }
+        });
+
+        assert.equal(result.imported, false);
+        assert.equal(result.stanzaSource, 'head');
+        assert.equal(await commitCount(git), 1);
+        assert.match(
+            extractStanza(fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8'), 'Error Rate'),
+            /index=worktree/
+        );
+    });
+
+    it('restores conf from git when worktree file is missing', async () => {
+        writeConf(repoPath, HEAD_CONF);
+        await git.add(CONF_PATH);
+        await git.commit('Seed conf');
+        fs.unlinkSync(path.join(repoPath, CONF_PATH));
+
+        const result = await openSavedSearchHistory({
+            git,
+            workspaceRoot: repoPath,
+            metadata: SAVED_SEARCH_META,
+            author: { name: 'Test User', email: 'test@example.com' }
+        });
+
+        assert.equal(result.imported, false);
+        assert.equal(result.stanzaSource, 'head');
+        assert.equal(
+            extractStanza(fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8'), 'Error Rate'),
+            ERROR_RATE_STANZA
+        );
+    });
+
+    it('skips import without REST config when stanza missing', async () => {
+        const result = await openSavedSearchHistory({
+            git,
+            workspaceRoot: repoPath,
+            metadata: SAVED_SEARCH_META,
+            author: { name: 'Test User', email: 'test@example.com' }
+        });
+
+        assert.equal(result.imported, false);
+        assert.equal(result.stanzaSource, 'missing');
+        assert.match(result.warning, /no REST config/i);
+        assert.equal(await commitCount(git), 0);
+        assert.equal(fs.existsSync(path.join(repoPath, CONF_PATH)), false);
     });
 
     it('still opens locally when fetch fails', async () => {
@@ -145,7 +235,8 @@ describe('openSavedSearchHistory', () => {
             git,
             workspaceRoot: repoPath,
             metadata: SAVED_SEARCH_META,
-            currentUrl: SPL_URL_IMPORT,
+            restSettings: { baseUrl: 'https://splunk.example.com:8089' },
+            fetchSavedSearchStanza: mockFetchStanza(ERROR_RATE_STANZA_IMPORTED),
             remoteSettings: {
                 remoteUrl: path.join(os.tmpdir(), 'missing-bare-remote-for-open-test')
             },
@@ -155,26 +246,29 @@ describe('openSavedSearchHistory', () => {
         assert.equal(result.imported, true);
         assert.equal(result.fetched, false);
         assert.ok(result.warning);
-        assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_IMPORT);
+        assert.equal(
+            extractStanza(fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8'), 'Error Rate'),
+            ERROR_RATE_STANZA_IMPORTED
+        );
     });
 
-    it('fetches remote history when untracked canonical file already exists in worktree', async () => {
+    it('fetches remote history when untracked conf already exists in worktree', async () => {
         const barePath = await createBareRemote();
         const { repoPath: repoAPath, git: gitA } = await createLocalRepo();
         try {
-            writeSplFile(repoAPath, canonicalPath, SPL_URL_IMPORT);
-            await gitA.add(canonicalPath);
+            writeConf(repoAPath, HEAD_CONF);
+            await gitA.add(CONF_PATH);
             await gitA.commit('Import saved search');
             assert.equal((await ensureRemote(gitA, { remoteUrl: barePath })).ok, true);
             assert.equal((await pushSharedHistory(gitA, { sharedBranch: SHARED_BRANCH })).ok, true);
 
-            writeSplFile(repoPath, canonicalPath, SPL_URL_OTHER);
+            const localConf = `${ERROR_RATE_STANZA.replace('index=main', 'index=local')}${OTHER_STANZA}`;
+            writeConf(repoPath, localConf);
 
             const result = await openSavedSearchHistory({
                 git,
                 workspaceRoot: repoPath,
                 metadata: SAVED_SEARCH_META,
-                currentUrl: SPL_URL_OTHER,
                 remoteSettings: { remoteUrl: barePath, sharedBranch: SHARED_BRANCH },
                 author: { name: 'Test User', email: 'test@example.com' }
             });
@@ -182,9 +276,12 @@ describe('openSavedSearchHistory', () => {
             assert.equal(result.imported, false);
             assert.equal(result.fetched, true);
             assert.equal(result.warning, '');
-            assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_OTHER);
+            assert.match(
+                extractStanza(fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8'), 'Error Rate'),
+                /index=local/
+            );
 
-            const versions = await listVersions(git, canonicalPath);
+            const versions = await listVersions(git, CONF_PATH, 10, { stanza: 'Error Rate' });
             assert.equal(versions.length, 1);
             assert.equal(versions[0].message, 'Import saved search');
         } finally {
@@ -193,12 +290,12 @@ describe('openSavedSearchHistory', () => {
         }
     });
 
-    it('fetches remote history without importing when file already exists remotely', async () => {
+    it('fetches remote history without importing when stanza exists remotely', async () => {
         const barePath = await createBareRemote();
         const { repoPath: repoAPath, git: gitA } = await createLocalRepo();
         try {
-            writeSplFile(repoAPath, canonicalPath, SPL_URL_IMPORT);
-            await gitA.add(canonicalPath);
+            writeConf(repoAPath, HEAD_CONF);
+            await gitA.add(CONF_PATH);
             await gitA.commit('Import saved search');
             assert.equal((await ensureRemote(gitA, { remoteUrl: barePath })).ok, true);
             assert.equal((await pushSharedHistory(gitA, { sharedBranch: SHARED_BRANCH })).ok, true);
@@ -209,17 +306,20 @@ describe('openSavedSearchHistory', () => {
                 git,
                 workspaceRoot: repoPath,
                 metadata: SAVED_SEARCH_META,
-                currentUrl: SPL_URL_OTHER,
                 remoteSettings: { remoteUrl: barePath, sharedBranch: SHARED_BRANCH },
                 author: { name: 'Test User', email: 'test@example.com' }
             });
 
             assert.equal(result.imported, false);
             assert.equal(result.fetched, true);
+            assert.equal(result.stanzaSource, 'head');
             assert.equal(result.warning, '');
-            assert.equal(fs.readFileSync(path.join(repoPath, canonicalPath), 'utf8'), SPL_URL_IMPORT);
+            assert.equal(
+                extractStanza(fs.readFileSync(path.join(repoPath, CONF_PATH), 'utf8'), 'Error Rate'),
+                ERROR_RATE_STANZA
+            );
 
-            const versions = await listVersions(git, canonicalPath);
+            const versions = await listVersions(git, CONF_PATH, 10, { stanza: 'Error Rate' });
             assert.equal(versions.length, 1);
             assert.equal(versions[0].message, 'Import saved search');
         } finally {
