@@ -629,6 +629,7 @@ describe('saved-search commit trailers', () => {
         assert.equal(result.saved, true);
 
         const body = await getCommitBody(result.hash);
+        assert.match(body, /^Object-Type: savedsearch$/m);
         assert.match(body, /^Splunk-Instance: prod$/m);
         assert.match(body, /^Splunk-App: search$/m);
         assert.match(body, /^Splunk-Owner: nobody$/m);
@@ -654,6 +655,7 @@ describe('saved-search commit trailers', () => {
         const body = await getCommitBody(result.hash);
         assert.match(body, /^Query-Parent: /m);
         assert.match(body, new RegExp(`^Query-Parent: ${firstHash}$`, 'm'));
+        assert.match(body, /^Object-Type: savedsearch$/m);
         assert.match(body, /^Splunk-Instance: prod$/m);
         assert.match(body, /^Splunk-App: search$/m);
         assert.match(body, /^Splunk-Owner: nobody$/m);
