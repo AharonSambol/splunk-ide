@@ -369,7 +369,7 @@ Keep sync status separate from draft dirty state.
 | 3 | Done | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
 | 4 | Done | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
 | 5 | Done | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
-| 6 | Open | Reset / discard one draft | drafts module, tests | other drafts survive |
+| 6 | Done | Reset / discard one draft | drafts module, tests | other drafts survive |
 | 7 | Open | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
 | 8 | Open | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
 | 9 | Open | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
@@ -590,11 +590,13 @@ clearing only the active draft.
 
 **DoD:**
 
-- [ ] Reset A keeps draft B
-- [ ] After reset, extract(worktree, A) === extract(HEAD, A)
-- [ ] Targeted tests pass
+- [x] Reset A keeps draft B
+- [x] After reset, extract(worktree, A) === extract(HEAD, A)
+- [x] Targeted tests pass
 
 **Commit:** `Discard a single stanza draft`
+
+**Done 2026-07-14:** Added `discardStanzaDraft` in `lib/query-versions.js`, `test/stanza-discard-draft.test.js`. `node --test test/stanza-discard-draft.test.js` → 3 pass; full `node --test test/*.test.js` → 234 pass, exit 0.
 
 ---
 
