@@ -52,6 +52,7 @@ const {
     autoSaveStanzaBeforeRestore,
     restoreVersion,
     restoreStanzaVersion,
+    discardStanzaDraft,
     renameQueryFile,
     consumeAutoSave,
     setVersionTag,
@@ -3593,15 +3594,14 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             if (trackedHash === hash) {
                 const draftStatus = await getSavedSearchDraftStatus(file);
                 if (draftStatus.hasDraft || forcedDraftByFileId.has(file.id) || autoSaveResult.saved) {
-                    const restored = await restoreStanzaVersion(currentGit, relativePath, stanzaName, hash);
-                    if (!restored.restored) {
-                        throw new Error(restored.reason || 'Restore failed');
-                    }
-                    forcedDraftByFileId.add(file.id);
+                    await discardStanzaDraft(currentGit, relativePath, stanzaName);
+                    forcedDraftByFileId.delete(file.id);
+                    userDraftByFileId.delete(file.id);
                     restoreParentByFileId.set(file.id, hash);
-                    selectedVersionHashes = [DRAFT_VERSION_HASH];
-                    if (restored.stanzaText) {
-                        await applySavedSearchAceFromStanza(file, restored.stanzaText);
+                    selectedVersionHashes = [hash];
+                    const stanza = await readVersionStanza(currentGit, relativePath, hash, stanzaName);
+                    if (stanza) {
+                        await applySavedSearchAceFromStanza(file, stanza);
                     }
                     await refreshQueryHistory();
                     return;
