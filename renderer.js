@@ -57,9 +57,11 @@ const {
     setVersionTag,
     deleteVersionTag,
     listVersionTags,
-    formatSplunkSaveTagName
+    formatSplunkSaveTagName,
+    extractSearchFromStanza
 } = require('./lib/query-versions');
 const { restorePlainQueryVersion } = require('./lib/plain-query-restore');
+const { resolveSavedSearchDraftPreviewText } = require('./lib/saved-search-preview');
 const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
 const { renderQuickSearchResults } = require('./lib/render-quick-search');
@@ -2229,12 +2231,75 @@ async function getAceQueryText(file = getActiveFile()) {
     }
 }
 
-function extractSearchFromStanza(stanzaText) {
-    if (!stanzaText) {
-        return '';
+async function setAceQueryText(file, searchText, { retries = 8, delayMs = 250 } = {}) {
+    if (!file || !isSavedSearchFile(file)) {
+        return false;
     }
-    const match = stanzaText.match(/^search\s*=\s*(.*)$/m);
-    return match ? match[1].trim() : '';
+    const view = document.getElementById(file.id);
+    if (!view?.executeJavaScript) {
+        return false;
+    }
+    const payload = JSON.stringify(String(searchText ?? ''));
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            const applied = await view.executeJavaScript(`(() => {
+                const el = document.querySelector('.ace_editor');
+                const editor = el?.env?.editor;
+                if (!editor?.setValue) {
+                    return false;
+                }
+                editor.setValue(${payload}, -1);
+                return true;
+            })()`);
+            if (applied) {
+                liveAceQueryByFileId.set(file.id, String(searchText ?? ''));
+                return true;
+            }
+        } catch {
+            // Ace may not be mounted yet.
+        }
+        if (attempt < retries - 1) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+    return false;
+}
+
+async function applySavedSearchAceFromStanza(file, stanzaText) {
+    if (!isSavedSearchFile(file) || !stanzaText) {
+        return false;
+    }
+    return setAceQueryText(file, extractSearchFromStanza(stanzaText));
+}
+
+async function syncSavedSearchAceEditor(file) {
+    if (!isSavedSearchFile(file) || !currentGit) {
+        return;
+    }
+    const relativePath = getRelativePath(file);
+    const stanzaName = getSavedSearchStanzaName(file);
+    const drafts = await listStanzaDraftsForConf(currentGit, relativePath);
+    const draft = drafts.find((entry) => entry.name === stanzaName);
+    if (draft?.text) {
+        await applySavedSearchAceFromStanza(file, draft.text);
+        return;
+    }
+    const trackedHash = restoreParentByFileId.get(file.id) || queryVersions[0]?.hash;
+    if (!trackedHash) {
+        return;
+    }
+    const stanza = await readVersionStanza(currentGit, relativePath, trackedHash, stanzaName);
+    if (stanza) {
+        await applySavedSearchAceFromStanza(file, stanza);
+    }
+}
+
+function getDraftPreviewQuery() {
+    const file = getActiveFile();
+    if (file && isSavedSearchFile(file)) {
+        return currentQueryText || '';
+    }
+    return getLiveQueryText() || currentQueryText || '';
 }
 
 function setStanzaSearch(stanzaText, stanzaName, search) {
@@ -2587,6 +2652,7 @@ async function enterSavedSearchHistory(file, currentUrl) {
         file.savedSearchSyncStatus = '';
     }
     await syncSavedSearchTrackedBase(file);
+    await syncSavedSearchAceEditor(file);
 }
 
 function getTagsForHash(hash) {
@@ -2923,7 +2989,7 @@ function renderVersionPreview() {
         if (isDraftSelected) {
             const baseHash = getTrackedBaseHash();
             const baseVersion = baseHash ? queryVersions.find(v => v.hash === baseHash) : null;
-            const draftQuery = getLiveQueryText() || currentQueryText || '';
+            const draftQuery = getDraftPreviewQuery();
             if (baseVersion) {
                 const diff = diffLines(
                     versionPreviewText(baseVersion),
@@ -2948,7 +3014,7 @@ function renderVersionPreview() {
     }
 
     if (isDraftSelected || !primary) {
-        const draftQuery = isDraftSelected ? (getLiveQueryText() || currentQueryText) : currentQueryText;
+        const draftQuery = isDraftSelected ? getDraftPreviewQuery() : currentQueryText;
         queryVersionPreviewText.textContent = draftQuery || '(empty query)';
         return;
     }
@@ -3233,9 +3299,24 @@ async function refreshQueryHistory() {
                 : 'Up to date';
         }
         queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
-        currentQueryText = isDashboardFile(file)
-            ? (current.url || current.query || '')
-            : (current.query || getSearchText(current.url || ''));
+        if (isSavedSearchFile(file)) {
+            const stanzaName = getSavedSearchStanzaName(file);
+            const [drafts, headStanza] = await Promise.all([
+                listStanzaDraftsForConf(currentGit, relativePath),
+                trackedHash
+                    ? readVersionStanza(currentGit, relativePath, trackedHash, stanzaName)
+                    : Promise.resolve('')
+            ]);
+            const draft = drafts.find((entry) => entry.name === stanzaName);
+            currentQueryText = resolveSavedSearchDraftPreviewText({
+                draftStanzaText: draft?.text || '',
+                headStanzaText: headStanza || ''
+            });
+        } else {
+            currentQueryText = isDashboardFile(file)
+                ? (current.url || current.query || '')
+                : (current.query || getSearchText(current.url || ''));
+        }
         renderVersionPreview();
 
         renderHistorySidebarList();
@@ -3511,6 +3592,9 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
                     forcedDraftByFileId.add(file.id);
                     restoreParentByFileId.set(file.id, hash);
                     selectedVersionHashes = [DRAFT_VERSION_HASH];
+                    if (restored.stanzaText) {
+                        await applySavedSearchAceFromStanza(file, restored.stanzaText);
+                    }
                     await refreshQueryHistory();
                     return;
                 }
@@ -3523,6 +3607,9 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             forcedDraftByFileId.add(file.id);
             restoreParentByFileId.set(file.id, restored.baseHash || hash);
             selectedVersionHashes = [DRAFT_VERSION_HASH];
+            if (restored.stanzaText) {
+                await applySavedSearchAceFromStanza(file, restored.stanzaText);
+            }
             await refreshQueryHistory();
             return;
         }
