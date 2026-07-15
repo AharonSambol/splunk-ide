@@ -62,6 +62,10 @@ const {
 } = require('./lib/query-versions');
 const { restorePlainQueryVersion } = require('./lib/plain-query-restore');
 const { resolveSavedSearchDraftPreviewText } = require('./lib/saved-search-preview');
+const {
+    resolveSavedSearchDirtyOnNavigate,
+    shouldScheduleLiveDraftRefresh
+} = require('./lib/saved-search-dirty');
 const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
 const { renderQuickSearchResults } = require('./lib/render-quick-search');
@@ -980,7 +984,57 @@ async function syncFileFromViewUrl(fileId) {
     if (urlChanged) {
         ensureDirectoryExists(path.dirname(file.path));
         fs.writeFileSync(file.path, url, 'utf8');
+        await syncSavedSearchDraftOnNavigate(file);
         onQueryFileChanged(fileId);
+    }
+}
+
+async function syncSavedSearchDraftOnNavigate(file) {
+    if (!isSavedSearchFile(file) || !currentGit) {
+        return;
+    }
+
+    const live = (await getLiveAceOrUrlQuery(file)).trim();
+    if (!live) {
+        return;
+    }
+
+    const relativePath = getRelativePath(file);
+    const stanzaName = getSavedSearchStanzaName(file);
+    let headHash = '';
+    try {
+        headHash = (await currentGit.revparse(['HEAD'])).trim();
+    } catch {
+        return;
+    }
+
+    const headStanza = await readVersionStanza(currentGit, relativePath, headHash, stanzaName) || '';
+    const headSearch = extractSearchFromStanza(headStanza);
+    const draftStatus = await getSavedSearchDraftStatus(file);
+    const action = resolveSavedSearchDirtyOnNavigate({
+        liveQuery: live,
+        headSearchQuery: headSearch,
+        hasForcedDraft: forcedDraftByFileId.has(file.id),
+        hasDurableDraft: draftStatus.hasDraft
+    });
+
+    if (action === 'keep') {
+        return;
+    }
+
+    if (action === 'clear') {
+        userDraftByFileId.delete(file.id);
+        return;
+    }
+
+    userDraftByFileId.add(file.id);
+    const drafts = await listStanzaDraftsForConf(currentGit, relativePath);
+    const existing = drafts.find((draft) => draft.name === stanzaName);
+    const baseStanza = existing?.text || headStanza;
+    if (extractSearchFromStanza(baseStanza) !== live) {
+        const stanzaText = setStanzaSearch(baseStanza, stanzaName, live);
+        await saveStanzaDraft(currentGit, relativePath, stanzaName, headHash, stanzaText);
+        await recomposeWorktree(currentGit, relativePath, headHash);
     }
 }
 
@@ -2358,6 +2412,10 @@ function shouldRefreshLiveDraftOnKey({ key, ctrl, meta, alt }) {
 }
 
 function scheduleRefreshLiveDraftState(fileId) {
+    const file = files.find(f => f.id === fileId);
+    if (!shouldScheduleLiveDraftRefresh(file)) {
+        return;
+    }
     const prev = liveDraftDebounceByFileId.get(fileId);
     if (prev) {
         clearTimeout(prev);
@@ -2374,62 +2432,12 @@ async function refreshLiveDraftState(fileId) {
         return;
     }
 
-    const live = (await getLiveAceOrUrlQuery(file)).trim();
-    const baseline = (await getQueryBaseline(file)).trim();
-
-    if (isSavedSearchFile(file) && currentGit) {
-        if (live !== baseline) {
-            userDraftByFileId.add(fileId);
-            const relativePath = getRelativePath(file);
-            const stanzaName = getSavedSearchStanzaName(file);
-            let trackedHash = restoreParentByFileId.get(fileId);
-            if (!trackedHash) {
-                const versions = await listVersions(
-                    currentGit,
-                    relativePath,
-                    1,
-                    getListVersionsOptions(file)
-                );
-                trackedHash = versions[0]?.hash;
-                if (trackedHash) {
-                    restoreParentByFileId.set(fileId, trackedHash);
-                }
-            }
-            if (trackedHash && live) {
-                const drafts = await listStanzaDraftsForConf(currentGit, relativePath);
-                const existing = drafts.find((draft) => draft.name === stanzaName);
-                const baseStanza = existing?.text
-                    || await readVersionStanza(currentGit, relativePath, trackedHash, stanzaName)
-                    || '';
-                if (extractSearchFromStanza(baseStanza) !== live) {
-                    const stanzaText = setStanzaSearch(baseStanza, stanzaName, live);
-                    await saveStanzaDraft(currentGit, relativePath, stanzaName, trackedHash, stanzaText);
-                    let headHash = '';
-                    try {
-                        headHash = (await currentGit.revparse(['HEAD'])).trim();
-                    } catch {
-                        headHash = '';
-                    }
-                    await recomposeWorktree(currentGit, relativePath, headHash);
-                }
-            }
-            onQueryFileChanged(fileId);
-            return;
-        }
-
-        if (forcedDraftByFileId.has(fileId)) {
-            return;
-        }
-
-        const draftStatus = await getSavedSearchDraftStatus(file);
-        if (draftStatus.hasDraft) {
-            return;
-        }
-
-        userDraftByFileId.delete(fileId);
-        onQueryFileChanged(fileId);
+    if (isSavedSearchFile(file)) {
         return;
     }
+
+    const live = (await getLiveAceOrUrlQuery(file)).trim();
+    const baseline = (await getQueryBaseline(file)).trim();
 
     if (!isVersionedObjectFile(file)) {
         return;
