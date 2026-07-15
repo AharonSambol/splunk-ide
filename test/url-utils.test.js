@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, parseSavedSearchFromUrl, urlsMatchForDraft } = require('../lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, urlsMatchForDraft } = require('../lib/url-utils');
 
 describe('decodeSearchText', () => {
     it('decodes percent-encoded text', () => {
@@ -82,6 +82,26 @@ describe('urlsMatchForDraft', () => {
         const base = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain&s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Fnicolas';
         const changed = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20nicolas%3D8&s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Fnicolas';
         assert.equal(urlsMatchForDraft(base, changed), false);
+    });
+});
+
+describe('getSearchText', () => {
+    it('extracts query text from URL content', () => {
+        const url = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
+        assert.equal(getSearchText(url), 'index=main');
+    });
+
+    it('extracts search= from stanza-shaped content', () => {
+        const stanza = `[Error Rate]
+search = index=main | stats count
+disabled = 0
+`;
+        assert.equal(getSearchText(stanza), 'index=main | stats count');
+    });
+
+    it('returns empty string for unrelated content', () => {
+        assert.equal(getSearchText('just some notes'), '');
+        assert.equal(getSearchText(''), '');
     });
 });
 
