@@ -50,9 +50,9 @@ const {
     readVersionStanza,
     saveVersion,
     saveStanzaVersion,
+    autoSaveStanzaBeforeRestore,
     restoreVersion,
     restoreStanzaVersion,
-    discardStanzaDraft,
     renameQueryFile,
     consumeAutoSave,
     setVersionTag,
@@ -232,7 +232,6 @@ const forcedDraftByFileId = new Set();
 const userDraftByFileId = new Set();
 const liveAceQueryByFileId = new Map();
 const liveDraftDebounceByFileId = new Map();
-const historyRefreshDebounceByFileId = new Map();
 
 const SAVED_SEARCH_SYNC_STATUS = {
     REMOTE_CHANGED: 'Remote changed',
@@ -2293,19 +2292,6 @@ function shouldRefreshLiveDraftOnKey({ key, ctrl, meta, alt }) {
     return key === 'Enter' || key === 'Backspace' || key === 'Delete' || key?.length === 1;
 }
 
-function scheduleDebouncedQueryHistoryRefresh(fileId) {
-    const prev = historyRefreshDebounceByFileId.get(fileId);
-    if (prev) {
-        clearTimeout(prev);
-    }
-    historyRefreshDebounceByFileId.set(fileId, setTimeout(() => {
-        historyRefreshDebounceByFileId.delete(fileId);
-        if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
-            void refreshQueryHistory();
-        }
-    }, 500));
-}
-
 function scheduleRefreshLiveDraftState(fileId) {
     const prev = liveDraftDebounceByFileId.get(fileId);
     if (prev) {
@@ -2363,7 +2349,6 @@ async function refreshLiveDraftState(fileId) {
                 }
             }
             onQueryFileChanged(fileId);
-            scheduleDebouncedQueryHistoryRefresh(fileId);
             return;
         }
 
@@ -2387,7 +2372,7 @@ async function refreshLiveDraftState(fileId) {
 
     if (live !== baseline) {
         userDraftByFileId.add(fileId);
-        onQueryFileChanged(fileId, { refreshHistory: true });
+        onQueryFileChanged(fileId);
         return;
     }
 
@@ -2396,7 +2381,7 @@ async function refreshLiveDraftState(fileId) {
     }
 
     userDraftByFileId.delete(fileId);
-    onQueryFileChanged(fileId, { refreshHistory: true });
+    onQueryFileChanged(fileId);
 }
 
 function seedQueryFromSources(file, fileUrl) {
@@ -3196,7 +3181,9 @@ async function refreshQueryHistory() {
         ? file.dashboard.name
         : file.name.split('/').pop();
     queryHistoryTitle.textContent = `History: ${displayName}`;
-    queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Loading...</div>';
+    if (queryVersions.length === 0) {
+        queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Loading...</div>';
+    }
 
     try {
         const readPath = isDashboardFile(file)
@@ -3488,13 +3475,42 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         if (isSavedSearchFile(file)) {
             const stanzaName = getSavedSearchStanzaName(file);
             const trackedHash = restoreParentByFileId.get(file.id);
+
+            await syncFileFromViewUrl(file.id);
+            const autoSaveOptions = {};
+            const author = getGitAuthorFromSettings();
+            if (author) {
+                autoSaveOptions.author = author;
+            }
+            if (file.savedSearch) {
+                autoSaveOptions.savedSearch = {
+                    ...file.savedSearch,
+                    id: getSavedSearchId(file.savedSearch)
+                };
+            }
+            const aceQuery = await getAceQueryText(file);
+            const liveQuery = aceQuery || getLiveQueryText(file) || (await getLiveAceOrUrlQuery(file));
+            if (liveQuery) {
+                autoSaveOptions.seedSearchText = liveQuery;
+            }
+            const autoSaveResult = await autoSaveStanzaBeforeRestore(
+                currentGit,
+                relativePath,
+                stanzaName,
+                hash,
+                autoSaveOptions
+            );
+
             if (trackedHash === hash) {
                 const draftStatus = await getSavedSearchDraftStatus(file);
-                if (draftStatus.hasDraft || forcedDraftByFileId.has(file.id)) {
-                    await discardStanzaDraft(currentGit, relativePath, stanzaName);
-                    forcedDraftByFileId.delete(file.id);
-                    userDraftByFileId.delete(file.id);
-                    onQueryFileChanged(file.id, { refreshHistory: true });
+                if (draftStatus.hasDraft || forcedDraftByFileId.has(file.id) || autoSaveResult.saved) {
+                    const restored = await restoreStanzaVersion(currentGit, relativePath, stanzaName, hash);
+                    if (!restored.restored) {
+                        throw new Error(restored.reason || 'Restore failed');
+                    }
+                    forcedDraftByFileId.add(file.id);
+                    restoreParentByFileId.set(file.id, hash);
+                    selectedVersionHashes = [DRAFT_VERSION_HASH];
                     await refreshQueryHistory();
                     return;
                 }
@@ -3507,15 +3523,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             forcedDraftByFileId.add(file.id);
             restoreParentByFileId.set(file.id, restored.baseHash || hash);
             selectedVersionHashes = [DRAFT_VERSION_HASH];
-            onQueryFileChanged(file.id, { refreshHistory: true });
             await refreshQueryHistory();
             return;
         }
 
         if (isDashboardFile(file)) {
             const trackedHash = restoreParentByFileId.get(file.id);
-            const hasUserDraft = userDraftByFileId.has(file.id);
-            if (hasUserDraft && trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
+            if (trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
                 await saveDraftStash(currentGit, relativePath, trackedHash);
                 userDraftByFileId.delete(file.id);
             }
@@ -3530,15 +3544,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             forcedDraftByFileId.add(file.id);
             restoreParentByFileId.set(file.id, hash);
             selectedVersionHashes = [DRAFT_VERSION_HASH];
-            onQueryFileChanged(file.id, { refreshHistory: true });
             await refreshQueryHistory();
             return;
         }
 
         const trackedHash = restoreParentByFileId.get(file.id);
-        const hasUserDraft = userDraftByFileId.has(file.id);
 
-        if (hasUserDraft && trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
+        if (trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
             await saveDraftStash(currentGit, relativePath, trackedHash);
             userDraftByFileId.delete(file.id);
         }
@@ -3587,7 +3599,6 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             userDraftByFileId.delete(file.id);
             restoreParentByFileId.set(file.id, hash);
         }
-        onQueryFileChanged(file.id, { refreshHistory: true });
         await refreshQueryHistory();
     } catch (err) {
         queryHistoryStatus.textContent = `Restore failed: ${err.message}`;
