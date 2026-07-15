@@ -51,7 +51,6 @@ const {
     saveStanzaVersion,
     autoSaveStanzaBeforeRestore,
     restoreVersion,
-    shouldSkipAutoSaveOnRestore,
     restoreStanzaVersion,
     renameQueryFile,
     consumeAutoSave,
@@ -60,6 +59,7 @@ const {
     listVersionTags,
     formatSplunkSaveTagName
 } = require('./lib/query-versions');
+const { restorePlainQueryVersion } = require('./lib/plain-query-restore');
 const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
 const { renderQuickSearchResults } = require('./lib/render-quick-search');
@@ -3548,18 +3548,19 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             return;
         }
 
-        await syncFileFromViewUrl(file.id);
         const trackedHash = restoreParentByFileId.get(file.id);
         const isDirty = !!(trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash))
             || userDraftByFileId.has(file.id);
         const headHash = version.isAutoSave ? (await currentGit.revparse(['HEAD'])).trim() : '';
-        const restored = await restoreVersion(
-            currentGit,
+        const restored = await restorePlainQueryVersion({
+            git: currentGit,
             relativePath,
             hash,
+            version,
             trackedHash,
-            { skipAutoSave: shouldSkipAutoSaveOnRestore(version, isDirty) }
-        );
+            isDirty,
+            syncUrl: () => syncFileFromViewUrl(file.id)
+        });
 
         file.url = restored.url;
         fs.writeFileSync(file.path, restored.url, 'utf8');
