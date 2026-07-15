@@ -6,6 +6,7 @@ const {
     saveVersion,
     listVersions,
     restoreVersion,
+    shouldSkipAutoSaveOnRestore,
     readCurrentQuery,
     renameQueryFile,
     consumeAutoSave,
@@ -350,6 +351,20 @@ describe('restoreVersion', () => {
         const afterJump = await listVersions(git, relativePath);
         assert.equal(afterJump.length, 2);
         assert.equal(afterJump.some(version => version.isAutoSave), false);
+    });
+});
+
+describe('shouldSkipAutoSaveOnRestore', () => {
+    it('skips when restoring an auto-save version', () => {
+        assert.equal(shouldSkipAutoSaveOnRestore({ isAutoSave: true }, true), true);
+    });
+
+    it('skips when there are no draft changes', () => {
+        assert.equal(shouldSkipAutoSaveOnRestore({ isAutoSave: false }, false), true);
+    });
+
+    it('auto-saves when dirty and restoring a normal version', () => {
+        assert.equal(shouldSkipAutoSaveOnRestore({ isAutoSave: false }, true), false);
     });
 });
 

@@ -42,7 +42,6 @@ const {
 const {
     getFileStatus,
     hasDraftChanges,
-    getDraftStash,
     saveDraftStash,
     popDraftStash,
     listVersions,
@@ -52,6 +51,7 @@ const {
     saveStanzaVersion,
     autoSaveStanzaBeforeRestore,
     restoreVersion,
+    shouldSkipAutoSaveOnRestore,
     restoreStanzaVersion,
     renameQueryFile,
     consumeAutoSave,
@@ -3548,45 +3548,28 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             return;
         }
 
+        await syncFileFromViewUrl(file.id);
         const trackedHash = restoreParentByFileId.get(file.id);
-
-        if (trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
-            await saveDraftStash(currentGit, relativePath, trackedHash);
-            userDraftByFileId.delete(file.id);
-        }
-
-        const draftStash = await getDraftStash(currentGit, relativePath, hash);
+        const isDirty = !!(trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash))
+            || userDraftByFileId.has(file.id);
         const headHash = version.isAutoSave ? (await currentGit.revparse(['HEAD'])).trim() : '';
         const restored = await restoreVersion(
             currentGit,
             relativePath,
             hash,
             trackedHash,
-            { skipAutoSave: true }
+            { skipAutoSave: shouldSkipAutoSaveOnRestore(version, isDirty) }
         );
 
-        let finalContent = restored;
-        if (draftStash) {
-            const popped = await popDraftStash(currentGit, relativePath, hash);
-            if (popped) {
-                finalContent = popped;
-            }
-        }
-
-        file.url = finalContent.url;
-        fs.writeFileSync(file.path, finalContent.url, 'utf8');
+        file.url = restored.url;
+        fs.writeFileSync(file.path, restored.url, 'utf8');
 
         const view = document.getElementById(file.id);
         if (view) {
-            view.src = finalContent.url;
+            view.src = restored.url;
         }
 
-        if (draftStash) {
-            restoreParentByFileId.set(file.id, hash);
-            forcedDraftByFileId.add(file.id);
-            userDraftByFileId.add(file.id);
-            selectedVersionHashes = [DRAFT_VERSION_HASH];
-        } else if (version.isAutoSave) {
+        if (version.isAutoSave) {
             await consumeAutoSave(currentGit, hash);
             if (hash === headHash) {
                 await currentGit.raw(['reset', '--mixed', `${hash}^`]);
