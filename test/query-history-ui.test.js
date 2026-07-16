@@ -2,7 +2,8 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const {
     formatQueryHistoryStatus,
-    getQueryHistoryEmptyMessage
+    getQueryHistoryEmptyMessage,
+    isStaleSplunkImportSyncStatus
 } = require('../lib/query-history-ui');
 
 describe('formatQueryHistoryStatus', () => {
@@ -38,6 +39,25 @@ describe('formatQueryHistoryStatus', () => {
             formatQueryHistoryStatus(file, { hasUnsavedChanges: false, syncStatus: warning }),
             warning
         );
+    });
+
+    it('includes dashboard sync status', () => {
+        const file = { dashboard: { name: 'alerts' } };
+        assert.equal(
+            formatQueryHistoryStatus(file, {
+                hasUnsavedChanges: true,
+                syncStatus: 'fetch failed'
+            }),
+            'Unsaved changes · fetch failed'
+        );
+    });
+});
+
+describe('isStaleSplunkImportSyncStatus', () => {
+    it('detects browser and REST import failures', () => {
+        assert.equal(isStaleSplunkImportSyncStatus('Failed to fetch'), true);
+        assert.equal(isStaleSplunkImportSyncStatus('fetch failed'), true);
+        assert.equal(isStaleSplunkImportSyncStatus('Push failed'), false);
     });
 });
 

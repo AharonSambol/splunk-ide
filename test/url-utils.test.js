@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, urlsMatchForDraft } = require('../lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, splunkUiUrlToRestBase, urlsMatchForDraft } = require('../lib/url-utils');
 
 describe('decodeSearchText', () => {
     it('decodes percent-encoded text', () => {
@@ -112,5 +112,16 @@ describe('getFileFolder', () => {
 
     it('returns empty string for root-level files', () => {
         assert.equal(getFileFolder('main.spl'), '');
+    });
+});
+
+describe('splunkUiUrlToRestBase', () => {
+    it('keeps the UI host and port for REST', () => {
+        const url = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
+        assert.equal(splunkUiUrlToRestBase(url), 'http://localhost:8010');
+    });
+
+    it('returns empty string for invalid input', () => {
+        assert.equal(splunkUiUrlToRestBase(''), '');
     });
 });

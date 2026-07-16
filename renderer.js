@@ -28,14 +28,15 @@ const {
     getNextTab,
     createDuplicateFileName,
 } = require('./lib/tabs');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl } = require('./lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, splunkUiUrlToRestBase } = require('./lib/url-utils');
 const { getSavedSearchId } = require('./lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
 const { getStanzaDraftStatus, saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('./lib/stanza-drafts');
 const { openSavedSearchHistory } = require('./lib/saved-search-open');
 const {
     formatQueryHistoryStatus,
-    getQueryHistoryEmptyMessage
+    getQueryHistoryEmptyMessage,
+    isStaleSplunkImportSyncStatus
 } = require('./lib/query-history-ui');
 const { openDashboardHistory } = require('./lib/dashboard-open');
 const { ensureRemote, pushSharedHistoryWithReconcile } = require('./lib/git-sync');
@@ -254,19 +255,6 @@ const SAVED_SEARCH_SYNC_STATUS = {
     PUSH_FAILED: 'Push failed',
     STANZA_CONFLICT: 'Stanza conflict'
 };
-
-function splunkUiUrlToRestBase(uiUrl) {
-    try {
-        const parsed = new URL(String(uiUrl));
-        parsed.port = '8089';
-        parsed.pathname = '';
-        parsed.search = '';
-        parsed.hash = '';
-        return parsed.origin;
-    } catch {
-        return '';
-    }
-}
 
 function getSplunkRestSettings(url) {
     const baseUrl = splunkUiUrlToRestBase(url || SPLUNK_URL);
@@ -3308,6 +3296,13 @@ async function refreshQueryHistory() {
         const preservedHashes = [...selectedVersionHashes];
         queryVersions = versions;
         versionTags = tags;
+        if (
+            isSavedSearchFile(file)
+            && versions.length > 0
+            && isStaleSplunkImportSyncStatus(file.savedSearchSyncStatus)
+        ) {
+            file.savedSearchSyncStatus = '';
+        }
         let trackedHash = restoreParentByFileId.get(file.id);
         if (!trackedHash && versions.length > 0) {
             trackedHash = versions[0].hash;
