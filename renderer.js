@@ -56,9 +56,11 @@ const {
     autoSaveStanzaBeforeRestore,
     restoreVersion,
     restoreStanzaVersion,
+    restoreStanzaAutoSaveVersion,
     discardStanzaDraft,
     renameQueryFile,
     consumeAutoSave,
+    shouldSkipAutoSaveOnRestore,
     setVersionTag,
     deleteVersionTag,
     listVersionTags,
@@ -3503,16 +3505,6 @@ async function saveQueryVersion() {
         if (result.hash) {
             restoreParentByFileId.set(file.id, result.hash);
         }
-        if (file.savedSearch && result.hash) {
-            const tagName = formatSplunkSaveTagName(gitSyncSettings.gitUserName, result.hash);
-            await setVersionTag(
-                currentGit,
-                relativePath,
-                result.hash,
-                tagName,
-                getVersionTagStanzaName(file)
-            );
-        }
         querySaveMessage.value = '';
         if (file.savedSearch) {
             file.savedSearchStanzaSource = 'head';
@@ -3564,29 +3556,59 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
             const trackedHash = restoreParentByFileId.get(file.id);
 
             await syncFileFromViewUrl(file.id);
-            const autoSaveOptions = {};
-            const author = getGitAuthorFromSettings();
-            if (author) {
-                autoSaveOptions.author = author;
+            const draftStatus = await getSavedSearchDraftStatus(file);
+            const isDirty = draftStatus.hasDraft
+                || forcedDraftByFileId.has(file.id)
+                || userDraftByFileId.has(file.id);
+
+            if (version.isAutoSave) {
+                const restored = await restoreStanzaAutoSaveVersion(
+                    currentGit,
+                    relativePath,
+                    stanzaName,
+                    hash,
+                    version.parentHash || trackedHash
+                );
+                if (!restored.restored) {
+                    throw new Error(restored.reason || 'Restore failed');
+                }
+                forcedDraftByFileId.add(file.id);
+                userDraftByFileId.delete(file.id);
+                restoreParentByFileId.set(file.id, restored.baseHash);
+                selectedVersionHashes = [DRAFT_VERSION_HASH];
+                if (restored.stanzaText) {
+                    await applySavedSearchAceFromStanza(file, restored.stanzaText);
+                }
+                await refreshQueryHistory();
+                return;
             }
-            if (file.savedSearch) {
-                autoSaveOptions.savedSearch = {
-                    ...file.savedSearch,
-                    id: getSavedSearchId(file.savedSearch)
-                };
+
+            let autoSaveResult = { saved: false };
+            if (!shouldSkipAutoSaveOnRestore(version, isDirty)) {
+                const autoSaveOptions = {};
+                const author = getGitAuthorFromSettings();
+                if (author) {
+                    autoSaveOptions.author = author;
+                }
+                if (file.savedSearch) {
+                    autoSaveOptions.savedSearch = {
+                        ...file.savedSearch,
+                        id: getSavedSearchId(file.savedSearch)
+                    };
+                }
+                const aceQuery = await getAceQueryText(file);
+                const liveQuery = aceQuery || getLiveQueryText(file) || (await getLiveAceOrUrlQuery(file));
+                if (liveQuery) {
+                    autoSaveOptions.seedSearchText = liveQuery;
+                }
+                autoSaveResult = await autoSaveStanzaBeforeRestore(
+                    currentGit,
+                    relativePath,
+                    stanzaName,
+                    hash,
+                    autoSaveOptions
+                );
             }
-            const aceQuery = await getAceQueryText(file);
-            const liveQuery = aceQuery || getLiveQueryText(file) || (await getLiveAceOrUrlQuery(file));
-            if (liveQuery) {
-                autoSaveOptions.seedSearchText = liveQuery;
-            }
-            const autoSaveResult = await autoSaveStanzaBeforeRestore(
-                currentGit,
-                relativePath,
-                stanzaName,
-                hash,
-                autoSaveOptions
-            );
 
             if (trackedHash === hash) {
                 const draftStatus = await getSavedSearchDraftStatus(file);
