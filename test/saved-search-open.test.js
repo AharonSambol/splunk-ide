@@ -252,6 +252,27 @@ disabled = 0
         );
     });
 
+    it('imports locally when remote exists but shared branch is empty', async () => {
+        const barePath = await createBareRemote();
+
+        const result = await openSavedSearchHistory({
+            git,
+            workspaceRoot: repoPath,
+            metadata: SAVED_SEARCH_META,
+            restSettings: { baseUrl: 'https://splunk.example.com:8089' },
+            fetchSavedSearchStanza: mockFetchStanza(ERROR_RATE_STANZA_IMPORTED),
+            remoteSettings: { remoteUrl: barePath, sharedBranch: SHARED_BRANCH },
+            author: { name: 'Test User', email: 'test@example.com' }
+        });
+
+        assert.equal(result.imported, true);
+        assert.equal(result.fetched, true);
+        assert.equal(result.warning, '');
+        assert.equal(await commitCount(git), 1);
+
+        cleanupTempRepo(barePath);
+    });
+
     it('fetches remote history when untracked conf already exists in worktree', async () => {
         const barePath = await createBareRemote();
         const { repoPath: repoAPath, git: gitA } = await createLocalRepo();
