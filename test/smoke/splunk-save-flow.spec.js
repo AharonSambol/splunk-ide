@@ -99,7 +99,7 @@ test.describe('Splunk save IPC and git commit', () => {
         tempProjectPath = undefined;
     });
 
-    test('guest Cmd+S commits and tags saved-search stanza', async () => {
+    test('guest Cmd+S does not commit until Splunk REST save succeeds', async () => {
         tempProjectPath = createTempProjectDir();
         const git = await setupSavedSearchProject(tempProjectPath);
         const commitsBefore = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
@@ -123,6 +123,14 @@ test.describe('Splunk save IPC and git commit', () => {
             `);
         });
 
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        expect(Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim())).toBe(commitsBefore);
+
+        await window.evaluate(async () => {
+            const view = document.querySelector('webview.active');
+            await view.executeJavaScript('window.__testPressSaveShortcut()');
+        });
+
         await expect.poll(async () => {
             const count = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
             return count;
@@ -131,11 +139,34 @@ test.describe('Splunk save IPC and git commit', () => {
         const latestMessage = (await git.log({ maxCount: 1 })).latest?.message || '';
         expect(latestMessage).toContain('Splunk save');
 
-        const tags = await git.tags();
-        expect(tags.all.length).toBeGreaterThan(0);
+        await expect.poll(async () => (await git.tags()).all.length, {
+            timeout: 5_000,
+        }).toBeGreaterThan(0);
     });
 
-    test('Save button in webview commits saved-search stanza', async () => {
+    test('Save dialog confirm in webview commits saved-search stanza', async () => {
+        tempProjectPath = createTempProjectDir();
+        const git = await setupSavedSearchProject(tempProjectPath);
+        const commitsBefore = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
+
+        ({ electronApp, userDataDir } = await launchApp());
+        const window = await electronApp.firstWindow();
+
+        await openProject(window, electronApp, tempProjectPath);
+        await openSavedSearchTab(window);
+        await editGuestQuery(window, ' | stats count');
+        await window.evaluate(async () => {
+            const view = document.querySelector('webview.active');
+            await view.executeJavaScript('window.__testConfirmSave()');
+        });
+
+        await expect.poll(async () => {
+            const count = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
+            return count;
+        }, { timeout: 15_000 }).toBeGreaterThan(commitsBefore);
+    });
+
+    test('toolbar Save without dialog confirm does not commit', async () => {
         tempProjectPath = createTempProjectDir();
         const git = await setupSavedSearchProject(tempProjectPath);
         const commitsBefore = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
@@ -151,9 +182,8 @@ test.describe('Splunk save IPC and git commit', () => {
             await view.executeJavaScript('window.__testClickSave()');
         });
 
-        await expect.poll(async () => {
-            const count = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
-            return count;
-        }, { timeout: 15_000 }).toBeGreaterThan(commitsBefore);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const commitsAfter = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
+        expect(commitsAfter).toBe(commitsBefore);
     });
 });

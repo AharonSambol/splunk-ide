@@ -25,6 +25,27 @@
             outline: none;
             white-space: pre-wrap;
         }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal[hidden] {
+            display: none;
+        }
+
+        .modal-card {
+            background: #2d2d2d;
+            padding: 16px;
+            border-radius: 4px;
+            display: flex;
+            gap: 8px;
+        }
     </style>
 </head>
 <body>
@@ -32,9 +53,16 @@
         <button type="button" id="save-btn">Save</button>
     </div>
     <div class="ace_editor" tabindex="0">index=main</div>
+    <div id="save-modal" class="modal" hidden>
+        <div class="modal-card">
+            <button type="button" id="confirm-save-btn">Save</button>
+            <button type="button" id="cancel-save-btn">Cancel</button>
+        </div>
+    </div>
     <script>
         (function () {
             const aceElement = document.querySelector('.ace_editor');
+            const modal = document.getElementById('save-modal');
             const state = { text: aceElement.textContent };
             const editor = {
                 session: {
@@ -55,6 +83,23 @@
             };
             aceElement.env = { editor };
 
+            const nativeFetch = window.fetch.bind(window);
+            window.fetch = function mockSplunkFetch(input, init) {
+                const url = typeof input === 'string' ? input : input?.url || '';
+                const method = String(init?.method || 'GET').toUpperCase();
+                if (method === 'POST' && /\/saved\/searches/.test(url)) {
+                    return Promise.resolve({ ok: true, status: 200 });
+                }
+                return nativeFetch(input, init);
+            };
+
+            function persistSavedSearch() {
+                return fetch('/servicesNS/nobody/search/saved/searches/error-rate', {
+                    method: 'POST',
+                    body: JSON.stringify({ search: editor.getValue() }),
+                });
+            }
+
             aceElement.addEventListener('keydown', (event) => {
                 if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) {
                     return;
@@ -63,11 +108,25 @@
                 editor.setValue(editor.getValue() + event.key);
             });
 
+            document.addEventListener('keydown', (event) => {
+                if (event.key.toLowerCase() !== 's' || (!event.ctrlKey && !event.metaKey)) {
+                    return;
+                }
+                event.preventDefault();
+                persistSavedSearch();
+            });
+
             document.getElementById('save-btn').addEventListener('click', () => {
-                fetch('/servicesNS/nobody/search/saved/searches/error-rate', {
-                    method: 'POST',
-                    body: JSON.stringify({ search: editor.getValue() }),
-                }).catch(() => {});
+                modal.hidden = false;
+            });
+
+            document.getElementById('confirm-save-btn').addEventListener('click', () => {
+                modal.hidden = true;
+                persistSavedSearch();
+            });
+
+            document.getElementById('cancel-save-btn').addEventListener('click', () => {
+                modal.hidden = true;
             });
 
             window.__testGetEditorText = () => editor.getValue();
@@ -77,6 +136,12 @@
             };
             window.__testClickSave = () => {
                 document.getElementById('save-btn').click();
+            };
+            window.__testConfirmSave = () => {
+                document.getElementById('confirm-save-btn').click();
+            };
+            window.__testPressSaveShortcut = () => {
+                persistSavedSearch();
             };
         })();
     </script>

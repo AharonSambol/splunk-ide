@@ -43,10 +43,6 @@ window.addEventListener('keydown', (e) => {
             shift: e.shiftKey
         });
 
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-            sendSplunkSave();
-        }
-
         if (e.key === 'Enter') {
             const target = e.target;
             const isTextField = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable;

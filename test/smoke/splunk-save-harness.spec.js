@@ -36,15 +36,8 @@ test.describe('Splunk save webview harness', () => {
         return window;
     }
 
-    test('guest bridge receives Cmd+S and forwards splunk-save IPC', async () => {
+    test('guest Cmd+S alone does not forward splunk-save IPC', async () => {
         const window = await launchHarness();
-
-        await expect.poll(async () => window.evaluate(async () => {
-            const view = document.getElementById('guest');
-            return view.executeJavaScript(
-                'Boolean(window.__splunkIdeHost?.splunkSave && window.__splunkIdeSaveHooks)'
-            );
-        })).toBe(true);
 
         await window.evaluate(async () => {
             const view = document.getElementById('guest');
@@ -58,15 +51,41 @@ test.describe('Splunk save webview harness', () => {
             `);
         });
 
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const events = await window.evaluate(() => window.__splunkSaveEvents);
+        expect(events).not.toContain('splunk-save');
+    });
+
+    test('saved-search REST write forwards splunk-save IPC', async () => {
+        const window = await launchHarness();
+
+        await window.evaluate(async () => {
+            const view = document.getElementById('guest');
+            await view.executeJavaScript('window.__testPressSaveShortcut()');
+        });
+
         await expect.poll(async () => window.evaluate(() => window.__splunkSaveEvents)).toContain('splunk-save');
     });
 
-    test('guest Save button forwards splunk-save IPC', async () => {
+    test('toolbar Save without confirm does not forward splunk-save IPC', async () => {
         const window = await launchHarness();
 
         await window.evaluate(async () => {
             const view = document.getElementById('guest');
             await view.executeJavaScript('window.__testClickSave()');
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const events = await window.evaluate(() => window.__splunkSaveEvents);
+        expect(events).not.toContain('splunk-save');
+    });
+
+    test('Save dialog confirm forwards splunk-save IPC', async () => {
+        const window = await launchHarness();
+
+        await window.evaluate(async () => {
+            const view = document.getElementById('guest');
+            await view.executeJavaScript('window.__testConfirmSave()');
         });
 
         await expect.poll(async () => window.evaluate(() => window.__splunkSaveEvents), {
