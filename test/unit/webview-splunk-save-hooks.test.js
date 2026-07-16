@@ -6,6 +6,7 @@ const {
     isSplunkSearchRunnerPage,
     isSavedSearchPage,
     isSplunkSaveButton,
+    shouldNotifyOnSave,
     notifyHostSplunkSave,
     attachSplunkSaveHooks,
     buildSplunkSaveInjectorSource,
@@ -125,6 +126,17 @@ describe('notifyHostSplunkSave', () => {
     });
 });
 
+describe('shouldNotifyOnSave', () => {
+    it('uses top window URL for iframe saves on search runner', () => {
+        const runnerHref = 'https://splunk/en-US/app/search/search?s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2Ferror-rate';
+        const win = {
+            location: { href: 'about:blank' },
+            top: { location: { href: runnerHref } },
+        };
+        assert.equal(shouldNotifyOnSave(win), true);
+    });
+});
+
 describe('attachSplunkSaveHooks', () => {
     it('notifies host after saved-search fetch succeeds', async () => {
         const sent = [];
@@ -166,43 +178,83 @@ describe('attachSplunkSaveHooks', () => {
         assert.deepEqual(sent, ['splunk-save']);
     });
 
-    it('routes Cmd+S to the host bridge', () => {
-        const calls = [];
-        const listeners = [];
+    it('does not notify when saved-search fetch fails', async () => {
+        const sent = [];
         const win = {
-            top: {
-                __splunkIdeHost: {
-                    splunkSave() {
-                        calls.push('splunk-save');
-                    },
-                },
+            location: { href: 'file:///tmp/splunk-saved-search-mock.html?s=%5Bnobody%3Asearch%3AError%20Rate%5D' },
+            setTimeout(fn, ms) {
+                return setTimeout(fn, ms);
             },
-            location: { href: 'file:///tmp/splunk-saved-search-mock.html' },
-            setTimeout: (fn) => fn(),
-            clearTimeout() {},
-            addEventListener(type, handler, capture) {
-                if (type === 'keydown' && capture) {
-                    listeners.push(handler);
-                }
-            },
+            clearTimeout,
             document: { documentElement: {}, querySelectorAll: () => [] },
             MutationObserver: class {
                 observe() {}
+            },
+            fetch() {
+                return Promise.resolve({ ok: false });
             },
             XMLHttpRequest: {
                 prototype: { open() {}, send() {}, addEventListener() {} },
             },
         };
+        win.XMLHttpRequest.prototype.open = function open() {};
+        win.XMLHttpRequest.prototype.send = function send() {};
 
         attachSplunkSaveHooks(win, {
-            onSave() {},
-            debounceMs: 0,
+            onSave() {
+                sent.push('splunk-save');
+            },
+            debounceMs: 10,
         });
 
-        const keydown = listeners.find((handler) => handler.toString().includes('ctrlKey'));
-        assert.ok(keydown);
-        keydown({ ctrlKey: true, metaKey: false, key: 's' });
-        assert.deepEqual(calls, ['splunk-save']);
+        await win.fetch('/servicesNS/nobody/search/saved/searches/error-rate', { method: 'POST' });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        assert.deepEqual(sent, []);
+    });
+
+    it('does not notify on Save button click before REST completes', async () => {
+        const sent = [];
+        const saveBtn = {
+            getAttribute() {
+                return null;
+            },
+            textContent: 'Save',
+            className: '',
+            closest() {
+                return this;
+            },
+        };
+        const win = {
+            location: { href: 'file:///tmp/splunk-saved-search-mock.html?s=%5Bnobody%3Asearch%3AError%20Rate%5D' },
+            setTimeout(fn, ms) {
+                return setTimeout(fn, ms);
+            },
+            clearTimeout,
+            document: { documentElement: {}, querySelectorAll: () => [] },
+            MutationObserver: class {
+                observe() {}
+            },
+            fetch() {
+                return new Promise(() => {});
+            },
+            XMLHttpRequest: {
+                prototype: { open() {}, send() {}, addEventListener() {} },
+            },
+        };
+        win.XMLHttpRequest.prototype.open = function open() {};
+        win.XMLHttpRequest.prototype.send = function send() {};
+
+        attachSplunkSaveHooks(win, {
+            onSave() {
+                sent.push('splunk-save');
+            },
+            debounceMs: 10,
+        });
+
+        assert.equal(isSplunkSaveButton(saveBtn), true);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.deepEqual(sent, []);
     });
 });
 
