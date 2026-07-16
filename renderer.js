@@ -325,7 +325,7 @@ function versionPreviewText(version) {
         return '';
     }
     if (version.stanzaText) {
-        return version.stanzaText;
+        return extractSearchFromStanza(version.stanzaText) || version.stanzaText;
     }
     const raw = String(version.url || '').trim();
     if (raw.startsWith('<') || raw.startsWith('{') || raw.startsWith('[')) {
@@ -971,7 +971,7 @@ async function syncFileFromViewUrl(fileId) {
         ensureDirectoryExists(path.dirname(file.path));
         fs.writeFileSync(file.path, url, 'utf8');
         await syncSavedSearchDraftOnNavigate(file);
-        onQueryFileChanged(fileId);
+        onQueryFileChanged(fileId, { refreshHistory: true });
     }
 }
 
@@ -3206,6 +3206,14 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
             return;
         }
         tab.classList.toggle('dirty', effectiveHasChanges);
+        if (fileId === activeFileId && effectiveHasChanges !== queryHasUnsavedChanges) {
+            queryHasUnsavedChanges = effectiveHasChanges;
+            if (!querySidebar.classList.contains('collapsed')) {
+                renderHistorySidebarList();
+                const primary = getPrimarySelectedHash();
+                queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
+            }
+        }
         if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
             const syncStatus = file.savedSearchSyncStatus || file.dashboardSyncStatus || '';
             if (isSavedSearchFile(file) || isDashboardFile(file)) {
