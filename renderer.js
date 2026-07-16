@@ -32,6 +32,10 @@ const { getSavedSearchId } = require('./lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
 const { getStanzaDraftStatus, saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('./lib/stanza-drafts');
 const { openSavedSearchHistory } = require('./lib/saved-search-open');
+const {
+    formatQueryHistoryStatus,
+    getQueryHistoryEmptyMessage
+} = require('./lib/query-history-ui');
 const { openDashboardHistory } = require('./lib/dashboard-open');
 const { ensureRemote, pushSharedHistoryWithReconcile } = require('./lib/git-sync');
 const {
@@ -279,26 +283,6 @@ async function getLatestFileCommit(git, ref, relativePath) {
     } catch {
         return '';
     }
-}
-
-function formatQueryHistoryStatus(file, { hasUnsavedChanges, syncStatus, draftStatus } = {}) {
-    if (!file?.savedSearch) {
-        return hasUnsavedChanges ? 'Unsaved changes' : 'Up to date';
-    }
-
-    const parts = [];
-    if (hasUnsavedChanges) {
-        parts.push('Unsaved draft');
-    } else if (!syncStatus && !(draftStatus?.stale && draftStatus?.status)) {
-        parts.push('Up to date');
-    }
-    if (draftStatus?.stale && draftStatus.status) {
-        parts.push(draftStatus.status);
-    }
-    if (syncStatus) {
-        parts.push(syncStatus);
-    }
-    return parts.join(' · ') || 'Up to date';
 }
 
 function isSavedSearchFile(file) {
@@ -888,6 +872,7 @@ function clearDashboardContext(file, url) {
 
 function clearSavedSearchContext(file, url) {
     delete file.savedSearch;
+    delete file.savedSearchStanzaSource;
     file.savedSearchSyncStatus = '';
     forcedDraftByFileId.delete(file.id);
     userDraftByFileId.delete(file.id);
@@ -2643,6 +2628,8 @@ async function enterSavedSearchHistory(file, currentUrl) {
         return;
     }
 
+    file.savedSearchStanzaSource = result.stanzaSource;
+
     if (result.warning) {
         file.savedSearchSyncStatus = result.warning;
     } else if (result.fetched && hadLocalDraft) {
@@ -2869,7 +2856,8 @@ function renderVersionTreeList() {
         return;
     }
     if (queryVersions.length === 0) {
-        queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">No saved versions yet.</div>';
+        const emptyMessage = getQueryHistoryEmptyMessage(getActiveFile());
+        queryVersionList.innerHTML = `<div style="padding:12px;color:#888;">${emptyMessage}</div>`;
         return;
     }
 
@@ -3392,7 +3380,7 @@ function renderQueryVersionList() {
             const empty = document.createElement('div');
             empty.style.padding = '12px';
             empty.style.color = '#888';
-            empty.textContent = 'No saved versions yet.';
+            empty.textContent = getQueryHistoryEmptyMessage(getActiveFile());
             queryVersionList.appendChild(empty);
         }
         return;
@@ -3519,6 +3507,7 @@ async function saveQueryVersion() {
         }
         querySaveMessage.value = '';
         if (file.savedSearch) {
+            file.savedSearchStanzaSource = 'head';
             await pushSavedSearchHistoryAfterSave(file);
         }
         await refreshQueryHistory();
