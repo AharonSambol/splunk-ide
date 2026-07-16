@@ -8,7 +8,8 @@ const {
     saveStanzaVersion,
     listVersions,
     autoSaveStanzaBeforeRestore,
-    restoreStanzaVersion
+    restoreStanzaVersion,
+    restoreStanzaAutoSaveVersion
 } = require('../lib/query-versions');
 const {
     saveStanzaDraft,
@@ -135,5 +136,97 @@ describe('autoSaveStanzaBeforeRestore', () => {
         const commitConf = await git.show([`${autoSave.hash}:${CONF_PATH}`]);
         const matches = commitConf.match(/^\[Error Rate\]/gm) || [];
         assert.equal(matches.length, 1);
+    });
+});
+
+describe('restoreStanzaAutoSaveVersion', () => {
+    let repoPath;
+    let git;
+    let initialHash;
+    let headHash;
+
+    beforeEach(async () => {
+        ({ repoPath, git } = await createTempGitRepo());
+        writeConf(repoPath, HEAD_CONF);
+        await saveVersion(git, CONF_PATH, 'Initial conf');
+        initialHash = (await git.revparse(['HEAD'])).trim();
+
+        writeConf(
+            repoPath,
+            HEAD_CONF.replace(
+                extractStanza(HEAD_CONF, STANZA),
+                OLD_ERROR_RATE
+            )
+        );
+        await saveVersion(git, CONF_PATH, 'Update Error Rate');
+        headHash = (await git.revparse(['HEAD'])).trim();
+    });
+
+    afterEach(() => {
+        cleanupTempRepo(repoPath);
+    });
+
+    it('consumes auto-save as draft without creating another auto-save', async () => {
+        await saveStanzaDraft(git, CONF_PATH, STANZA, headHash, DRAFT_ERROR_RATE);
+        await recomposeWorktree(git, CONF_PATH, headHash);
+
+        const autoSave = await autoSaveStanzaBeforeRestore(git, CONF_PATH, STANZA, initialHash);
+        assert.equal(autoSave.saved, true);
+
+        const versionsBefore = await listVersions(git, CONF_PATH, 30, { stanza: STANZA });
+        const autoSaveVersion = versionsBefore.find((entry) => entry.isAutoSave);
+        assert.ok(autoSaveVersion);
+
+        await restoreStanzaVersion(git, CONF_PATH, STANZA, initialHash);
+
+        const restored = await restoreStanzaAutoSaveVersion(
+            git,
+            CONF_PATH,
+            STANZA,
+            autoSaveVersion.hash,
+            autoSaveVersion.parentHash
+        );
+        assert.equal(restored.restored, true);
+
+        const versionsAfter = await listVersions(git, CONF_PATH, 30, { stanza: STANZA });
+        assert.equal(versionsAfter.filter((entry) => entry.isAutoSave).length, 0);
+        assert.ok(!versionsAfter.some((entry) => entry.hash === autoSaveVersion.hash));
+
+        const draft = await getStanzaDraft(git, CONF_PATH, STANZA, autoSaveVersion.parentHash || headHash);
+        assert.ok(draft);
+        assert.match(draft.text, /search = index=main \| stats count/);
+    });
+
+    it('does not grow auto-save chain when restoring auto-save twice', async () => {
+        const autoSave = await autoSaveStanzaBeforeRestore(git, CONF_PATH, STANZA, initialHash, {
+            seedSearchText: 'index=main | stats count'
+        });
+        assert.equal(autoSave.saved, true);
+
+        const versionsBefore = await listVersions(git, CONF_PATH, 30, { stanza: STANZA });
+        const autoSaveVersion = versionsBefore.find((entry) => entry.isAutoSave);
+        assert.ok(autoSaveVersion);
+
+        await restoreStanzaAutoSaveVersion(
+            git,
+            CONF_PATH,
+            STANZA,
+            autoSaveVersion.hash,
+            autoSaveVersion.parentHash
+        );
+
+        const versionsAfterFirst = await listVersions(git, CONF_PATH, 30, { stanza: STANZA });
+        assert.equal(versionsAfterFirst.filter((entry) => entry.isAutoSave).length, 0);
+
+        await restoreStanzaAutoSaveVersion(
+            git,
+            CONF_PATH,
+            STANZA,
+            autoSaveVersion.hash,
+            autoSaveVersion.parentHash
+        );
+
+        const versionsAfterSecond = await listVersions(git, CONF_PATH, 30, { stanza: STANZA });
+        assert.equal(versionsAfterSecond.filter((entry) => entry.isAutoSave).length, 0);
     });
 });
