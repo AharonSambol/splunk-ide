@@ -8,9 +8,14 @@ const { _electron: electron } = require('@playwright/test');
 const REPO_ROOT = path.resolve(__dirname, '../../..');
 
 async function launchApp(options = {}) {
+    const userDataDir = options.userDataDir
+        || fs.mkdtempSync(path.join(os.tmpdir(), 'splunk-ide-smoke-user-'));
     const electronApp = await electron.launch({
         executablePath: require('electron'),
-        args: [path.join(REPO_ROOT, 'main.js')],
+        args: [
+            path.join(REPO_ROOT, 'main.js'),
+            `--user-data-dir=${userDataDir}`,
+        ],
         cwd: REPO_ROOT,
         env: {
             ...process.env,
@@ -23,7 +28,7 @@ async function launchApp(options = {}) {
     const window = await electronApp.firstWindow();
     await window.waitForLoadState('domcontentloaded');
 
-    return { electronApp, window };
+    return { electronApp, window, userDataDir };
 }
 
 function createTempProjectDir() {
@@ -45,8 +50,11 @@ async function mockProjectFolderDialog(electronApp, folderPath) {
     }, folderPath);
 }
 
-async function closeApp(electronApp) {
+async function closeApp(electronApp, userDataDir) {
     await electronApp.close();
+    if (userDataDir && fs.existsSync(userDataDir)) {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+    }
 }
 
 module.exports = {

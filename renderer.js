@@ -9,6 +9,7 @@ const SPLUNK_URL = splunk_url;
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { ipcRenderer } = require('electron');
 const { simpleGit } = require('simple-git');
 const { buildFileTree } = require('./lib/file-tree');
@@ -77,6 +78,7 @@ const { renderExplorer } = require('./lib/render-explorer');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
 const { renderQuickSearchResults } = require('./lib/render-quick-search');
 const { attachWebviewSelectionDragHandlers } = require('./lib/webview-selection-drag-handlers');
+const { buildSplunkSaveInjectorSource } = require('./lib/webview-splunk-save-hooks');
 const { attachParentSelectionCleanup } = require('./lib/parent-selection-cleanup');
 const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
 
@@ -1039,14 +1041,23 @@ async function handleSplunkSave(fileId) {
     await syncFileFromViewUrl(fileId);
     const relativePath = getRelativePath(file);
     const stanzaName = getSavedSearchStanzaName(file);
-    const parentHash = restoreParentByFileId.get(file.id);
     const author = getGitAuthorFromSettings();
+    const fileUrl = file.url
+        || (fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
+    let aceQuery = await getAceQueryText(file);
+    if (!aceQuery) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        aceQuery = await getAceQueryText(file);
+    }
     const saveOptions = {
         author,
         savedSearch: {
             ...file.savedSearch,
             id: getSavedSearchId(file.savedSearch)
-        }
+        },
+        seedSearchText: aceQuery
+            || getLiveQueryText(file)
+            || seedQueryFromSources(file, fileUrl)
     };
 
     try {
@@ -1057,24 +1068,29 @@ async function handleSplunkSave(fileId) {
             'Splunk save',
             saveOptions
         );
-        let hash = parentHash;
+        let hash = '';
         if (result.saved && result.hash) {
             hash = result.hash;
             restoreParentByFileId.set(file.id, hash);
             forcedDraftByFileId.delete(file.id);
             userDraftByFileId.delete(file.id);
+            liveAceQueryByFileId.delete(file.id);
+            file.savedSearchStanzaSource = 'head';
             await pushSavedSearchHistoryAfterSave(file);
-        } else if (!hash) {
-            const versions = await listVersions(
-                currentGit,
-                relativePath,
-                1,
-                getListVersionsOptions(file)
-            );
-            hash = versions[0]?.hash;
-        }
-        if (!hash) {
-            return;
+        } else {
+            hash = restoreParentByFileId.get(file.id) || '';
+            if (!hash) {
+                const versions = await listVersions(
+                    currentGit,
+                    relativePath,
+                    1,
+                    getListVersionsOptions(file)
+                );
+                hash = versions[0]?.hash || '';
+            }
+            if (!hash) {
+                return;
+            }
         }
 
         const tagName = formatSplunkSaveTagName(gitSyncSettings.gitUserName, hash);
@@ -1563,7 +1579,8 @@ function createView(file) {
     try {
         const preloadPath = path.join(__dirname, 'webview-preload.js');
         // Preload must be an absolute file:// URL and set before src
-        view.setAttribute('preload', `file://${preloadPath}`);
+        view.setAttribute('preload', pathToFileURL(preloadPath).href);
+        view.setAttribute('webpreferences', 'contextIsolation=yes,sandbox=yes');
     } catch (err) { 
         
     }
@@ -1643,15 +1660,22 @@ function createView(file) {
         fs.readFileSync(path.join(__dirname, 'injector.js'), 'utf8'),
         fs.readFileSync(path.join(__dirname, 'injector-selection-cleanup.js'), 'utf8'),
     ].join('\n');
-    view.addEventListener('dom-ready', () => {
-        view.executeJavaScript(injectorCode)
+    const saveHookCode = buildSplunkSaveInjectorSource();
+    const injectGuestScripts = () => {
+        view.executeJavaScript(injectorCode).catch((err) => {
+            console.error('Failed to inject guest helpers into webview', file.id, err);
+        });
+        view.executeJavaScript(saveHookCode)
             .then(() => {
-                console.log('injector.js injected into webview', file.id);
+                console.log('save hooks injected into webview', file.id);
             })
-            .catch(err => {
-                console.error('Failed to inject injector.js into webview', file.id, err);
+            .catch((err) => {
+                console.error('Failed to inject save hooks into webview', file.id, err);
             });
-    });
+    };
+    view.addEventListener('dom-ready', injectGuestScripts);
+    view.addEventListener('did-navigate-in-page', injectGuestScripts);
+    view.addEventListener('did-stop-loading', injectGuestScripts);
 
     // Ensure nav state is updated when this view becomes active
     view.addEventListener('focus', () => {
@@ -2261,8 +2285,13 @@ async function getAceQueryText(file = getActiveFile()) {
     }
     try {
         const text = await view.executeJavaScript(`(() => {
-            const el = document.querySelector('.ace_editor');
-            return el?.env?.editor?.getValue?.() ?? '';
+            const editor = document.querySelector('.ace_editor')?.env?.editor;
+            if (!editor) {
+                return '';
+            }
+            return editor.getValue?.()
+                || editor.session?.getValue?.()
+                || '';
         })()`) || '';
         if (text) {
             liveAceQueryByFileId.set(file.id, text);
