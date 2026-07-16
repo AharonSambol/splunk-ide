@@ -1089,6 +1089,9 @@ async function handleSplunkSave(fileId) {
             tagName,
             getVersionTagStanzaName(file)
         );
+        if (isStaleSplunkImportSyncStatus(file.savedSearchSyncStatus)) {
+            file.savedSearchSyncStatus = '';
+        }
         if (fileId === activeFileId) {
             await refreshQueryHistory();
         }
@@ -2664,6 +2667,8 @@ async function enterSavedSearchHistory(file, currentUrl) {
             file.savedSearchSyncStatus = '';
         }
     } else if (file.savedSearchSyncStatus === SAVED_SEARCH_SYNC_STATUS.REMOTE_CHANGED) {
+        file.savedSearchSyncStatus = '';
+    } else if (isStaleSplunkImportSyncStatus(file.savedSearchSyncStatus)) {
         file.savedSearchSyncStatus = '';
     }
     await syncSavedSearchTrackedBase(file);

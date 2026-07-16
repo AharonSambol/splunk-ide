@@ -57,6 +57,7 @@ describe('isStaleSplunkImportSyncStatus', () => {
     it('detects browser and REST import failures', () => {
         assert.equal(isStaleSplunkImportSyncStatus('Failed to fetch'), true);
         assert.equal(isStaleSplunkImportSyncStatus('fetch failed'), true);
+        assert.equal(isStaleSplunkImportSyncStatus('Splunk REST GET failed: 404 Not Found'), true);
         assert.equal(isStaleSplunkImportSyncStatus('Push failed'), false);
     });
 });
