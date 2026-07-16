@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Splunk saved search mock</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            background: #2d2d2d;
+        }
+
+        .ace_editor {
+            min-height: 120px;
+            padding: 12px;
+            border: 1px solid #333;
+            outline: none;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" id="save-btn">Save</button>
+    </div>
+    <div class="ace_editor" tabindex="0">index=main</div>
+    <script>
+        (function () {
+            const aceElement = document.querySelector('.ace_editor');
+            const state = { text: aceElement.textContent };
+            const editor = {
+                session: {
+                    getValue() {
+                        return state.text;
+                    },
+                    setValue(value) {
+                        state.text = value;
+                        aceElement.textContent = value;
+                    },
+                },
+                getValue() {
+                    return this.session.getValue();
+                },
+                setValue(value) {
+                    this.session.setValue(value);
+                },
+            };
+            aceElement.env = { editor };
+
+            aceElement.addEventListener('keydown', (event) => {
+                if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) {
+                    return;
+                }
+                event.preventDefault();
+                editor.setValue(editor.getValue() + event.key);
+            });
+
+            document.getElementById('save-btn').addEventListener('click', () => {
+                fetch('/servicesNS/nobody/search/saved/searches/error-rate', {
+                    method: 'POST',
+                    body: JSON.stringify({ search: editor.getValue() }),
+                }).catch(() => {});
+            });
+
+            window.__testGetEditorText = () => editor.getValue();
+            window.__testType = (text) => {
+                editor.setValue(editor.getValue() + text);
+                return editor.getValue();
+            };
+            window.__testClickSave = () => {
+                document.getElementById('save-btn').click();
+            };
+        })();
+    </script>
+</body>
+</html>

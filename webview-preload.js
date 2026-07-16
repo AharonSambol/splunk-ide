@@ -1,11 +1,22 @@
-const path = require('node:path');
-const { ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
+
+function sendSplunkSave() {
+    try { ipcRenderer.sendToHost('splunk-save'); } catch { /* ignore */ }
+}
+
+if (process.contextIsolated) {
+    contextBridge.exposeInMainWorld('__splunkIdeHost', { splunkSave: sendSplunkSave });
+} else {
+    window.__splunkIdeHost = { splunkSave: sendSplunkSave };
+}
+
 const {
     clearAceSelection,
     recoverFromMissedDrag,
     resetDragState,
-} = require(path.join(__dirname, 'lib', 'end-ace-selection-drag.js'));
-const { attachSelectionDragTracker } = require(path.join(__dirname, 'lib', 'selection-drag-tracker.js'));
+} = require('./lib/end-ace-selection-drag.js');
+const { attachSelectionDragTracker } = require('./lib/selection-drag-tracker.js');
+const { SPLUNK_SAVE_EVENT } = require('./lib/webview-splunk-save-hooks.js');
 
 window.__splunkIdeClearSelection = () => clearAceSelection(document);
 window.__splunkIdeRecoverFromMissedDrag = () => recoverFromMissedDrag(document);
@@ -17,6 +28,8 @@ attachSelectionDragTracker(document, {
     resetDragState: () => resetDragState(document),
     recoverFromMissedDrag: () => recoverFromMissedDrag(document),
 });
+
+document.addEventListener(SPLUNK_SAVE_EVENT, sendSplunkSave);
 
 // Capture keydown at the capture phase to observe events before page handlers.
 window.addEventListener('keydown', (e) => {
@@ -31,7 +44,7 @@ window.addEventListener('keydown', (e) => {
         });
 
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-            try { ipcRenderer.sendToHost('splunk-save'); } catch (err) { /* ignore */ }
+            sendSplunkSave();
         }
 
         if (e.key === 'Enter') {
@@ -46,8 +59,8 @@ window.addEventListener('keydown', (e) => {
                     const sendSave = () => {
                         if (sent) return;
                         sent = true;
-                        try { 
-                            ipcRenderer.sendToHost('save-file'); 
+                        try {
+                            ipcRenderer.sendToHost('save-file');
                         } catch (err) { /* ignore */ }
                         window.removeEventListener('popstate', onLoc);
                         window.removeEventListener('hashchange', onLoc);

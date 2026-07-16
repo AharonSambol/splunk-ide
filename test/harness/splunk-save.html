@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Splunk save harness</title>
+</head>
+<body>
+    <webview id="guest"></webview>
+    <script>
+        const fs = require('node:fs');
+        const path = require('node:path');
+        const { pathToFileURL } = require('node:url');
+        const { buildSplunkSaveInjectorSource } = require('../../lib/webview-splunk-save-hooks');
+
+        const view = document.getElementById('guest');
+        const fixturePath = path.join(__dirname, '../fixtures/splunk-saved-search-mock.html');
+        const preloadPath = path.join(__dirname, '../../webview-preload.js');
+        const hookSource = buildSplunkSaveInjectorSource();
+        const loadUrl = pathToFileURL(fixturePath).href
+            + '?s=' + encodeURIComponent('[nobody:search:Error Rate]');
+
+        window.__splunkSaveEvents = [];
+        view.setAttribute('preload', pathToFileURL(preloadPath).href);
+        view.setAttribute('webpreferences', 'contextIsolation=yes,sandbox=yes');
+        view.addEventListener('ipc-message', (event) => {
+            window.__splunkSaveEvents.push(event.channel);
+        });
+
+        window.__harnessReady = new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('guest timeout')), 15_000);
+            view.addEventListener('dom-ready', async () => {
+                try {
+                    await view.executeJavaScript(hookSource);
+                    clearTimeout(timeout);
+                    resolve(true);
+                } catch (err) {
+                    clearTimeout(timeout);
+                    reject(err);
+                }
+            }, { once: true });
+            view.src = loadUrl;
+        });
+    </script>
+</body>
+</html>
