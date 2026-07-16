@@ -4,7 +4,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { simpleGit } = require('simple-git');
-const { ensureRemote, fetchSharedHistory, pushSharedHistory } = require('../lib/git-sync');
+const {
+    ensureRemote,
+    fetchSharedHistory,
+    pushSharedHistory,
+    alignSharedBranchWithRemote,
+    pushSharedHistoryWithReconcile
+} = require('../lib/git-sync');
 const {
     saveVersion,
     listVersions,
@@ -87,6 +93,85 @@ describe('ensureRemote', () => {
         const remotes = await git.getRemotes(true);
         assert.equal(remotes.length, 1);
         assert.equal(remotes[0].refs.fetch, barePath);
+    });
+});
+
+describe('alignSharedBranchWithRemote', () => {
+    let barePath;
+    let repoPath;
+    let git;
+
+    afterEach(() => {
+        if (repoPath) {
+            cleanupTempRepo(repoPath);
+        }
+        if (barePath) {
+            cleanupTempRepo(barePath);
+        }
+    });
+
+    it('resets unrelated local main onto remote and allows push', async () => {
+        barePath = await createBareRemote();
+        ({ repoPath, git } = await createLocalRepo());
+
+        writeSplFile(repoPath, RELATIVE_PATH, SPL_URL_V1);
+        await saveVersion(git, RELATIVE_PATH, 'Remote seed');
+        assert.equal((await ensureRemote(git, { remoteUrl: barePath })).ok, true);
+        assert.equal((await pushSharedHistory(git, { sharedBranch: SHARED_BRANCH })).ok, true);
+        const remoteHead = (await simpleGit(barePath).revparse(['HEAD'])).trim();
+
+        const orphanPath = fs.mkdtempSync(path.join(os.tmpdir(), 'splunk-ide-orphan-'));
+        const orphanGit = simpleGit(orphanPath);
+        await orphanGit.init();
+        await orphanGit.addConfig('user.name', 'Test User');
+        await orphanGit.addConfig('user.email', 'test@example.com');
+        fs.writeFileSync(path.join(orphanPath, 'orphan.txt'), 'orphan\n');
+        await orphanGit.add('orphan.txt');
+        await orphanGit.commit('orphan first commit');
+        await orphanGit.addRemote('origin', barePath);
+        await orphanGit.fetch('origin');
+
+        const aligned = await alignSharedBranchWithRemote(orphanGit, { sharedBranch: SHARED_BRANCH });
+        assert.equal(aligned.ok, true);
+        assert.equal(aligned.resetUnrelated, true);
+        assert.equal((await orphanGit.revparse(['HEAD'])).trim(), remoteHead);
+
+        writeSplFile(orphanPath, RELATIVE_PATH, SPL_URL_V2);
+        await saveVersion(orphanGit, RELATIVE_PATH, 'After align');
+        assert.equal((await pushSharedHistory(orphanGit, { sharedBranch: SHARED_BRANCH })).ok, true);
+
+        cleanupTempRepo(orphanPath);
+    });
+
+    it('pushSharedHistoryWithReconcile succeeds after unrelated reset', async () => {
+        barePath = await createBareRemote();
+        ({ repoPath, git } = await createLocalRepo());
+
+        writeSplFile(repoPath, RELATIVE_PATH, SPL_URL_V1);
+        await saveVersion(git, RELATIVE_PATH, 'Remote seed');
+        assert.equal((await ensureRemote(git, { remoteUrl: barePath })).ok, true);
+        assert.equal((await pushSharedHistory(git, { sharedBranch: SHARED_BRANCH })).ok, true);
+
+        const orphanPath = fs.mkdtempSync(path.join(os.tmpdir(), 'splunk-ide-orphan-'));
+        const orphanGit = simpleGit(orphanPath);
+        await orphanGit.init();
+        await orphanGit.addConfig('user.name', 'Test User');
+        await orphanGit.addConfig('user.email', 'test@example.com');
+        fs.writeFileSync(path.join(orphanPath, 'orphan.txt'), 'orphan\n');
+        await orphanGit.add('orphan.txt');
+        await orphanGit.commit('orphan first commit');
+        await orphanGit.addRemote('origin', barePath);
+        await orphanGit.fetch('origin');
+
+        writeSplFile(orphanPath, RELATIVE_PATH, SPL_URL_V2);
+        await saveVersion(orphanGit, RELATIVE_PATH, 'Local save');
+
+        const pushed = await pushSharedHistoryWithReconcile(orphanGit, {
+            sharedBranch: SHARED_BRANCH
+        });
+        assert.equal(pushed.ok, true);
+
+        cleanupTempRepo(orphanPath);
     });
 });
 
