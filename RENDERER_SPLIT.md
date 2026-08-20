@@ -405,6 +405,8 @@ node --check renderer.js renderer/layout.js
 
 **Done when** both sidebars resize, collapse, reopen; widths persist in `localStorage` under the same keys. History toggle still refreshes the list.
 
+**Status:** moved clamp/apply/resize/collapse helpers plus `initializeLayoutControls` / `setQueryHistoryPanelOpen` / `toggleQueryHistoryPanel` and the four sidebar listeners into `renderer/layout.js`. `window.onload`, `switchToFile` wrapper, and keymap stay in `renderer.js` and call the exports (`QUERY_SIDEBAR_COLLAPSED_KEY` imported, not duplicated). `attachLayout({ syncActiveFile, refreshHistory, updateStatusBar })` is called at the old listener site. Commit: _this atom_. Before: layout functions in `renderer.js`; `node --check` ok; 21 folder, 5 restore, smoke shell + 3 drag pass. After: `function initializeLayoutControls` gone from `renderer.js`, present in `renderer/layout.js`; same checks pass.
+
 ---
 
 ## Track F — explorer + project (protected)
