@@ -679,12 +679,17 @@
         details.folder>summary {
             display: flex;
             align-items: center;
-            justify-content: space-between;
             cursor: pointer;
             color: #9cdcfe;
             list-style: none;
             padding: 4px 0;
             user-select: none;
+        }
+
+        details.folder>summary > span:first-of-type {
+            flex: 1;
+            min-width: 0;
+            text-align: left;
         }
 
         details.folder>summary::before {
