@@ -444,6 +444,8 @@ Manual: create folder, drag search into it, collapse chevron (name stays beside 
 
 **Done when** folder unit tests pass **without edits** (unless a test grepped `renderer.js` — none currently should). Explorer empty copy unchanged.
 
+**Status:** moved explorer/project CRUD, load/open project, new-file/rename/move modal, collapsed-folder persist, and `updateExplorer` into `renderer/explorer.js`. `attachExplorer({ createTab, createView, closeTab, switchToFile, clearOpenTabs, initializeQueryVersions, refreshQueryHistory, onQueryFileChanged, applySavedSearchToFile, updateTabLabel })` replaced the old explorer listeners. `getDashboardViewRelativePath` stays in `renderer.js` (explorer keeps its own copy). Protected chain `toExplorerInput` → `buildFileTree` → `renderExplorer` still in `updateExplorer`. Commit: this atom. Before: explorer functions in `renderer.js`; `node --check` ok; 36 folder/project, 5 restore; smoke shell + 3 drag pass. After: `function updateExplorer` gone from `renderer.js`, present in `renderer/explorer.js` with the three-call chain; same checks pass. Leftover `renderer.js` imports: `attachExplorer`, `openFile`, `loadProject`, `createNewFile`, `openStartupSearch`, `hideNewItemMenu`, `closeNewFileModal`, `updateExplorer`, `ensureDirectoryExists`, `syncFolderList`, `persistIdeFolders`, `createFileWithUrl`, `openNewFileModal`, `clearOpenTabs`.
+
 ---
 
 ## Track G — tabs + history (largest, last)
