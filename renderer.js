@@ -20,7 +20,7 @@ const {
     getNextTab,
     createDuplicateFileName,
 } = require('./lib/tabs');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, splunkUiUrlToRestBase, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('./lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, shouldClearTabObjectOnNavigate, splunkUiUrlToRestBase, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('./lib/url-utils');
 let SPLUNK_URL = DEFAULT_SPLUNK_URL;
 const { getSavedSearchId } = require('./lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
@@ -961,6 +961,9 @@ async function syncFileFromViewUrl(fileId) {
                 }
                 await applyDashboardToFile(file, dashboard, url);
             }
+            return;
+        }
+        if (!shouldClearTabObjectOnNavigate(url)) {
             return;
         }
         if (file.savedSearch) {

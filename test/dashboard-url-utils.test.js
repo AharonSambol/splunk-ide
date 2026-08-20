@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseDashboardFromUrl } = require('../lib/url-utils');
+const { parseDashboardFromUrl, shouldClearTabObjectOnNavigate } = require('../lib/url-utils');
 
 describe('parseDashboardFromUrl', () => {
     it('extracts dashboard metadata from app view path', () => {
@@ -35,5 +35,37 @@ describe('parseDashboardFromUrl', () => {
 
     it('returns null for blank input', () => {
         assert.equal(parseDashboardFromUrl(''), null);
+    });
+
+    it('returns null for Splunk list and chrome pages', () => {
+        assert.equal(parseDashboardFromUrl('http://localhost:8010/en-US/app/search/dashboards'), null);
+        assert.equal(parseDashboardFromUrl('http://localhost:8010/en-US/app/search/alerts'), null);
+        assert.equal(parseDashboardFromUrl('http://localhost:8010/en-US/app/search/alert'), null);
+        assert.equal(parseDashboardFromUrl('http://localhost:8010/en-US/app/search/reports'), null);
+    });
+});
+
+describe('shouldClearTabObjectOnNavigate', () => {
+    it('keeps the current object on Dashboards and Alerts lists', () => {
+        assert.equal(shouldClearTabObjectOnNavigate('http://localhost:8010/en-US/app/search/dashboards'), false);
+        assert.equal(shouldClearTabObjectOnNavigate('http://localhost:8010/en-US/app/search/alerts'), false);
+    });
+
+    it('clears on the ad-hoc Search page', () => {
+        assert.equal(
+            shouldClearTabObjectOnNavigate('http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain'),
+            true
+        );
+    });
+
+    it('does not clear when the URL is a saved search or dashboard', () => {
+        assert.equal(
+            shouldClearTabObjectOnNavigate('http://localhost:8010/en-US/app/search/search?s=%5Bnobody%3Asearch%3AError%20Rate%5D'),
+            false
+        );
+        assert.equal(
+            shouldClearTabObjectOnNavigate('http://localhost:8010/en-US/app/search/error_dashboard'),
+            false
+        );
     });
 });
