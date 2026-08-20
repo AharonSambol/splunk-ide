@@ -311,6 +311,8 @@ node --test test/main-find-in-page.test.js
 
 **Done when** Cmd/Ctrl+F still opens the overlay on an open tab; Escape still closes it and clears find. Shortcut handler in `renderer.js` still references the exported functions.
 
+**Status:** moved `createFindOverlay` / `showFindOverlay` / `hideFindOverlay` / `doFind` to `renderer/find-overlay.js`. Keymap and shared mousedown closer stay in `renderer.js` and call the exports. Commit: _this atom_. Before: overlay functions in `renderer.js`; `node --check` ok; 10 find-in-page, 26 restore/folder, smoke shell + 3 drag pass. After: functions gone from `renderer.js`, present in `renderer/find-overlay.js`; same checks pass.
+
 ---
 
 ## Track C — git settings modal
