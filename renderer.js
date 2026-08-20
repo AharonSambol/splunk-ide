@@ -32,11 +32,6 @@ const {
 const { openDashboardHistory } = require('./lib/dashboard-open');
 const { ensureRemote, pushSharedHistoryWithReconcile } = require('./lib/git-sync');
 const {
-    filterQuickSearchResults,
-    getQuickSearchEmptyMessage,
-    moveQuickSearchSelection,
-} = require('./lib/quick-search');
-const {
     getFileStatus,
     hasDraftChanges,
     saveDraftStash,
@@ -82,7 +77,6 @@ const {
     writeIdeFolders,
 } = require('./lib/ide-folders');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
-const { renderQuickSearchResults } = require('./lib/render-quick-search');
 const { attachWebviewSelectionDragHandlers } = require('./lib/webview-selection-drag-handlers');
 const { buildSplunkSaveInjectorSource } = require('./lib/webview-splunk-save-hooks');
 const { attachParentSelectionCleanup } = require('./lib/parent-selection-cleanup');
@@ -97,6 +91,11 @@ const {
     getGitRemoteSettings,
     attachGitSettings,
 } = require('./renderer/git-settings');
+const {
+    openQuickSearch,
+    closeQuickSearch,
+    attachQuickSearch,
+} = require('./renderer/quick-search');
 
 attachParentSelectionCleanup(document);
 attachConfirmModal();
@@ -125,9 +124,6 @@ const {
     sidebarDragOverlay,
     quickSearchOverlay,
     quickSearchModal,
-    quickSearchHint,
-    quickSearchInput,
-    quickSearchResults,
     newFileModal,
     newFileModalBox,
     newFileModalLabel,
@@ -436,8 +432,7 @@ newFileModalInput.addEventListener('keydown', event => {
 ipcRenderer.on('app-keydown', (_event, keyInfo) => {
     handleKeyboardShortcut(keyInfo);
 });
-quickSearchInput.addEventListener('input', updateQuickSearchResults);
-quickSearchInput.addEventListener('keydown', handleQuickSearchKeydown);
+attachQuickSearch({ openFile });
 
 window.onload = async () => {
     initializeLayoutControls();
@@ -1892,90 +1887,6 @@ function switchToNextTab() {
     }
 }
 
-function openQuickSearch(mode = 'file') {
-    state.quickSearchMode = mode;
-    quickSearchOverlay.classList.add('visible');
-    quickSearchInput.value = '';
-    state.quickSearchSelectedIndex = 0;
-    quickSearchInput.placeholder = mode === 'content' ? 'Search file contents...' : 'Search files...';
-    quickSearchHint.textContent = mode === 'content'
-        ? 'Type to search all file contents. Use arrow keys and Enter to open.'
-        : 'Type to search open files. Use arrow keys and Enter to open.';
-    updateQuickSearchResults();
-    quickSearchInput.focus();
-}
-
-function closeQuickSearch() {
-    quickSearchOverlay.classList.remove('visible');
-}
-
-function updateQuickSearchResults() {
-    const query = quickSearchInput.value;
-    const { results, awaitingQuery } = filterQuickSearchResults(
-        state.files,
-        state.folders,
-        query,
-        state.quickSearchMode,
-        file => {
-            try {
-                const rawText = fs.readFileSync(file.path, 'utf8');
-                return extractQueryFromUrl(rawText);
-            } catch {
-                return '';
-            }
-        }
-    );
-
-    renderQuickSearchResults(quickSearchResults, {
-        results,
-        selectedIndex: state.quickSearchSelectedIndex,
-        mode: state.quickSearchMode,
-        emptyMessage: getQuickSearchEmptyMessage(state.quickSearchMode, awaitingQuery),
-    }, {
-        onSelect: activateFileFromQuickSearch,
-    });
-}
-
-function handleQuickSearchKeydown(event) {
-    const visibleItems = Array.from(document.querySelectorAll('.quick-search-item'));
-    if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        state.quickSearchSelectedIndex = moveQuickSearchSelection(
-            state.quickSearchSelectedIndex,
-            'down',
-            visibleItems.length
-        );
-        updateQuickSearchResults();
-    }
-
-    if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        state.quickSearchSelectedIndex = moveQuickSearchSelection(
-            state.quickSearchSelectedIndex,
-            'up',
-            visibleItems.length
-        );
-        updateQuickSearchResults();
-    }
-
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        const selectedItem = visibleItems[state.quickSearchSelectedIndex];
-        if (selectedItem) {
-            activateFileFromQuickSearch(selectedItem.dataset.fileId);
-        }
-    }
-
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeQuickSearch();
-    }
-}
-
-function activateFileFromQuickSearch(fileId) {
-    closeQuickSearch();
-    openFile(fileId);
-}
 // Query version history (per active .spl file)
 function getActiveFile() {
     return state.files.find(f => f.id === state.activeFileId) || null;

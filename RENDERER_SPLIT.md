@@ -378,6 +378,8 @@ Smoke `opens quick search overlay with double-shift` must not get **worse** than
 
 **Done when** file and content modes still work; arrow keys + Enter still open the tab.
 
+**Status:** moved `openQuickSearch` / `closeQuickSearch` / `updateQuickSearchResults` / `handleQuickSearchKeydown` / `activateFileFromQuickSearch` and the two `#quick-search-input` listeners into `renderer/quick-search.js`. Keymap and shared mousedown closer stay in `renderer.js` and call the exports. `attachQuickSearch({ openFile })` is called after the existing addEventListener block. Commit: _this atom_. Before: overlay functions in `renderer.js`; `node --check` ok; 24 lib quick-search, 26 restore/folder, smoke shell + 3 drag pass. After: `function openQuickSearch` gone from `renderer.js`, present in `renderer/quick-search.js`; same checks pass.
+
 ---
 
 ## Track E — layout (sidebars)
