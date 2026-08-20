@@ -442,7 +442,9 @@ gitSyncSettingsModal.addEventListener('keydown', event => {
         closeGitSyncSettingsModal();
     }
 });
-document.addEventListener('keydown', handleGlobalKeydown);
+ipcRenderer.on('app-keydown', (_event, keyInfo) => {
+    handleKeyboardShortcut(keyInfo);
+});
 quickSearchInput.addEventListener('input', updateQuickSearchResults);
 quickSearchInput.addEventListener('keydown', handleQuickSearchKeydown);
 
@@ -1586,7 +1588,6 @@ function createView(file) {
             if (shouldRefreshLiveDraftOnKey(keyInfo)) {
                 scheduleRefreshLiveDraftState(file.id);
             }
-            handleKeyboardShortcut(keyInfo);
         } else if (event.channel === 'webview-beforeinput') {
             scheduleRefreshLiveDraftState(file.id);
         } else if (event.channel === 'save-file') {
@@ -1964,44 +1965,6 @@ function renderFileNode(file) {
         item.classList.add('active');
     }
     return item;
-}
-
-function handleGlobalKeydown(event) {
-    handleKeyboardShortcut({
-        key: event.key,
-        code: event.code,
-        ctrl: event.ctrlKey,
-        meta: event.metaKey,
-        alt: event.altKey,
-        shift: event.shiftKey
-    });
-
-    // Prevent default for known shortcuts
-    const key = event.key.toLowerCase();
-    if (event.shiftKey && key === 'shift') {
-        // Shift-Shift handled above
-        if (shiftTapCount === 2) {
-            event.preventDefault();
-        }
-    }
-    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-    }
-    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
-        event.preventDefault();
-    }
-    if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'h') {
-        event.preventDefault();
-    }
-    if (event.ctrlKey && event.key === 'Tab') {
-        event.preventDefault();
-    }
-    if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        event.preventDefault();
-    }
-    if (event.ctrlKey && (event.key === 'n' || event.key === 'N')) {
-        event.preventDefault();
-    }
 }
 
 function openMostRecentTab() {
