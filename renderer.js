@@ -88,8 +88,10 @@ const { buildSplunkSaveInjectorSource } = require('./lib/webview-splunk-save-hoo
 const { attachParentSelectionCleanup } = require('./lib/parent-selection-cleanup');
 const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
 const state = require('./renderer/state');
+const { showConfirmModal, closeConfirmModal, attachConfirmModal } = require('./renderer/confirm-modal');
 
 attachParentSelectionCleanup(document);
+attachConfirmModal();
 
 const {
     newFileBtn,
@@ -424,21 +426,6 @@ document.addEventListener('mousedown', event => {
 });
 queryPreviewModeBtns.forEach(btn => {
     btn.addEventListener('click', () => setPreviewMode(btn.dataset.mode));
-});
-confirmCancelBtn.addEventListener('click', () => closeConfirmModal(false));
-confirmOkBtn.addEventListener('click', () => closeConfirmModal(true));
-confirmModal.addEventListener('keydown', event => {
-    if (!confirmModal.classList.contains('visible')) {
-        return;
-    }
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeConfirmModal(false);
-    }
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        closeConfirmModal(true);
-    }
 });
 newFileModalInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
@@ -2919,24 +2906,6 @@ function onQueryFileChanged(fileId, { refreshHistory = false } = {}) {
     }
     if (refreshHistory && fileId === state.activeFileId && !querySidebar.classList.contains('collapsed')) {
         refreshQueryHistory();
-    }
-}
-
-function showConfirmModal({ title, body }) {
-    return new Promise(resolve => {
-        state.confirmResolve = resolve;
-        confirmModalTitle.textContent = title;
-        confirmModalBody.textContent = body;
-        confirmModal.classList.add('visible');
-        confirmOkBtn.focus();
-    });
-}
-
-function closeConfirmModal(confirmed) {
-    confirmModal.classList.remove('visible');
-    if (state.confirmResolve) {
-        state.confirmResolve(confirmed);
-        state.confirmResolve = null;
     }
 }
 
