@@ -346,6 +346,8 @@ node --check renderer.js renderer/git-settings.js
 
 **Done when** gear modal still loads/saves Splunk URL + remote; changing Splunk URL still retargets open webviews. `state.SPLUNK_URL` / `state.gitSyncSettings` still what `createView` reads.
 
+**Status:** moved load/populate/status/open/close/retarget/save plus `getGitAuthorFromSettings` / `getGitRemoteSettings` and the four git-sync listeners into `renderer/git-settings.js`. Shared mousedown closer and `window.onload` stay in `renderer.js` and call the exports. Commit: _this atom_. Before: functions in `renderer.js`; `node --check` ok; 8 lib git-settings, 26 restore/folder, smoke shell + 3 drag pass. After: `function loadGitSyncSettings` gone from `renderer.js`, present in `renderer/git-settings.js`; same checks pass.
+
 ---
 
 ## Track D — quick search

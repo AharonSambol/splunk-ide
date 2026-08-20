@@ -19,7 +19,7 @@ const {
     getNextTab,
     createDuplicateFileName,
 } = require('./lib/tabs');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, shouldClearTabObjectOnNavigate, splunkUiUrlToRestBase, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('./lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, shouldClearTabObjectOnNavigate, splunkUiUrlToRestBase, DEFAULT_SPLUNK_URL, withSplunkOrigin } = require('./lib/url-utils');
 const { getSavedSearchId } = require('./lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
 const { getStanzaDraftStatus, saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('./lib/stanza-drafts');
@@ -90,9 +90,17 @@ const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
 const state = require('./renderer/state');
 const { showConfirmModal, closeConfirmModal, attachConfirmModal } = require('./renderer/confirm-modal');
 const { showFindOverlay, hideFindOverlay } = require('./renderer/find-overlay');
+const {
+    loadGitSyncSettings,
+    closeGitSyncSettingsModal,
+    getGitAuthorFromSettings,
+    getGitRemoteSettings,
+    attachGitSettings,
+} = require('./renderer/git-settings');
 
 attachParentSelectionCleanup(document);
 attachConfirmModal();
+attachGitSettings();
 
 const {
     newFileBtn,
@@ -150,18 +158,8 @@ const {
     confirmModalBody,
     confirmCancelBtn,
     confirmOkBtn,
-    gitSyncSettingsBtn,
     gitSyncSettingsModal,
     gitSyncSettingsModalBox,
-    gitSyncSplunkUrlInput,
-    gitSyncRemoteUrlInput,
-    gitSyncRemoteNameInput,
-    gitSyncSharedBranchInput,
-    gitSyncUserNameInput,
-    gitSyncUserEmailInput,
-    gitSyncSettingsStatus,
-    gitSyncSettingsCancelBtn,
-    gitSyncSettingsSaveBtn,
     statusFile,
     statusSave,
     statusVersions,
@@ -360,9 +358,6 @@ newFolderBtn.addEventListener('click', () => {
 });
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
-gitSyncSettingsBtn.addEventListener('click', openGitSyncSettingsModal);
-gitSyncSettingsCancelBtn.addEventListener('click', closeGitSyncSettingsModal);
-gitSyncSettingsSaveBtn.addEventListener('click', saveGitSyncSettingsFromModal);
 
 queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false));
 querySidebarReopenBtn.addEventListener('click', () => setQueryHistoryPanelOpen(true));
@@ -438,15 +433,6 @@ newFileModalInput.addEventListener('keydown', event => {
         closeNewFileModal();
     }
 });
-gitSyncSettingsModal.addEventListener('keydown', event => {
-    if (!gitSyncSettingsModal.classList.contains('visible')) {
-        return;
-    }
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeGitSyncSettingsModal();
-    }
-});
 ipcRenderer.on('app-keydown', (_event, keyInfo) => {
     handleKeyboardShortcut(keyInfo);
 });
@@ -464,79 +450,6 @@ window.onload = async () => {
         openStartupSearch();
     }
 };
-
-async function loadGitSyncSettings() {
-    state.gitSyncSettings = await ipcRenderer.invoke('get-git-sync-settings');
-    state.SPLUNK_URL = normalizeSplunkAddress(state.gitSyncSettings.splunkUrl);
-}
-
-function populateGitSyncSettingsForm() {
-    gitSyncSplunkUrlInput.value = state.gitSyncSettings.splunkUrl || state.SPLUNK_URL;
-    gitSyncRemoteUrlInput.value = state.gitSyncSettings.remoteUrl || '';
-    gitSyncRemoteNameInput.value = state.gitSyncSettings.remoteName || 'origin';
-    gitSyncSharedBranchInput.value = state.gitSyncSettings.sharedBranch || 'main';
-    gitSyncUserNameInput.value = state.gitSyncSettings.gitUserName || '';
-    gitSyncUserEmailInput.value = state.gitSyncSettings.gitUserEmail || '';
-}
-
-function setGitSyncSettingsStatus(message, type = '') {
-    gitSyncSettingsStatus.textContent = message;
-    gitSyncSettingsStatus.classList.remove('error', 'success');
-    if (type) {
-        gitSyncSettingsStatus.classList.add(type);
-    }
-}
-
-function openGitSyncSettingsModal() {
-    populateGitSyncSettingsForm();
-    setGitSyncSettingsStatus('');
-    gitSyncSettingsModal.classList.add('visible');
-    setTimeout(() => gitSyncSplunkUrlInput.focus(), 0);
-}
-
-function closeGitSyncSettingsModal() {
-    gitSyncSettingsModal.classList.remove('visible');
-    setGitSyncSettingsStatus('');
-}
-
-function retargetOpenViewsToSplunkUrl() {
-    for (const file of state.files) {
-        file.url = withSplunkOrigin(file.url || state.SPLUNK_URL, state.SPLUNK_URL);
-        const view = document.getElementById(file.id);
-        if (view) {
-            view.src = file.url;
-        }
-    }
-}
-
-async function saveGitSyncSettingsFromModal() {
-    const settings = {
-        splunkUrl: gitSyncSplunkUrlInput.value,
-        remoteUrl: gitSyncRemoteUrlInput.value,
-        remoteName: gitSyncRemoteNameInput.value,
-        sharedBranch: gitSyncSharedBranchInput.value,
-        gitUserName: gitSyncUserNameInput.value,
-        gitUserEmail: gitSyncUserEmailInput.value
-    };
-
-    gitSyncSettingsSaveBtn.disabled = true;
-    setGitSyncSettingsStatus('Saving...');
-
-    try {
-        const result = await ipcRenderer.invoke('set-git-sync-settings', settings);
-        if (!result || !result.ok) {
-            setGitSyncSettingsStatus(result?.message || 'Failed to save settings', 'error');
-            return;
-        }
-        await loadGitSyncSettings();
-        retargetOpenViewsToSplunkUrl();
-        closeGitSyncSettingsModal();
-    } catch (error) {
-        setGitSyncSettingsStatus(error.message || 'Failed to save settings', 'error');
-    } finally {
-        gitSyncSettingsSaveBtn.disabled = false;
-    }
-}
 
 function openStartupSearch() {
     let fileId = state.fileMru.find(id => state.files.some(file => file.id === id));
@@ -2317,26 +2230,6 @@ function resolveSavedSearchFromFile(file, currentUrl) {
         file.savedSearch = savedSearch;
     }
     return savedSearch || null;
-}
-
-function getGitAuthorFromSettings() {
-    const name = (state.gitSyncSettings.gitUserName || '').trim();
-    const email = (state.gitSyncSettings.gitUserEmail || '').trim();
-    if (name && email) {
-        return { name, email };
-    }
-    if (name) {
-        return { name, email: '' };
-    }
-    return undefined;
-}
-
-function getGitRemoteSettings() {
-    return {
-        remoteUrl: state.gitSyncSettings.remoteUrl || '',
-        remoteName: state.gitSyncSettings.remoteName || 'origin',
-        sharedBranch: state.gitSyncSettings.sharedBranch || 'main'
-    };
 }
 
 async function preserveDraftBeforeRemoteSync(file) {
