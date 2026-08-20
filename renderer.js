@@ -1,4 +1,3 @@
-let fileCounter = 1;
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -21,7 +20,6 @@ const {
     createDuplicateFileName,
 } = require('./lib/tabs');
 const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, shouldClearTabObjectOnNavigate, splunkUiUrlToRestBase, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('./lib/url-utils');
-let SPLUNK_URL = DEFAULT_SPLUNK_URL;
 const { getSavedSearchId } = require('./lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
 const { getStanzaDraftStatus, saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('./lib/stanza-drafts');
@@ -89,6 +87,7 @@ const { attachWebviewSelectionDragHandlers } = require('./lib/webview-selection-
 const { buildSplunkSaveInjectorSource } = require('./lib/webview-splunk-save-hooks');
 const { attachParentSelectionCleanup } = require('./lib/parent-selection-cleanup');
 const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
+const state = require('./renderer/state');
 
 attachParentSelectionCleanup(document);
 
@@ -178,40 +177,14 @@ const PROJECT_SIDEBAR_DEFAULT_WIDTH = 260;
 const DRAFT_VERSION_HASH = '__draft__';
 const EXPLORER_COLLAPSED_KEY = 'splunk-ide-explorer-collapsed';
 
-let files = [];
-let folders = [];
-let ideFolders = {};
-let collapsedExplorerFolders = new Set();
-let activeFileId = null;
-let fileMru = [];
-let currentProjectPath = null;
-let currentProjectName = 'No project loaded';
-let shiftTapCount = 0;
-let shiftTimer = null;
-let quickSearchSelectedIndex = 0;
-let quickSearchMode = 'file';
-let modalMode = 'create';
-let modalTargetFileId = null;
-let currentGit = null;
-let gitSyncSettings = {
-    splunkUrl: '',
-    remoteUrl: '',
-    remoteName: 'origin',
-    sharedBranch: 'main',
-    gitUserName: '',
-    gitUserEmail: ''
-};
-let queryVersions = [];
-let queryHasUnsavedChanges = false;
-let selectedVersionHashes = [];
 
 function getPrimarySelectedHash() {
-    return selectedVersionHashes.length ? selectedVersionHashes[selectedVersionHashes.length - 1] : null;
+    return state.selectedVersionHashes.length ? state.selectedVersionHashes[state.selectedVersionHashes.length - 1] : null;
 }
 
 function isMultiVersionCompare() {
-    return selectedVersionHashes.length === 2
-        && !selectedVersionHashes.includes(DRAFT_VERSION_HASH);
+    return state.selectedVersionHashes.length === 2
+        && !state.selectedVersionHashes.includes(DRAFT_VERSION_HASH);
 }
 
 function updateVersionSelectionUi() {
@@ -232,7 +205,7 @@ function handleVersionRowClick(event, hash) {
         toggleVersionMultiSelect(hash);
         return;
     }
-    const version = queryVersions.find(v => v.hash === hash);
+    const version = state.queryVersions.find(v => v.hash === hash);
     if (version) {
         selectQueryVersion(version);
     }
@@ -242,7 +215,7 @@ function toggleVersionMultiSelect(hash) {
     if (hash === DRAFT_VERSION_HASH) {
         return;
     }
-    let hashes = selectedVersionHashes.filter(h => h !== DRAFT_VERSION_HASH);
+    let hashes = state.selectedVersionHashes.filter(h => h !== DRAFT_VERSION_HASH);
     const idx = hashes.indexOf(hash);
     if (idx >= 0) {
         hashes.splice(idx, 1);
@@ -252,22 +225,9 @@ function toggleVersionMultiSelect(hash) {
             hashes.shift();
         }
     }
-    selectedVersionHashes = hashes;
+    state.selectedVersionHashes = hashes;
     updateVersionSelectionUi();
 }
-let queryRefreshGeneration = 0;
-let currentQueryText = '';
-let previewMode = 'preview';
-let historySidebarMode = 'history';
-let versionTags = [];
-let tagPopupTargetHash = null;
-let tagPopupClearMode = false;
-let confirmResolve = null;
-const restoreParentByFileId = new Map();
-const forcedDraftByFileId = new Set();
-const userDraftByFileId = new Set();
-const liveAceQueryByFileId = new Map();
-const liveDraftDebounceByFileId = new Map();
 
 const SAVED_SEARCH_SYNC_STATUS = {
     REMOTE_CHANGED: 'Remote changed',
@@ -277,7 +237,7 @@ const SAVED_SEARCH_SYNC_STATUS = {
 };
 
 function getSplunkRestSettings(url) {
-    const baseUrl = splunkUiUrlToRestBase(url || SPLUNK_URL);
+    const baseUrl = splunkUiUrlToRestBase(url || state.SPLUNK_URL);
     return baseUrl ? { baseUrl } : {};
 }
 
@@ -347,11 +307,11 @@ function versionPreviewText(version) {
 }
 
 async function getSavedSearchDraftStatus(file) {
-    if (!isSavedSearchFile(file) || !currentGit) {
+    if (!isSavedSearchFile(file) || !state.currentGit) {
         return { stale: false, hasDraft: false };
     }
     return getStanzaDraftStatus(
-        currentGit,
+        state.currentGit,
         getRelativePath(file),
         getSavedSearchStanzaName(file)
     );
@@ -360,21 +320,21 @@ async function getSavedSearchDraftStatus(file) {
 async function resolveEffectiveUnsavedChanges(file, trackedHash, fileStatus) {
     if (!isSavedSearchFile(file)) {
         if (trackedHash) {
-            return hasDraftChanges(currentGit, getRelativePath(file), trackedHash);
+            return hasDraftChanges(state.currentGit, getRelativePath(file), trackedHash);
         }
         return fileStatus.hasChanges;
     }
     const draftStatus = await getSavedSearchDraftStatus(file);
     return draftStatus.hasDraft
-        || forcedDraftByFileId.has(file.id)
-        || userDraftByFileId.has(file.id);
+        || state.forcedDraftByFileId.has(file.id)
+        || state.userDraftByFileId.has(file.id);
 }
 
 function getDiskRelativePath(file) {
     if (file.dashboard) {
         return getDashboardViewRelativePath(file.dashboard);
     }
-    return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
+    return path.relative(state.currentProjectPath, file.path).split(path.sep).join('/');
 }
 
 newProjectBtn.addEventListener('click', createNewProject);
@@ -424,7 +384,7 @@ tagPopupSave.addEventListener('click', () => saveTagFromPopup());
 tagPopupInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
         event.preventDefault();
-        if (tagPopupClearMode) {
+        if (state.tagPopupClearMode) {
             clearTagFromPopup();
         } else {
             saveTagFromPopup();
@@ -458,7 +418,7 @@ document.addEventListener('mousedown', event => {
     if (newItemMenu.classList.contains('visible') && !newItemMenu.contains(target) && target !== newFileBtn) {
         hideNewItemMenu();
     }
-    if (_findOverlay && !_findOverlay.overlay.contains(target)) {
+    if (state._findOverlay && !state._findOverlay.overlay.contains(target)) {
         hideFindOverlay();
     }
 });
@@ -510,7 +470,7 @@ window.onload = async () => {
     await loadGitSyncSettings();
     const workspacePath = await ipcRenderer.invoke('get-default-workspace');
     await loadProject(workspacePath);
-    if (files.length === 0) {
+    if (state.files.length === 0) {
         createNewFile('Search 1');
     } else {
         openStartupSearch();
@@ -518,17 +478,17 @@ window.onload = async () => {
 };
 
 async function loadGitSyncSettings() {
-    gitSyncSettings = await ipcRenderer.invoke('get-git-sync-settings');
-    SPLUNK_URL = normalizeSplunkAddress(gitSyncSettings.splunkUrl);
+    state.gitSyncSettings = await ipcRenderer.invoke('get-git-sync-settings');
+    state.SPLUNK_URL = normalizeSplunkAddress(state.gitSyncSettings.splunkUrl);
 }
 
 function populateGitSyncSettingsForm() {
-    gitSyncSplunkUrlInput.value = gitSyncSettings.splunkUrl || SPLUNK_URL;
-    gitSyncRemoteUrlInput.value = gitSyncSettings.remoteUrl || '';
-    gitSyncRemoteNameInput.value = gitSyncSettings.remoteName || 'origin';
-    gitSyncSharedBranchInput.value = gitSyncSettings.sharedBranch || 'main';
-    gitSyncUserNameInput.value = gitSyncSettings.gitUserName || '';
-    gitSyncUserEmailInput.value = gitSyncSettings.gitUserEmail || '';
+    gitSyncSplunkUrlInput.value = state.gitSyncSettings.splunkUrl || state.SPLUNK_URL;
+    gitSyncRemoteUrlInput.value = state.gitSyncSettings.remoteUrl || '';
+    gitSyncRemoteNameInput.value = state.gitSyncSettings.remoteName || 'origin';
+    gitSyncSharedBranchInput.value = state.gitSyncSettings.sharedBranch || 'main';
+    gitSyncUserNameInput.value = state.gitSyncSettings.gitUserName || '';
+    gitSyncUserEmailInput.value = state.gitSyncSettings.gitUserEmail || '';
 }
 
 function setGitSyncSettingsStatus(message, type = '') {
@@ -552,8 +512,8 @@ function closeGitSyncSettingsModal() {
 }
 
 function retargetOpenViewsToSplunkUrl() {
-    for (const file of files) {
-        file.url = withSplunkOrigin(file.url || SPLUNK_URL, SPLUNK_URL);
+    for (const file of state.files) {
+        file.url = withSplunkOrigin(file.url || state.SPLUNK_URL, state.SPLUNK_URL);
         const view = document.getElementById(file.id);
         if (view) {
             view.src = file.url;
@@ -591,9 +551,9 @@ async function saveGitSyncSettingsFromModal() {
 }
 
 function openStartupSearch() {
-    let fileId = fileMru.find(id => files.some(file => file.id === id));
+    let fileId = state.fileMru.find(id => state.files.some(file => file.id === id));
     if (!fileId) {
-        const sorted = [...files].sort((a, b) => {
+        const sorted = [...state.files].sort((a, b) => {
             const aMtime = fs.statSync(a.path).mtimeMs;
             const bMtime = fs.statSync(b.path).mtimeMs;
             return bMtime - aMtime;
@@ -606,12 +566,12 @@ function openStartupSearch() {
 }
 
 function copyActiveFileUrl() {
-    if (!activeFileId) {
+    if (!state.activeFileId) {
         alert('No file open');
         return;
     }
 
-    const file = files.find(f => f.id === activeFileId);
+    const file = state.files.find(f => f.id === state.activeFileId);
     
     saveFileUrl(file.id);
     
@@ -631,32 +591,32 @@ function copyActiveFileUrl() {
 }
 
 function duplicateCurrentTab() {
-    if (!activeFileId) {
+    if (!state.activeFileId) {
         alert('No file open to duplicate');
         return;
     }
 
-    const activeFile = files.find(f => f.id === activeFileId);
+    const activeFile = state.files.find(f => f.id === state.activeFileId);
     if (!activeFile) {
         return;
     }
 
     const baseName = activeFile.name.split('/').pop();
     const folder = getFileFolder(activeFile.name);
-    const newName = createDuplicateFileName(files, baseName);
+    const newName = createDuplicateFileName(state.files, baseName);
     createFileWithUrl(newName, activeFile.url, folder);
 }
 
 function createFileWithUrl(name, url, parentFolder = '') {
-    if (!currentProjectPath) {
+    if (!state.currentProjectPath) {
         alert('Please create or open a project before creating files.');
         return;
     }
 
     const savedSearch = parseSavedSearchFromUrl(url);
     const normalizedFileName = normalizeRelativePath(name);
-    const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
-    fileCounter++;
+    const fileId = `splunk-view-${Date.now()}-${state.fileCounter}`;
+    state.fileCounter++;
 
     const relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
     const filePath = getProjectFilePath(relativeFileName);
@@ -668,8 +628,8 @@ function createFileWithUrl(name, url, parentFolder = '') {
     if (savedSearch) {
         file.savedSearch = savedSearch;
     }
-    files.push(file);
-    fileMru.unshift(fileId);
+    state.files.push(file);
+    state.fileMru.unshift(fileId);
 
     createTab(file);
     createView(file);
@@ -679,25 +639,25 @@ function createFileWithUrl(name, url, parentFolder = '') {
 }
 
 function createNewFile(name, parentFolder = '') {
-    if (!currentProjectPath) {
+    if (!state.currentProjectPath) {
         alert('Please create or open a project before creating files.');
         return;
     }
 
-    const defaultName = `Search ${fileCounter}`;
+    const defaultName = `Search ${state.fileCounter}`;
     const fileName = name ? name.trim() || defaultName : defaultName;
     const normalizedFileName = normalizeRelativePath(fileName);
-    const fileId = `splunk-view-${Date.now()}-${fileCounter}`;
-    fileCounter++;
+    const fileId = `splunk-view-${Date.now()}-${state.fileCounter}`;
+    state.fileCounter++;
 
     const relativeFileName = parentFolder ? `${parentFolder}/${normalizedFileName}` : normalizedFileName;
     const filePath = getProjectFilePath(relativeFileName);
     ensureDirectoryExists(path.dirname(filePath));
-    fs.writeFileSync(filePath, SPLUNK_URL, 'utf8');
+    fs.writeFileSync(filePath, state.SPLUNK_URL, 'utf8');
 
-    const file = { id: fileId, name: relativeFileName, path: filePath, url: SPLUNK_URL };
-    files.push(file);
-    fileMru.unshift(fileId);
+    const file = { id: fileId, name: relativeFileName, path: filePath, url: state.SPLUNK_URL };
+    state.files.push(file);
+    state.fileMru.unshift(fileId);
 
     createTab(file);
     createView(file);
@@ -707,16 +667,16 @@ function createNewFile(name, parentFolder = '') {
 }
 
 function createNewFolder(name) {
-    if (!currentProjectPath) {
+    if (!state.currentProjectPath) {
         alert('Please create or open a project before creating folders.');
         return;
     }
 
-    const next = addIdeFolder(ideFolders, name);
-    if (JSON.stringify(next) === JSON.stringify(ideFolders)) {
+    const next = addIdeFolder(state.ideFolders, name);
+    if (JSON.stringify(next) === JSON.stringify(state.ideFolders)) {
         return;
     }
-    ideFolders = next;
+    state.ideFolders = next;
     syncFolderList();
     void persistIdeFolders();
     updateExplorer();
@@ -727,7 +687,7 @@ function getOpenTabIds() {
 }
 
 function closeTab(fileId) {
-    const file = files.find(f => f.id === fileId);
+    const file = state.files.find(f => f.id === fileId);
     if (!file) {
         return;
     }
@@ -735,7 +695,7 @@ function closeTab(fileId) {
     saveFileUrl(fileId);
 
     const openTabsBeforeClose = getOpenTabIds();
-    const wasActive = activeFileId === fileId;
+    const wasActive = state.activeFileId === fileId;
 
     const tab = tabBar.querySelector(`.tab[data-target-id="${fileId}"]`);
     if (tab) {
@@ -747,14 +707,14 @@ function closeTab(fileId) {
         view.remove();
     }
 
-    const tabState = closeFileState(files, openTabsBeforeClose, activeFileId, fileId, fileMru);
-    fileMru = tabState.fileMru;
+    const tabState = closeFileState(state.files, openTabsBeforeClose, state.activeFileId, fileId, state.fileMru);
+    state.fileMru = tabState.fileMru;
 
     if (wasActive) {
         if (tabState.activeFileId) {
             switchToFile(tabState.activeFileId);
         } else {
-            activeFileId = null;
+            state.activeFileId = null;
             document.querySelectorAll('webview').forEach(view => view.classList.remove('active'));
             document.querySelectorAll('.explorer-item').forEach(item => item.classList.remove('active'));
         }
@@ -775,22 +735,22 @@ function deleteFolder(folderPath) {
         return;
     }
 
-    ideFolders = removeIdeFolder(ideFolders, folderPath);
+    state.ideFolders = removeIdeFolder(state.ideFolders, folderPath);
     syncFolderList();
-    collapsedExplorerFolders.delete(folderPath);
+    state.collapsedExplorerFolders.delete(folderPath);
     persistCollapsedExplorerFolders();
     void persistIdeFolders();
     updateExplorer();
 }
 
 function removeFile(fileId, deleteFromDisk = false) {
-    const wasActive = activeFileId === fileId;
-    const file = files.find(f => f.id === fileId);
-    files = files.filter(file => file.id !== fileId);
-    fileMru = fileMru.filter(id => id !== fileId);
+    const wasActive = state.activeFileId === fileId;
+    const file = state.files.find(f => f.id === fileId);
+    state.files = state.files.filter(file => file.id !== fileId);
+    state.fileMru = state.fileMru.filter(id => id !== fileId);
 
     if (file) {
-        ideFolders = pruneIdeFolders(ideFolders, files.map(explorerIdForFile));
+        state.ideFolders = pruneIdeFolders(state.ideFolders, state.files.map(explorerIdForFile));
         syncFolderList();
         void persistIdeFolders();
     }
@@ -806,16 +766,16 @@ function removeFile(fileId, deleteFromDisk = false) {
         if (remainingTabs.length > 0) {
             switchToFile(remainingTabs[0].dataset.targetId);
         } else {
-            activeFileId = null;
-            if (files.length > 0) {
-                openFile(files[0].id);
+            state.activeFileId = null;
+            if (state.files.length > 0) {
+                openFile(state.files[0].id);
             }
         }
     }
 }
 
 function openFile(fileId) {
-    const file = files.find(f => f.id === fileId);
+    const file = state.files.find(f => f.id === fileId);
     if (!file) {
         return;
     }
@@ -831,7 +791,7 @@ function openFile(fileId) {
 }
 
 function getProjectFilePath(fileName) {
-    return buildProjectFilePath(currentProjectPath, fileName, path);
+    return buildProjectFilePath(state.currentProjectPath, fileName, path);
 }
 
 function ensureDirectoryExists(directoryPath) {
@@ -843,7 +803,7 @@ function scanProjectFiles(directory) {
 }
 
 function scanProjectFolders(directory) {
-    return scanProjectFoldersOnDisk(fs, path, directory, currentProjectPath);
+    return scanProjectFoldersOnDisk(fs, path, directory, state.currentProjectPath);
 }
 
 function getViewUrl(fileId) {
@@ -861,11 +821,11 @@ function getViewUrl(fileId) {
 function renderEmptySavedSearchHistory() {
     queryHistoryTitle.textContent = 'Query History';
     queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see its history.</div>';
-    currentQueryText = '';
-    queryHasUnsavedChanges = false;
-    queryVersions = [];
-    versionTags = [];
-    selectedVersionHashes = [];
+    state.currentQueryText = '';
+    state.queryHasUnsavedChanges = false;
+    state.queryVersions = [];
+    state.versionTags = [];
+    state.selectedVersionHashes = [];
     renderVersionPreview();
     queryHistoryStatus.textContent = '';
     queryHistoryStatus.classList.remove('dirty');
@@ -876,18 +836,18 @@ function renderEmptySavedSearchHistory() {
 
 function clearDashboardContext(file, url) {
     delete file.dashboard;
-    forcedDraftByFileId.delete(file.id);
-    userDraftByFileId.delete(file.id);
-    restoreParentByFileId.delete(file.id);
+    state.forcedDraftByFileId.delete(file.id);
+    state.userDraftByFileId.delete(file.id);
+    state.restoreParentByFileId.delete(file.id);
     if (url && url !== file.url) {
         file.url = url;
         if (fs.existsSync(file.path)) {
             fs.writeFileSync(file.path, url, 'utf8');
         }
-        userDraftByFileId.add(file.id);
+        state.userDraftByFileId.add(file.id);
     }
-    selectedVersionHashes = [];
-    if (file.id === activeFileId) {
+    state.selectedVersionHashes = [];
+    if (file.id === state.activeFileId) {
         renderEmptySavedSearchHistory();
     }
     onQueryFileChanged(file.id);
@@ -897,25 +857,25 @@ function clearSavedSearchContext(file, url) {
     delete file.savedSearch;
     delete file.savedSearchStanzaSource;
     file.savedSearchSyncStatus = '';
-    forcedDraftByFileId.delete(file.id);
-    userDraftByFileId.delete(file.id);
-    restoreParentByFileId.delete(file.id);
+    state.forcedDraftByFileId.delete(file.id);
+    state.userDraftByFileId.delete(file.id);
+    state.restoreParentByFileId.delete(file.id);
     if (url && url !== file.url) {
         file.url = url;
         if (fs.existsSync(file.path)) {
             fs.writeFileSync(file.path, url, 'utf8');
         }
-        userDraftByFileId.add(file.id);
+        state.userDraftByFileId.add(file.id);
     }
-    selectedVersionHashes = [];
-    if (file.id === activeFileId) {
+    state.selectedVersionHashes = [];
+    if (file.id === state.activeFileId) {
         renderEmptySavedSearchHistory();
     }
     onQueryFileChanged(file.id);
 }
 
 async function syncFileFromViewUrl(fileId) {
-    const file = files.find(f => f.id === fileId);
+    const file = state.files.find(f => f.id === fileId);
     if (!file?.path) {
         return;
     }
@@ -956,7 +916,7 @@ async function syncFileFromViewUrl(fileId) {
                 } else if (url !== file.url) {
                     file.url = url;
                     fs.writeFileSync(file.path, url, 'utf8');
-                    userDraftByFileId.add(fileId);
+                    state.userDraftByFileId.add(fileId);
                     onQueryFileChanged(fileId, { refreshHistory: true });
                 }
                 await applyDashboardToFile(file, dashboard, url);
@@ -973,7 +933,7 @@ async function syncFileFromViewUrl(fileId) {
         } else if (url !== file.url) {
             file.url = url;
             fs.writeFileSync(file.path, url, 'utf8');
-            userDraftByFileId.add(fileId);
+            state.userDraftByFileId.add(fileId);
             onQueryFileChanged(fileId, { refreshHistory: true });
         }
         return;
@@ -1002,7 +962,7 @@ async function syncFileFromViewUrl(fileId) {
 }
 
 async function syncSavedSearchDraftOnNavigate(file) {
-    if (!isSavedSearchFile(file) || !currentGit) {
+    if (!isSavedSearchFile(file) || !state.currentGit) {
         return;
     }
 
@@ -1015,18 +975,18 @@ async function syncSavedSearchDraftOnNavigate(file) {
     const stanzaName = getSavedSearchStanzaName(file);
     let headHash = '';
     try {
-        headHash = (await currentGit.revparse(['HEAD'])).trim();
+        headHash = (await state.currentGit.revparse(['HEAD'])).trim();
     } catch {
         return;
     }
 
-    const headStanza = await readVersionStanza(currentGit, relativePath, headHash, stanzaName) || '';
+    const headStanza = await readVersionStanza(state.currentGit, relativePath, headHash, stanzaName) || '';
     const headSearch = extractSearchFromStanza(headStanza);
     const draftStatus = await getSavedSearchDraftStatus(file);
     const action = resolveSavedSearchDirtyOnNavigate({
         liveQuery: live,
         headSearchQuery: headSearch,
-        hasForcedDraft: forcedDraftByFileId.has(file.id),
+        hasForcedDraft: state.forcedDraftByFileId.has(file.id),
         hasDurableDraft: draftStatus.hasDraft
     });
 
@@ -1035,18 +995,18 @@ async function syncSavedSearchDraftOnNavigate(file) {
     }
 
     if (action === 'clear') {
-        userDraftByFileId.delete(file.id);
+        state.userDraftByFileId.delete(file.id);
         return;
     }
 
-    userDraftByFileId.add(file.id);
-    const drafts = await listStanzaDraftsForConf(currentGit, relativePath);
+    state.userDraftByFileId.add(file.id);
+    const drafts = await listStanzaDraftsForConf(state.currentGit, relativePath);
     const existing = drafts.find((draft) => draft.name === stanzaName);
     const baseStanza = existing?.text || headStanza;
     if (extractSearchFromStanza(baseStanza) !== live) {
         const stanzaText = setStanzaSearch(baseStanza, stanzaName, live);
-        await saveStanzaDraft(currentGit, relativePath, stanzaName, headHash, stanzaText);
-        await recomposeWorktree(currentGit, relativePath, headHash);
+        await saveStanzaDraft(state.currentGit, relativePath, stanzaName, headHash, stanzaText);
+        await recomposeWorktree(state.currentGit, relativePath, headHash);
     }
 }
 
@@ -1055,8 +1015,8 @@ function saveFileUrl(fileId) {
 }
 
 async function handleSplunkSave(fileId) {
-    const file = files.find(f => f.id === fileId);
-    if (!file?.savedSearch || !currentGit) {
+    const file = state.files.find(f => f.id === fileId);
+    if (!file?.savedSearch || !state.currentGit) {
         return;
     }
 
@@ -1084,7 +1044,7 @@ async function handleSplunkSave(fileId) {
 
     try {
         const result = await saveStanzaVersion(
-            currentGit,
+            state.currentGit,
             relativePath,
             stanzaName,
             'Splunk save',
@@ -1093,17 +1053,17 @@ async function handleSplunkSave(fileId) {
         let hash = '';
         if (result.saved && result.hash) {
             hash = result.hash;
-            restoreParentByFileId.set(file.id, hash);
-            forcedDraftByFileId.delete(file.id);
-            userDraftByFileId.delete(file.id);
-            liveAceQueryByFileId.delete(file.id);
+            state.restoreParentByFileId.set(file.id, hash);
+            state.forcedDraftByFileId.delete(file.id);
+            state.userDraftByFileId.delete(file.id);
+            state.liveAceQueryByFileId.delete(file.id);
             file.savedSearchStanzaSource = 'head';
             await pushSavedSearchHistoryAfterSave(file);
         } else {
-            hash = restoreParentByFileId.get(file.id) || '';
+            hash = state.restoreParentByFileId.get(file.id) || '';
             if (!hash) {
                 const versions = await listVersions(
-                    currentGit,
+                    state.currentGit,
                     relativePath,
                     1,
                     getListVersionsOptions(file)
@@ -1115,9 +1075,9 @@ async function handleSplunkSave(fileId) {
             }
         }
 
-        const tagName = formatSplunkSaveTagName(gitSyncSettings.gitUserName, hash);
+        const tagName = formatSplunkSaveTagName(state.gitSyncSettings.gitUserName, hash);
         await setVersionTag(
-            currentGit,
+            state.currentGit,
             relativePath,
             hash,
             tagName,
@@ -1126,7 +1086,7 @@ async function handleSplunkSave(fileId) {
         if (isStaleSplunkImportSyncStatus(file.savedSearchSyncStatus)) {
             file.savedSearchSyncStatus = '';
         }
-        if (fileId === activeFileId) {
+        if (fileId === state.activeFileId) {
             await refreshQueryHistory();
         }
     } catch (err) {
@@ -1145,7 +1105,7 @@ async function applySavedSearchToFile(file, savedSearch, url) {
 
     const nextId = explorerIdForFile(file);
     if (previousId !== nextId) {
-        ideFolders = replaceItemId(ideFolders, previousId, nextId);
+        state.ideFolders = replaceItemId(state.ideFolders, previousId, nextId);
         syncFolderList();
         void persistIdeFolders();
         updateExplorer();
@@ -1171,27 +1131,27 @@ function resolveDashboardFromFile(file, currentUrl) {
 }
 
 async function syncDashboardTrackedBase(file) {
-    if (!file?.dashboard || !currentGit) {
+    if (!file?.dashboard || !state.currentGit) {
         return;
     }
 
     const relativePath = getRelativePath(file);
-    const versions = await listVersions(currentGit, relativePath, 1);
+    const versions = await listVersions(state.currentGit, relativePath, 1);
     if (versions.length === 0) {
         return;
     }
 
     const latestHash = versions[0].hash;
-    restoreParentByFileId.set(file.id, latestHash);
-    if (!userDraftByFileId.has(file.id) && !forcedDraftByFileId.has(file.id)) {
-        userDraftByFileId.delete(file.id);
-        forcedDraftByFileId.delete(file.id);
+    state.restoreParentByFileId.set(file.id, latestHash);
+    if (!state.userDraftByFileId.has(file.id) && !state.forcedDraftByFileId.has(file.id)) {
+        state.userDraftByFileId.delete(file.id);
+        state.forcedDraftByFileId.delete(file.id);
     }
 }
 
 async function enterDashboardHistory(file, currentUrl) {
     resolveDashboardFromFile(file, currentUrl);
-    if (!file?.dashboard || !currentGit || !currentProjectPath) {
+    if (!file?.dashboard || !state.currentGit || !state.currentProjectPath) {
         return;
     }
 
@@ -1201,8 +1161,8 @@ async function enterDashboardHistory(file, currentUrl) {
 
     try {
         const result = await openDashboardHistory({
-            git: currentGit,
-            workspaceRoot: currentProjectPath,
+            git: state.currentGit,
+            workspaceRoot: state.currentProjectPath,
             metadata: file.dashboard,
             restSettings: getSplunkRestSettings(url),
             remoteSettings: getGitRemoteSettings(),
@@ -1225,7 +1185,7 @@ async function enterDashboardHistory(file, currentUrl) {
 }
 
 async function applyDashboardToFile(file, dashboard, url) {
-    if (!currentGit || !currentProjectPath) {
+    if (!state.currentGit || !state.currentProjectPath) {
         file.dashboard = dashboard;
         file.url = url;
         return;
@@ -1236,8 +1196,8 @@ async function applyDashboardToFile(file, dashboard, url) {
     file.savedSearchSyncStatus = '';
 
     const result = await openDashboardHistory({
-        git: currentGit,
-        workspaceRoot: currentProjectPath,
+        git: state.currentGit,
+        workspaceRoot: state.currentProjectPath,
         metadata: dashboard,
         restSettings: getSplunkRestSettings(url),
         remoteSettings: getGitRemoteSettings(),
@@ -1251,7 +1211,7 @@ async function applyDashboardToFile(file, dashboard, url) {
     }
 
     const viewPath = result.viewPath || getDashboardViewRelativePath(file.dashboard);
-    const absoluteViewPath = path.join(currentProjectPath, viewPath);
+    const absoluteViewPath = path.join(state.currentProjectPath, viewPath);
 
     if (file.path !== absoluteViewPath) {
         ensureDirectoryExists(path.dirname(absoluteViewPath));
@@ -1283,7 +1243,7 @@ function populateFolderSelect(selectedValue = '') {
     rootOption.textContent = 'Root';
     newFileFolderSelect.appendChild(rootOption);
 
-    const sortedFolders = [...folders].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const sortedFolders = [...state.folders].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     sortedFolders.forEach(folderPath => {
         const option = document.createElement('option');
         option.value = folderPath;
@@ -1300,22 +1260,22 @@ function getSelectedFolder() {
 }
 
 function openMoveFileModal(file) {
-    modalMode = 'move';
-    modalTargetFileId = file.id;
+    state.modalMode = 'move';
+    state.modalTargetFileId = file.id;
     newFileModalLabel.textContent = `Move "${file.name.split('/').pop()}" to folder`;
     newFileModalInput.value = file.name.split('/').pop();
     newFileModalInput.disabled = true;
-    populateFolderSelect(folderForId(ideFolders, explorerIdForFile(file)));
+    populateFolderSelect(folderForId(state.ideFolders, explorerIdForFile(file)));
     showNewFileModal();
 }
 
 async function moveFile(fileId, targetFolder) {
-    const file = files.find(f => f.id === fileId);
+    const file = state.files.find(f => f.id === fileId);
     if (!file) {
         return;
     }
 
-    ideFolders = setItemFolder(ideFolders, explorerIdForFile(file), targetFolder);
+    state.ideFolders = setItemFolder(state.ideFolders, explorerIdForFile(file), targetFolder);
     syncFolderList();
     await persistIdeFolders();
     updateExplorer();
@@ -1350,22 +1310,22 @@ async function openProject() {
 }
 
 async function loadProject(projectPath) {
-    currentProjectPath = projectPath;
-    currentProjectName = path.basename(projectPath);
+    state.currentProjectPath = projectPath;
+    state.currentProjectName = path.basename(projectPath);
     updateProjectDisplay();
     await initializeQueryVersions();
 
-    files = [];
-    folders = [];
-    ideFolders = {};
-    fileMru = [];
-    activeFileId = null;
-    restoreParentByFileId.clear();
-    forcedDraftByFileId.clear();
-    userDraftByFileId.clear();
+    state.files = [];
+    state.folders = [];
+    state.ideFolders = {};
+    state.fileMru = [];
+    state.activeFileId = null;
+    state.restoreParentByFileId.clear();
+    state.forcedDraftByFileId.clear();
+    state.userDraftByFileId.clear();
     clearOpenTabs();
 
-    const filePaths = scanProjectFiles(currentProjectPath);
+    const filePaths = scanProjectFiles(state.currentProjectPath);
     const sortedPaths = [...filePaths].sort((left, right) => {
         const leftCanonical = left.includes(`${path.sep}saved-searches${path.sep}`) ? 0 : 1;
         const rightCanonical = right.includes(`${path.sep}saved-searches${path.sep}`) ? 0 : 1;
@@ -1373,7 +1333,7 @@ async function loadProject(projectPath) {
     });
     const seenSavedSearchIds = new Set();
     for (const filePath of sortedPaths) {
-        const url = withSplunkOrigin(fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL, SPLUNK_URL);
+        const url = withSplunkOrigin(fs.readFileSync(filePath, 'utf8').trim() || state.SPLUNK_URL, state.SPLUNK_URL);
         const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
         const savedSearch = parseSavedSearchFromUrl(url);
         if (savedSearch) {
@@ -1386,10 +1346,10 @@ async function loadProject(projectPath) {
         const fileRecord = { id: `splunk-view-${Date.now()}-${Math.random()}`, name, path: filePath, url };
         if (savedSearch) {
             fileRecord.savedSearch = savedSearch;
-            files.push(fileRecord);
+            state.files.push(fileRecord);
             await applySavedSearchToFile(fileRecord, savedSearch, url);
         } else {
-            files.push(fileRecord);
+            state.files.push(fileRecord);
         }
     }
 
@@ -1410,18 +1370,18 @@ function hideNewItemMenu() {
 }
 
 function syncFolderList() {
-    folders = folderNames(ideFolders);
+    state.folders = folderNames(state.ideFolders);
 }
 
 function collapsedFoldersStorageKey() {
-    return `${EXPLORER_COLLAPSED_KEY}:${currentProjectPath || ''}`;
+    return `${EXPLORER_COLLAPSED_KEY}:${state.currentProjectPath || ''}`;
 }
 
 function loadCollapsedExplorerFolders() {
     try {
-        collapsedExplorerFolders = new Set(JSON.parse(localStorage.getItem(collapsedFoldersStorageKey()) || '[]'));
+        state.collapsedExplorerFolders = new Set(JSON.parse(localStorage.getItem(collapsedFoldersStorageKey()) || '[]'));
     } catch {
-        collapsedExplorerFolders = new Set();
+        state.collapsedExplorerFolders = new Set();
     }
 }
 
@@ -1430,15 +1390,15 @@ function persistCollapsedExplorerFolders() {
 }
 
 async function persistIdeFolders() {
-    if (!currentProjectPath) {
+    if (!state.currentProjectPath) {
         return;
     }
-    writeIdeFolders(currentProjectPath, ideFolders);
-    if (!currentGit) {
+    writeIdeFolders(state.currentProjectPath, state.ideFolders);
+    if (!state.currentGit) {
         return;
     }
     try {
-        await saveVersion(currentGit, IDE_FOLDERS_FILE, 'Update search folders', undefined, {
+        await saveVersion(state.currentGit, IDE_FOLDERS_FILE, 'Update search folders', undefined, {
             author: getGitAuthorFromSettings(),
         });
     } catch (err) {
@@ -1447,56 +1407,56 @@ async function persistIdeFolders() {
 }
 
 function loadIdeFoldersFromProject() {
-    const knownIds = files.map(explorerIdForFile);
-    ideFolders = pruneIdeFolders(readIdeFolders(currentProjectPath), knownIds);
+    const knownIds = state.files.map(explorerIdForFile);
+    state.ideFolders = pruneIdeFolders(readIdeFolders(state.currentProjectPath), knownIds);
     syncFolderList();
 }
 
 function updateProjectDisplay() {
-    projectNameLabel.textContent = currentProjectPath ? currentProjectName : 'No project loaded';
-    projectNameLabel.title = currentProjectPath || '';
-    newFileBtn.disabled = !currentProjectPath;
-    newFolderBtn.disabled = !currentProjectPath;
-    if (!currentProjectPath) {
+    projectNameLabel.textContent = state.currentProjectPath ? state.currentProjectName : 'No project loaded';
+    projectNameLabel.title = state.currentProjectPath || '';
+    newFileBtn.disabled = !state.currentProjectPath;
+    newFolderBtn.disabled = !state.currentProjectPath;
+    if (!state.currentProjectPath) {
         hideNewItemMenu();
     }
 }
 
 function openNewFileModal() {
-    modalMode = 'create';
-    modalTargetFileId = null;
+    state.modalMode = 'create';
+    state.modalTargetFileId = null;
     newFileModalLabel.textContent = 'New Search';
-    newFileModalInput.value = `Search ${fileCounter}`;
+    newFileModalInput.value = `Search ${state.fileCounter}`;
     showNewFileModal();
 }
 
 function openNewFolderModal() {
-    modalMode = 'folder';
-    modalTargetFileId = null;
+    state.modalMode = 'folder';
+    state.modalTargetFileId = null;
     newFileModalLabel.textContent = 'New Folder Name';
     newFileModalInput.value = '';
     showNewFileModal();
 }
 
 function openRenameModal(file) {
-    modalMode = 'rename';
-    modalTargetFileId = file.id;
+    state.modalMode = 'rename';
+    state.modalTargetFileId = file.id;
     newFileModalLabel.textContent = `Rename "${file.name.split('/').pop()}"`;
     newFileModalInput.value = file.name;
     showNewFileModal();
 }
 
 function showNewFileModal() {
-    if (modalMode === 'rename') {
-        newFileModalLabel.textContent = `Rename "${files.find(f => f.id === modalTargetFileId)?.name.split('/').pop() || ''}"`;
+    if (state.modalMode === 'rename') {
+        newFileModalLabel.textContent = `Rename "${state.files.find(f => f.id === state.modalTargetFileId)?.name.split('/').pop() || ''}"`;
         newFileFolderRow.style.display = 'none';
         newFileModalInput.disabled = false;
-    } else if (modalMode === 'folder') {
+    } else if (state.modalMode === 'folder') {
         newFileModalLabel.textContent = 'New Folder Name';
         newFileFolderRow.style.display = 'none';
         newFileModalInput.disabled = false;
-    } else if (modalMode === 'move') {
-        newFileModalLabel.textContent = `Move "${files.find(f => f.id === modalTargetFileId)?.name.split('/').pop() || ''}" to folder`;
+    } else if (state.modalMode === 'move') {
+        newFileModalLabel.textContent = `Move "${state.files.find(f => f.id === state.modalTargetFileId)?.name.split('/').pop() || ''}" to folder`;
         newFileFolderRow.style.display = 'block';
         newFileModalInput.disabled = true;
     } else {
@@ -1505,16 +1465,16 @@ function showNewFileModal() {
         newFileModalInput.disabled = false;
     }
 
-    if (modalMode === 'rename') {
+    if (state.modalMode === 'rename') {
         newFileCreateBtn.textContent = 'Rename';
-    } else if (modalMode === 'move') {
+    } else if (state.modalMode === 'move') {
         newFileCreateBtn.textContent = 'Move';
-    } else if (modalMode === 'folder') {
+    } else if (state.modalMode === 'folder') {
         newFileCreateBtn.textContent = 'Create Folder';
     } else {
         newFileCreateBtn.textContent = 'Create';
     }
-    newFileModalInput.placeholder = modalMode === 'folder' ? 'Folder name' : 'Enter file name or path';
+    newFileModalInput.placeholder = state.modalMode === 'folder' ? 'Folder name' : 'Enter file name or path';
     newFileModal.classList.add('visible');
     setTimeout(() => {
         newFileModalInput.select();
@@ -1524,19 +1484,19 @@ function showNewFileModal() {
 
 function closeNewFileModal() {
     newFileModal.classList.remove('visible');
-    modalMode = 'create';
-    modalTargetFileId = null;
+    state.modalMode = 'create';
+    state.modalTargetFileId = null;
 }
 
 function confirmNewFileCreation() {
     const name = newFileModalInput.value;
     const selectedFolder = getSelectedFolder();
-    if (modalMode === 'rename' && modalTargetFileId) {
-        renameFile(modalTargetFileId, name);
-    } else if (modalMode === 'folder') {
+    if (state.modalMode === 'rename' && state.modalTargetFileId) {
+        renameFile(state.modalTargetFileId, name);
+    } else if (state.modalMode === 'folder') {
         createNewFolder(name);
-    } else if (modalMode === 'move' && modalTargetFileId) {
-        moveFile(modalTargetFileId, selectedFolder);
+    } else if (state.modalMode === 'move' && state.modalTargetFileId) {
+        moveFile(state.modalTargetFileId, selectedFolder);
     } else {
         createNewFile(name);
     }
@@ -1544,7 +1504,7 @@ function confirmNewFileCreation() {
 }
 
 async function renameFile(fileId, newName) {
-    const file = files.find(f => f.id === fileId);
+    const file = state.files.find(f => f.id === fileId);
     if (!file) {
         return;
     }
@@ -1566,12 +1526,12 @@ async function renameFile(fileId, newName) {
         return;
     }
 
-    if (currentGit) {
+    if (state.currentGit) {
         await renameQueryFile(
-            currentGit,
-            currentProjectPath,
+            state.currentGit,
+            state.currentProjectPath,
             oldRelative,
-            path.relative(currentProjectPath, newPath).split(path.sep).join('/')
+            path.relative(state.currentProjectPath, newPath).split(path.sep).join('/')
         );
     } else {
         ensureDirectoryExists(path.dirname(newPath));
@@ -1590,7 +1550,7 @@ function updateTabLabel(file) {
 }
 
 function createTab(file) {
-    const tab = createTabElement(document, file, activeFileId, {
+    const tab = createTabElement(document, file, state.activeFileId, {
         onClose: closeTab,
         onSwitch: switchToFile,
     });
@@ -1652,7 +1612,7 @@ function createView(file) {
         
     }
     // set src after preload so the preload script is injected
-    view.src = file.url || SPLUNK_URL;
+    view.src = file.url || state.SPLUNK_URL;
     viewsContainer.appendChild(view);
 
     // Listen for key events forwarded from the webview preload
@@ -1801,10 +1761,10 @@ function updateNavButtons() {
 // Update nav buttons whenever active tab changes
 const originalSwitchToFile = switchToFile;
 switchToFile = function(targetId) {
-    const prevFileId = activeFileId;
+    const prevFileId = state.activeFileId;
     originalSwitchToFile(targetId);
     if (prevFileId !== targetId) {
-        selectedVersionHashes = [];
+        state.selectedVersionHashes = [];
     }
     try { setTimeout(updateNavButtons, 50); } catch (e) {}
     refreshQueryDirtyState(targetId);
@@ -1812,7 +1772,7 @@ switchToFile = function(targetId) {
         await syncFileFromViewUrl(targetId);
         if (!querySidebar.classList.contains('collapsed')) {
             await refreshQueryHistory();
-        } else if (activeFileId && localStorage.getItem(QUERY_SIDEBAR_COLLAPSED_KEY) !== 'true') {
+        } else if (state.activeFileId && localStorage.getItem(QUERY_SIDEBAR_COLLAPSED_KEY) !== 'true') {
             setQueryHistoryPanelOpen(true);
         }
     })();
@@ -1841,19 +1801,19 @@ function reorderTabs(draggedFileId, targetFileId, dropEvent) {
 }
 
 function switchToFile(targetId) {
-    if (!files.some(file => file.id === targetId)) {
+    if (!state.files.some(file => file.id === targetId)) {
         return;
     }
 
-    if (activeFileId && activeFileId !== targetId) {
-        const outgoingView = document.getElementById(activeFileId);
+    if (state.activeFileId && state.activeFileId !== targetId) {
+        const outgoingView = document.getElementById(state.activeFileId);
         try { outgoingView?.__endSelectionDrag?.(); } catch (e) {}
-        saveFileUrl(activeFileId);
+        saveFileUrl(state.activeFileId);
     }
 
-    activeFileId = targetId;
-    fileMru = fileMru.filter(id => id !== targetId);
-    fileMru.unshift(targetId);
+    state.activeFileId = targetId;
+    state.fileMru = state.fileMru.filter(id => id !== targetId);
+    state.fileMru.unshift(targetId);
 
     setActiveTab(tabBar, targetId);
 
@@ -1899,15 +1859,15 @@ function handleKeyboardShortcut(d) {
 
     // Handle Shift-Shift for quick search
     if (key === 'shift') {
-        shiftTapCount += 1;
+        state.shiftTapCount += 1;
 
-        if (shiftTapCount === 1) {
-            shiftTimer = globalThis.setTimeout(() => {
-                shiftTapCount = 0;
+        if (state.shiftTapCount === 1) {
+            state.shiftTimer = globalThis.setTimeout(() => {
+                state.shiftTapCount = 0;
             }, 400);
-        } else if (shiftTapCount === 2) {
-            globalThis.clearTimeout(shiftTimer);
-            shiftTapCount = 0;
+        } else if (state.shiftTapCount === 2) {
+            globalThis.clearTimeout(state.shiftTimer);
+            state.shiftTapCount = 0;
             openQuickSearch();
         }
         return;
@@ -1975,7 +1935,7 @@ function setHistorySidebarMode(mode) {
     if (mode !== 'history' && mode !== 'tree' && mode !== 'tags') {
         return;
     }
-    historySidebarMode = mode;
+    state.historySidebarMode = mode;
     historyTabs.forEach(tab => {
         tab.classList.toggle('active', tab.dataset.mode === mode);
     });
@@ -1983,11 +1943,11 @@ function setHistorySidebarMode(mode) {
 }
 
 function updateExplorer() {
-    const { fileList, folderList } = toExplorerInput(files, ideFolders);
+    const { fileList, folderList } = toExplorerInput(state.files, state.ideFolders);
     const tree = buildFileTree(fileList, folderList);
     renderExplorer(explorer, tree, {
-        activeFileId,
-        isEmpty: files.length === 0 && folderList.length === 0,
+        activeFileId: state.activeFileId,
+        isEmpty: state.files.length === 0 && folderList.length === 0,
         hideRootLabel: true,
     }, {
         onFileClick: openFile,
@@ -1996,12 +1956,12 @@ function updateExplorer() {
         onFileDelete: deleteFile,
         onFolderDelete: deleteFolder,
         onFileDrop: (fileId, folderPath) => { void moveFile(fileId, folderPath); },
-        isFolderOpen: folderPath => !collapsedExplorerFolders.has(folderPath),
+        isFolderOpen: folderPath => !state.collapsedExplorerFolders.has(folderPath),
         onFolderToggle: (folderPath, open) => {
             if (open) {
-                collapsedExplorerFolders.delete(folderPath);
+                state.collapsedExplorerFolders.delete(folderPath);
             } else {
-                collapsedExplorerFolders.add(folderPath);
+                state.collapsedExplorerFolders.add(folderPath);
             }
             persistCollapsedExplorerFolders();
         },
@@ -2009,33 +1969,33 @@ function updateExplorer() {
 }
 
 function openMostRecentTab() {
-    if (fileMru.length < 2) {
+    if (state.fileMru.length < 2) {
         return;
     }
 
-    const targetId = fileMru[1];
+    const targetId = state.fileMru[1];
     switchToFile(targetId);
 }
 
 function switchToPreviousTab() {
-    const previousTabId = getPreviousTab(getOpenTabIds(), activeFileId);
+    const previousTabId = getPreviousTab(getOpenTabIds(), state.activeFileId);
     if (previousTabId) {
         switchToFile(previousTabId);
     }
 }
 
 function switchToNextTab() {
-    const nextTabId = getNextTab(getOpenTabIds(), activeFileId);
+    const nextTabId = getNextTab(getOpenTabIds(), state.activeFileId);
     if (nextTabId) {
         switchToFile(nextTabId);
     }
 }
 
 function openQuickSearch(mode = 'file') {
-    quickSearchMode = mode;
+    state.quickSearchMode = mode;
     quickSearchOverlay.classList.add('visible');
     quickSearchInput.value = '';
-    quickSearchSelectedIndex = 0;
+    state.quickSearchSelectedIndex = 0;
     quickSearchInput.placeholder = mode === 'content' ? 'Search file contents...' : 'Search files...';
     quickSearchHint.textContent = mode === 'content'
         ? 'Type to search all file contents. Use arrow keys and Enter to open.'
@@ -2045,11 +2005,8 @@ function openQuickSearch(mode = 'file') {
 }
 
 // Inline find overlay for Ctrl+F (behaves like Chrome's find)
-let _findOverlay = null;
-let _lastFindQuery = '';
-let _findWasActive = false;
 function createFindOverlay() {
-    if (_findOverlay) return _findOverlay;
+    if (state._findOverlay) return state._findOverlay;
     const overlay = document.createElement('div');
     overlay.id = 'find-overlay';
     overlay.style.position = 'fixed';
@@ -2127,29 +2084,29 @@ function createFindOverlay() {
     });
     closeBtn.addEventListener('click', hideFindOverlay);
 
-    _findOverlay = { overlay, input, prevBtn, nextBtn, closeBtn };
-    return _findOverlay;
+    state._findOverlay = { overlay, input, prevBtn, nextBtn, closeBtn };
+    return state._findOverlay;
 }
 
 function showFindOverlay(view) {
     const f = createFindOverlay();
-    f.input.value = _lastFindQuery || '';
+    f.input.value = state._lastFindQuery || '';
     f.input.focus();
     f.input.select();
-    _findWasActive = true;
+    state._findWasActive = true;
 }
 
 function hideFindOverlay() {
-    if (!_findOverlay) return;
+    if (!state._findOverlay) return;
     try {
         // remove overlay from DOM
-        _findOverlay.overlay.remove();
+        state._findOverlay.overlay.remove();
     } catch (e) {
         // ignore
     }
-    _findOverlay = null;
-    _lastFindQuery = '';
-    _findWasActive = false;
+    state._findOverlay = null;
+    state._lastFindQuery = '';
+    state._findWasActive = false;
     try {
         const view = document.querySelector('webview.active');
         if (view) {
@@ -2163,7 +2120,7 @@ function hideFindOverlay() {
 
 function doFind(text, forward = true, findNext = false) {
     if (!text) return;
-    _lastFindQuery = text;
+    state._lastFindQuery = text;
     try {
         const view = document.querySelector('webview.active');
         if (!view) return;
@@ -2181,10 +2138,10 @@ function closeQuickSearch() {
 function updateQuickSearchResults() {
     const query = quickSearchInput.value;
     const { results, awaitingQuery } = filterQuickSearchResults(
-        files,
-        folders,
+        state.files,
+        state.folders,
         query,
-        quickSearchMode,
+        state.quickSearchMode,
         file => {
             try {
                 const rawText = fs.readFileSync(file.path, 'utf8');
@@ -2197,9 +2154,9 @@ function updateQuickSearchResults() {
 
     renderQuickSearchResults(quickSearchResults, {
         results,
-        selectedIndex: quickSearchSelectedIndex,
-        mode: quickSearchMode,
-        emptyMessage: getQuickSearchEmptyMessage(quickSearchMode, awaitingQuery),
+        selectedIndex: state.quickSearchSelectedIndex,
+        mode: state.quickSearchMode,
+        emptyMessage: getQuickSearchEmptyMessage(state.quickSearchMode, awaitingQuery),
     }, {
         onSelect: activateFileFromQuickSearch,
     });
@@ -2209,8 +2166,8 @@ function handleQuickSearchKeydown(event) {
     const visibleItems = Array.from(document.querySelectorAll('.quick-search-item'));
     if (event.key === 'ArrowDown') {
         event.preventDefault();
-        quickSearchSelectedIndex = moveQuickSearchSelection(
-            quickSearchSelectedIndex,
+        state.quickSearchSelectedIndex = moveQuickSearchSelection(
+            state.quickSearchSelectedIndex,
             'down',
             visibleItems.length
         );
@@ -2219,8 +2176,8 @@ function handleQuickSearchKeydown(event) {
 
     if (event.key === 'ArrowUp') {
         event.preventDefault();
-        quickSearchSelectedIndex = moveQuickSearchSelection(
-            quickSearchSelectedIndex,
+        state.quickSearchSelectedIndex = moveQuickSearchSelection(
+            state.quickSearchSelectedIndex,
             'up',
             visibleItems.length
         );
@@ -2229,7 +2186,7 @@ function handleQuickSearchKeydown(event) {
 
     if (event.key === 'Enter') {
         event.preventDefault();
-        const selectedItem = visibleItems[quickSearchSelectedIndex];
+        const selectedItem = visibleItems[state.quickSearchSelectedIndex];
         if (selectedItem) {
             activateFileFromQuickSearch(selectedItem.dataset.fileId);
         }
@@ -2247,14 +2204,14 @@ function activateFileFromQuickSearch(fileId) {
 }
 // Query version history (per active .spl file)
 function getActiveFile() {
-    return files.find(f => f.id === activeFileId) || null;
+    return state.files.find(f => f.id === state.activeFileId) || null;
 }
 
 function getLiveQueryText(file = getActiveFile()) {
     if (!file) {
         return '';
     }
-    const cached = liveAceQueryByFileId.get(file.id);
+    const cached = state.liveAceQueryByFileId.get(file.id);
     if (cached) {
         return cached;
     }
@@ -2289,7 +2246,7 @@ async function getAceQueryText(file = getActiveFile()) {
                 || '';
         })()`) || '';
         if (text) {
-            liveAceQueryByFileId.set(file.id, text);
+            state.liveAceQueryByFileId.set(file.id, text);
         }
         return text;
     } catch {
@@ -2318,7 +2275,7 @@ async function setAceQueryText(file, searchText, { retries = 8, delayMs = 250 } 
                 return true;
             })()`);
             if (applied) {
-                liveAceQueryByFileId.set(file.id, String(searchText ?? ''));
+                state.liveAceQueryByFileId.set(file.id, String(searchText ?? ''));
                 return true;
             }
         } catch {
@@ -2339,22 +2296,22 @@ async function applySavedSearchAceFromStanza(file, stanzaText) {
 }
 
 async function syncSavedSearchAceEditor(file) {
-    if (!isSavedSearchFile(file) || !currentGit) {
+    if (!isSavedSearchFile(file) || !state.currentGit) {
         return;
     }
     const relativePath = getRelativePath(file);
     const stanzaName = getSavedSearchStanzaName(file);
-    const drafts = await listStanzaDraftsForConf(currentGit, relativePath);
+    const drafts = await listStanzaDraftsForConf(state.currentGit, relativePath);
     const draft = drafts.find((entry) => entry.name === stanzaName);
     if (draft?.text) {
         await applySavedSearchAceFromStanza(file, draft.text);
         return;
     }
-    const trackedHash = restoreParentByFileId.get(file.id) || queryVersions[0]?.hash;
+    const trackedHash = state.restoreParentByFileId.get(file.id) || state.queryVersions[0]?.hash;
     if (!trackedHash) {
         return;
     }
-    const stanza = await readVersionStanza(currentGit, relativePath, trackedHash, stanzaName);
+    const stanza = await readVersionStanza(state.currentGit, relativePath, trackedHash, stanzaName);
     if (stanza) {
         await applySavedSearchAceFromStanza(file, stanza);
     }
@@ -2363,9 +2320,9 @@ async function syncSavedSearchAceEditor(file) {
 function getDraftPreviewQuery() {
     const file = getActiveFile();
     if (file && isSavedSearchFile(file)) {
-        return currentQueryText || '';
+        return state.currentQueryText || '';
     }
-    return getLiveQueryText() || currentQueryText || '';
+    return getLiveQueryText() || state.currentQueryText || '';
 }
 
 function setStanzaSearch(stanzaText, stanzaName, search) {
@@ -2393,7 +2350,7 @@ async function getLiveAceOrUrlQuery(file) {
 }
 
 async function getQueryBaseline(file) {
-    if (!isSavedSearchFile(file) || !currentGit) {
+    if (!isSavedSearchFile(file) || !state.currentGit) {
         const fileUrl = file.url
             || (file.path && fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
         return extractQueryFromUrl(fileUrl);
@@ -2401,11 +2358,11 @@ async function getQueryBaseline(file) {
 
     const relativePath = getRelativePath(file);
     const stanzaName = getSavedSearchStanzaName(file);
-    const trackedHash = restoreParentByFileId.get(file.id);
-    const versionHash = queryVersions[0]?.hash;
+    const trackedHash = state.restoreParentByFileId.get(file.id);
+    const versionHash = state.queryVersions[0]?.hash;
     const hash = trackedHash || versionHash;
     if (hash) {
-        const stanza = await readVersionStanza(currentGit, relativePath, hash, stanzaName);
+        const stanza = await readVersionStanza(state.currentGit, relativePath, hash, stanzaName);
         if (stanza) {
             return extractSearchFromStanza(stanza);
         }
@@ -2424,22 +2381,22 @@ function shouldRefreshLiveDraftOnKey({ key, ctrl, meta, alt }) {
 }
 
 function scheduleRefreshLiveDraftState(fileId) {
-    const file = files.find(f => f.id === fileId);
+    const file = state.files.find(f => f.id === fileId);
     if (!shouldScheduleLiveDraftRefresh(file)) {
         return;
     }
-    const prev = liveDraftDebounceByFileId.get(fileId);
+    const prev = state.liveDraftDebounceByFileId.get(fileId);
     if (prev) {
         clearTimeout(prev);
     }
-    liveDraftDebounceByFileId.set(fileId, setTimeout(() => {
-        liveDraftDebounceByFileId.delete(fileId);
+    state.liveDraftDebounceByFileId.set(fileId, setTimeout(() => {
+        state.liveDraftDebounceByFileId.delete(fileId);
         void refreshLiveDraftState(fileId);
     }, 200));
 }
 
 async function refreshLiveDraftState(fileId) {
-    const file = files.find(f => f.id === fileId);
+    const file = state.files.find(f => f.id === fileId);
     if (!file) {
         return;
     }
@@ -2456,16 +2413,16 @@ async function refreshLiveDraftState(fileId) {
     }
 
     if (live !== baseline) {
-        userDraftByFileId.add(fileId);
+        state.userDraftByFileId.add(fileId);
         onQueryFileChanged(fileId);
         return;
     }
 
-    if (forcedDraftByFileId.has(fileId)) {
+    if (state.forcedDraftByFileId.has(fileId)) {
         return;
     }
 
-    userDraftByFileId.delete(fileId);
+    state.userDraftByFileId.delete(fileId);
     onQueryFileChanged(fileId);
 }
 
@@ -2484,7 +2441,7 @@ function getRelativePath(file) {
     if (file.dashboard) {
         return getDashboardViewRelativePath(file.dashboard);
     }
-    return path.relative(currentProjectPath, file.path).split(path.sep).join('/');
+    return path.relative(state.currentProjectPath, file.path).split(path.sep).join('/');
 }
 
 function resolveSavedSearchFromFile(file, currentUrl) {
@@ -2502,8 +2459,8 @@ function resolveSavedSearchFromFile(file, currentUrl) {
 }
 
 function getGitAuthorFromSettings() {
-    const name = (gitSyncSettings.gitUserName || '').trim();
-    const email = (gitSyncSettings.gitUserEmail || '').trim();
+    const name = (state.gitSyncSettings.gitUserName || '').trim();
+    const email = (state.gitSyncSettings.gitUserEmail || '').trim();
     if (name && email) {
         return { name, email };
     }
@@ -2515,47 +2472,47 @@ function getGitAuthorFromSettings() {
 
 function getGitRemoteSettings() {
     return {
-        remoteUrl: gitSyncSettings.remoteUrl || '',
-        remoteName: gitSyncSettings.remoteName || 'origin',
-        sharedBranch: gitSyncSettings.sharedBranch || 'main'
+        remoteUrl: state.gitSyncSettings.remoteUrl || '',
+        remoteName: state.gitSyncSettings.remoteName || 'origin',
+        sharedBranch: state.gitSyncSettings.sharedBranch || 'main'
     };
 }
 
 async function preserveDraftBeforeRemoteSync(file) {
     const relativePath = getRelativePath(file);
-    const trackedHash = restoreParentByFileId.get(file.id);
-    const hasUserDraft = userDraftByFileId.has(file.id);
-    if (!hasUserDraft || !trackedHash || !currentGit) {
+    const trackedHash = state.restoreParentByFileId.get(file.id);
+    const hasUserDraft = state.userDraftByFileId.has(file.id);
+    if (!hasUserDraft || !trackedHash || !state.currentGit) {
         return { stashed: false, trackedHash, relativePath };
     }
-    const hasChanges = await hasDraftChanges(currentGit, relativePath, trackedHash);
+    const hasChanges = await hasDraftChanges(state.currentGit, relativePath, trackedHash);
     if (!hasChanges) {
         return { stashed: false, trackedHash, relativePath };
     }
-    await saveDraftStash(currentGit, relativePath, trackedHash);
+    await saveDraftStash(state.currentGit, relativePath, trackedHash);
     return { stashed: true, trackedHash, relativePath };
 }
 
 async function restoreDraftAfterRemoteSync(file, draftState) {
-    if (!draftState?.stashed || !draftState.trackedHash || !currentGit) {
+    if (!draftState?.stashed || !draftState.trackedHash || !state.currentGit) {
         return;
     }
     const relativePath = getRelativePath(file);
-    const popped = await popDraftStash(currentGit, relativePath, draftState.trackedHash);
+    const popped = await popDraftStash(state.currentGit, relativePath, draftState.trackedHash);
     if (popped) {
         fs.writeFileSync(file.path, popped, 'utf8');
-        userDraftByFileId.add(file.id);
+        state.userDraftByFileId.add(file.id);
     }
 }
 
 async function syncSavedSearchTrackedBase(file) {
-    if (!file?.savedSearch || !currentGit) {
+    if (!file?.savedSearch || !state.currentGit) {
         return;
     }
 
     const relativePath = getRelativePath(file);
     const versions = await listVersions(
-        currentGit,
+        state.currentGit,
         relativePath,
         1,
         getListVersionsOptions(file)
@@ -2565,17 +2522,17 @@ async function syncSavedSearchTrackedBase(file) {
     }
 
     const latestHash = versions[0].hash;
-    restoreParentByFileId.set(file.id, latestHash);
+    state.restoreParentByFileId.set(file.id, latestHash);
     const draftStatus = await getSavedSearchDraftStatus(file);
     if (!draftStatus.hasDraft) {
-        userDraftByFileId.delete(file.id);
-        forcedDraftByFileId.delete(file.id);
+        state.userDraftByFileId.delete(file.id);
+        state.forcedDraftByFileId.delete(file.id);
     }
 }
 
 async function pushSavedSearchHistoryAfterSave(file) {
     resolveSavedSearchFromFile(file);
-    if (!file?.savedSearch || !currentGit) {
+    if (!file?.savedSearch || !state.currentGit) {
         return;
     }
 
@@ -2585,20 +2542,20 @@ async function pushSavedSearchHistoryAfterSave(file) {
         return;
     }
 
-    const remoteResult = await ensureRemote(currentGit, { remoteName, remoteUrl });
+    const remoteResult = await ensureRemote(state.currentGit, { remoteName, remoteUrl });
     if (!remoteResult.ok) {
         file.savedSearchSyncStatus = SAVED_SEARCH_SYNC_STATUS.PUSH_FAILED;
         return;
     }
 
-    const pushResult = await pushSharedHistoryWithReconcile(currentGit, {
+    const pushResult = await pushSharedHistoryWithReconcile(state.currentGit, {
         remoteName,
         sharedBranch,
         reconcile: {
             confPath: getSavedSearchConfPath(file.savedSearch),
             metadata: file.savedSearch,
             stanzas: [file.savedSearch.name],
-            restSettings: { baseUrl: splunkUiUrlToRestBase(SPLUNK_URL) },
+            restSettings: { baseUrl: splunkUiUrlToRestBase(state.SPLUNK_URL) },
             author: getGitAuthorFromSettings(),
             remoteSettings: { remoteName, sharedBranch }
         }
@@ -2621,7 +2578,7 @@ async function pushSavedSearchHistoryAfterSave(file) {
 
 async function enterSavedSearchHistory(file, currentUrl) {
     resolveSavedSearchFromFile(file, currentUrl);
-    if (!file?.savedSearch || !currentGit || !currentProjectPath) {
+    if (!file?.savedSearch || !state.currentGit || !state.currentProjectPath) {
         return;
     }
 
@@ -2629,20 +2586,20 @@ async function enterSavedSearchHistory(file, currentUrl) {
         || file.url
         || (fs.existsSync(file.path) ? fs.readFileSync(file.path, 'utf8').trim() : '');
     const relativePath = getRelativePath(file);
-    const trackedHash = restoreParentByFileId.get(file.id);
-    let hadLocalDraft = forcedDraftByFileId.has(file.id);
+    const trackedHash = state.restoreParentByFileId.get(file.id);
+    let hadLocalDraft = state.forcedDraftByFileId.has(file.id);
     if (!hadLocalDraft) {
         const draftStatus = await getSavedSearchDraftStatus(file);
         hadLocalDraft = draftStatus.hasDraft;
     }
-    const localCommit = await getLatestFileCommit(currentGit, 'HEAD', relativePath);
+    const localCommit = await getLatestFileCommit(state.currentGit, 'HEAD', relativePath);
     const draftState = { stashed: false };
 
     let result;
     try {
         result = await openSavedSearchHistory({
-            git: currentGit,
-            workspaceRoot: currentProjectPath,
+            git: state.currentGit,
+            workspaceRoot: state.currentProjectPath,
             metadata: file.savedSearch,
             currentUrl: url,
             restSettings: getSplunkRestSettings(url),
@@ -2661,7 +2618,7 @@ async function enterSavedSearchHistory(file, currentUrl) {
     } else if (result.fetched && hadLocalDraft) {
         const { remoteName, sharedBranch } = getGitRemoteSettings();
         const remoteCommit = await getLatestFileCommit(
-            currentGit,
+            state.currentGit,
             `refs/remotes/${remoteName}/${sharedBranch}`,
             relativePath
         );
@@ -2680,7 +2637,7 @@ async function enterSavedSearchHistory(file, currentUrl) {
 }
 
 function getTagsForHash(hash) {
-    return versionTags.filter(tag => tag.hash === hash);
+    return state.versionTags.filter(tag => tag.hash === hash);
 }
 
 function appendTagPills(labelEl, hash) {
@@ -2697,10 +2654,10 @@ function attachVersionRowContextMenu(item, hash, tagName) {
         if (hash === DRAFT_VERSION_HASH) {
             return;
         }
-        if (historySidebarMode !== 'history' && historySidebarMode !== 'tree' && historySidebarMode !== 'tags') {
+        if (state.historySidebarMode !== 'history' && state.historySidebarMode !== 'tree' && state.historySidebarMode !== 'tags') {
             return;
         }
-        if ((historySidebarMode === 'history' || historySidebarMode === 'tree') && getTagsForHash(hash).length > 0) {
+        if ((state.historySidebarMode === 'history' || state.historySidebarMode === 'tree') && getTagsForHash(hash).length > 0) {
             return;
         }
         event.preventDefault();
@@ -2733,9 +2690,9 @@ function openTagPopup(hash, x, y, tagName) {
     if (!hash || hash === DRAFT_VERSION_HASH) {
         return;
     }
-    const clearMode = historySidebarMode === 'tags' || Boolean(tagName);
-    tagPopupClearMode = clearMode;
-    tagPopupTargetHash = hash;
+    const clearMode = state.historySidebarMode === 'tags' || Boolean(tagName);
+    state.tagPopupClearMode = clearMode;
+    state.tagPopupTargetHash = hash;
     tagPopupInput.readOnly = clearMode;
     tagPopupInput.value = tagName || getTagsForHash(hash)[0]?.name || '';
     tagPopupSave.hidden = clearMode;
@@ -2750,8 +2707,8 @@ function openTagPopup(hash, x, y, tagName) {
 
 function closeTagPopup() {
     tagPopup.classList.remove('visible');
-    tagPopupTargetHash = null;
-    tagPopupClearMode = false;
+    state.tagPopupTargetHash = null;
+    state.tagPopupClearMode = false;
     tagPopupInput.readOnly = false;
     tagPopupInput.value = '';
     tagPopupSave.hidden = false;
@@ -2760,12 +2717,12 @@ function closeTagPopup() {
 
 async function saveTagFromPopup() {
     const name = tagPopupInput.value.trim();
-    const hash = tagPopupTargetHash;
+    const hash = state.tagPopupTargetHash;
     if (!name || !hash) {
         return;
     }
     const file = getActiveFile();
-    if (!file || !currentGit) {
+    if (!file || !state.currentGit) {
         return;
     }
     if (typeof setVersionTag !== 'function') {
@@ -2777,11 +2734,11 @@ async function saveTagFromPopup() {
     const tagStanza = getVersionTagStanzaName(file);
     const preservedHashes = [...selectedVersionHashes];
     try {
-        await setVersionTag(currentGit, relativePath, hash, name, tagStanza);
-        versionTags = await listVersionTags(currentGit, relativePath, tagStanza);
+        await setVersionTag(state.currentGit, relativePath, hash, name, tagStanza);
+        state.versionTags = await listVersionTags(state.currentGit, relativePath, tagStanza);
         closeTagPopup();
         renderHistorySidebarList();
-        selectedVersionHashes = preservedHashes;
+        state.selectedVersionHashes = preservedHashes;
         queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
             applyVersionRowClasses(item, item.dataset.hash);
         });
@@ -2793,12 +2750,12 @@ async function saveTagFromPopup() {
 
 async function clearTagFromPopup() {
     const name = tagPopupInput.value.trim();
-    const hash = tagPopupTargetHash;
+    const hash = state.tagPopupTargetHash;
     if (!name || !hash) {
         return;
     }
     const file = getActiveFile();
-    if (!file || !currentGit) {
+    if (!file || !state.currentGit) {
         return;
     }
     if (typeof deleteVersionTag !== 'function') {
@@ -2810,11 +2767,11 @@ async function clearTagFromPopup() {
     const tagStanza = getVersionTagStanzaName(file);
     const preservedHashes = [...selectedVersionHashes];
     try {
-        await deleteVersionTag(currentGit, relativePath, name, tagStanza);
-        versionTags = await listVersionTags(currentGit, relativePath, tagStanza);
+        await deleteVersionTag(state.currentGit, relativePath, name, tagStanza);
+        state.versionTags = await listVersionTags(state.currentGit, relativePath, tagStanza);
         closeTagPopup();
         renderHistorySidebarList();
-        selectedVersionHashes = preservedHashes;
+        state.selectedVersionHashes = preservedHashes;
         queryVersionList.querySelectorAll('.query-version-item').forEach(item => {
             applyVersionRowClasses(item, item.dataset.hash);
         });
@@ -2828,7 +2785,7 @@ function selectVersionByHash(hash) {
     if (hash === DRAFT_VERSION_HASH) {
         selectDraftVersion();
     } else {
-        const version = queryVersions.find(v => v.hash === hash);
+        const version = state.queryVersions.find(v => v.hash === hash);
         if (version) {
             selectQueryVersion(version);
         }
@@ -2865,11 +2822,11 @@ function buildVersionTreeRows(versions) {
 }
 
 function renderHistorySidebarList() {
-    if (historySidebarMode === 'tree') {
+    if (state.historySidebarMode === 'tree') {
         renderVersionTreeList();
         return;
     }
-    if (historySidebarMode === 'tags') {
+    if (state.historySidebarMode === 'tags') {
         renderTagsList();
         return;
     }
@@ -2883,13 +2840,13 @@ function renderVersionTreeList() {
         queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see its version tree.</div>';
         return;
     }
-    if (queryVersions.length === 0) {
+    if (state.queryVersions.length === 0) {
         const emptyMessage = getQueryHistoryEmptyMessage(getActiveFile());
         queryVersionList.innerHTML = `<div style="padding:12px;color:#888;">${emptyMessage}</div>`;
         return;
     }
 
-    for (const { version, glyph } of buildVersionTreeRows(queryVersions)) {
+    for (const { version, glyph } of buildVersionTreeRows(state.queryVersions)) {
         const item = document.createElement('div');
         item.className = 'query-version-item';
         item.dataset.hash = version.hash;
@@ -2922,14 +2879,14 @@ function renderTagsList() {
         queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Open a query to see tagged versions.</div>';
         return;
     }
-    if (versionTags.length === 0) {
+    if (state.versionTags.length === 0) {
         queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">No tagged versions. Right-click a commit to tag.</div>';
         return;
     }
 
     const sorted = [...versionTags].sort((a, b) => new Date(b.date) - new Date(a.date));
     for (const entry of sorted) {
-        const version = queryVersions.find(v => v.hash === entry.hash);
+        const version = state.queryVersions.find(v => v.hash === entry.hash);
         const item = document.createElement('div');
         item.className = 'query-version-item';
         item.dataset.hash = entry.hash;
@@ -2957,17 +2914,17 @@ function renderTagsList() {
 
 function onQueryFileChanged(fileId, { refreshHistory = false } = {}) {
     refreshQueryDirtyState(fileId);
-    if (fileId === activeFileId) {
+    if (fileId === state.activeFileId) {
         renderVersionPreview();
     }
-    if (refreshHistory && fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
+    if (refreshHistory && fileId === state.activeFileId && !querySidebar.classList.contains('collapsed')) {
         refreshQueryHistory();
     }
 }
 
 function showConfirmModal({ title, body }) {
     return new Promise(resolve => {
-        confirmResolve = resolve;
+        state.confirmResolve = resolve;
         confirmModalTitle.textContent = title;
         confirmModalBody.textContent = body;
         confirmModal.classList.add('visible');
@@ -2977,14 +2934,14 @@ function showConfirmModal({ title, body }) {
 
 function closeConfirmModal(confirmed) {
     confirmModal.classList.remove('visible');
-    if (confirmResolve) {
-        confirmResolve(confirmed);
-        confirmResolve = null;
+    if (state.confirmResolve) {
+        state.confirmResolve(confirmed);
+        state.confirmResolve = null;
     }
 }
 
 function setPreviewMode(mode) {
-    previewMode = mode;
+    state.previewMode = mode;
     queryPreviewModeBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === mode);
     });
@@ -2995,11 +2952,11 @@ function renderVersionPreview() {
     const primary = getPrimarySelectedHash();
     const isDraftSelected = primary === DRAFT_VERSION_HASH;
 
-    if (previewMode === 'diff') {
+    if (state.previewMode === 'diff') {
         if (isMultiVersionCompare()) {
-            const [fromHash, toHash] = selectedVersionHashes;
-            const fromVersion = queryVersions.find(v => v.hash === fromHash);
-            const toVersion = queryVersions.find(v => v.hash === toHash);
+            const [fromHash, toHash] = state.selectedVersionHashes;
+            const fromVersion = state.queryVersions.find(v => v.hash === fromHash);
+            const toVersion = state.queryVersions.find(v => v.hash === toHash);
             if (fromVersion && toVersion) {
                 const diff = diffLines(
                     versionPreviewText(fromVersion),
@@ -3013,7 +2970,7 @@ function renderVersionPreview() {
         }
         if (isDraftSelected) {
             const baseHash = getTrackedBaseHash();
-            const baseVersion = baseHash ? queryVersions.find(v => v.hash === baseHash) : null;
+            const baseVersion = baseHash ? state.queryVersions.find(v => v.hash === baseHash) : null;
             const draftQuery = getDraftPreviewQuery();
             if (baseVersion) {
                 const diff = diffLines(
@@ -3030,21 +2987,21 @@ function renderVersionPreview() {
             queryVersionPreviewText.textContent = 'Select a version to diff.';
             return;
         }
-        const version = queryVersions.find(v => v.hash === primary);
+        const version = state.queryVersions.find(v => v.hash === primary);
         if (version) {
-            const diff = diffLines(versionPreviewText(version), currentQueryText || '');
+            const diff = diffLines(versionPreviewText(version), state.currentQueryText || '');
             queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
             return;
         }
     }
 
     if (isDraftSelected || !primary) {
-        const draftQuery = isDraftSelected ? getDraftPreviewQuery() : currentQueryText;
+        const draftQuery = isDraftSelected ? getDraftPreviewQuery() : state.currentQueryText;
         queryVersionPreviewText.textContent = draftQuery || '(empty query)';
         return;
     }
 
-    const version = queryVersions.find(v => v.hash === primary);
+    const version = state.queryVersions.find(v => v.hash === primary);
     queryVersionPreviewText.textContent = versionPreviewText(version) || '(empty query)';
 }
 
@@ -3168,7 +3125,7 @@ function setQueryHistoryPanelOpen(open, { persist = true } = {}) {
 }
 
 function toggleQueryHistoryPanel() {
-    if (!activeFileId) {
+    if (!state.activeFileId) {
         return;
     }
     const isOpen = !querySidebar.classList.contains('collapsed');
@@ -3202,19 +3159,19 @@ function updateStatusBar({ hasChanges, status, versionCount, syncStatus } = {}) 
 }
 
 async function initializeQueryVersions() {
-    if (!currentProjectPath) {
-        currentGit = null;
+    if (!state.currentProjectPath) {
+        state.currentGit = null;
         return;
     }
 
-    currentGit = simpleGit(currentProjectPath);
+    state.currentGit = simpleGit(state.currentProjectPath);
 }
 
-async function refreshQueryDirtyState(fileId = activeFileId) {
-    const generation = queryRefreshGeneration;
-    const file = files.find(f => f.id === fileId);
+async function refreshQueryDirtyState(fileId = state.activeFileId) {
+    const generation = state.queryRefreshGeneration;
+    const file = state.files.find(f => f.id === fileId);
     const tab = tabBar.querySelector(`.tab[data-target-id="${fileId}"]`);
-    if (!file || !tab || !currentGit) {
+    if (!file || !tab || !state.currentGit) {
         if (tab) {
             tab.classList.remove('dirty');
         }
@@ -3223,27 +3180,27 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
 
     try {
         const relativePath = getRelativePath(file);
-        const fileStatus = await getFileStatus(currentGit, relativePath);
+        const fileStatus = await getFileStatus(state.currentGit, relativePath);
         const { hasChanges } = fileStatus;
-        const trackedHash = restoreParentByFileId.get(fileId);
+        const trackedHash = state.restoreParentByFileId.get(fileId);
         const draftStatus = isSavedSearchFile(file)
             ? await getSavedSearchDraftStatus(file)
             : null;
         const logicalHasChanges = await resolveEffectiveUnsavedChanges(file, trackedHash, { hasChanges });
-        const effectiveHasChanges = logicalHasChanges || forcedDraftByFileId.has(fileId);
-        if (generation !== queryRefreshGeneration && fileId !== activeFileId) {
+        const effectiveHasChanges = logicalHasChanges || state.forcedDraftByFileId.has(fileId);
+        if (generation !== state.queryRefreshGeneration && fileId !== state.activeFileId) {
             return;
         }
         tab.classList.toggle('dirty', effectiveHasChanges);
-        if (fileId === activeFileId && effectiveHasChanges !== queryHasUnsavedChanges) {
-            queryHasUnsavedChanges = effectiveHasChanges;
+        if (fileId === state.activeFileId && effectiveHasChanges !== state.queryHasUnsavedChanges) {
+            state.queryHasUnsavedChanges = effectiveHasChanges;
             if (!querySidebar.classList.contains('collapsed')) {
                 renderHistorySidebarList();
                 const primary = getPrimarySelectedHash();
                 queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
             }
         }
-        if (fileId === activeFileId && !querySidebar.classList.contains('collapsed')) {
+        if (fileId === state.activeFileId && !querySidebar.classList.contains('collapsed')) {
             const syncStatus = file.savedSearchSyncStatus || file.dashboardSyncStatus || '';
             if (isSavedSearchFile(file) || isDashboardFile(file)) {
                 queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
@@ -3259,7 +3216,7 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
             queryHistoryStatus.classList.toggle('dirty', effectiveHasChanges);
             querySaveBtn.disabled = !effectiveHasChanges;
         }
-        if (fileId === activeFileId) {
+        if (fileId === state.activeFileId) {
             updateStatusBar({ hasChanges: effectiveHasChanges });
         }
     } catch {
@@ -3268,9 +3225,9 @@ async function refreshQueryDirtyState(fileId = activeFileId) {
 }
 
 async function refreshQueryHistory() {
-    const generation = ++queryRefreshGeneration;
+    const generation = ++state.queryRefreshGeneration;
     const file = getActiveFile();
-    if (!file || !currentGit || !currentProjectPath) {
+    if (!file || !state.currentGit || !state.currentProjectPath) {
         renderEmptySavedSearchHistory();
         return;
     }
@@ -3281,31 +3238,31 @@ async function refreshQueryHistory() {
         ? file.dashboard.name
         : file.name.split('/').pop();
     queryHistoryTitle.textContent = `History: ${displayName}`;
-    if (queryVersions.length === 0) {
+    if (state.queryVersions.length === 0) {
         queryVersionList.innerHTML = '<div style="padding:12px;color:#888;">Loading...</div>';
     }
 
     try {
         const readPath = isDashboardFile(file)
-            ? path.join(currentProjectPath, relativePath)
+            ? path.join(state.currentProjectPath, relativePath)
             : file.path;
         const [fileStatus, versions, current, tags, draftStatus] = await Promise.all([
-            getFileStatus(currentGit, relativePath),
-            listVersions(currentGit, relativePath, 30, listOptions),
+            getFileStatus(state.currentGit, relativePath),
+            listVersions(state.currentGit, relativePath, 30, listOptions),
             Promise.resolve(readCurrentQuery(readPath)),
             (typeof listVersionTags === 'function'
-                ? listVersionTags(currentGit, relativePath, getVersionTagStanzaName(file)).catch(() => [])
+                ? listVersionTags(state.currentGit, relativePath, getVersionTagStanzaName(file)).catch(() => [])
                 : Promise.resolve([])),
             isSavedSearchFile(file) ? getSavedSearchDraftStatus(file) : Promise.resolve(null)
         ]);
 
-        if (generation !== queryRefreshGeneration) {
+        if (generation !== state.queryRefreshGeneration) {
             return;
         }
 
         const preservedHashes = [...selectedVersionHashes];
-        queryVersions = versions;
-        versionTags = tags;
+        state.queryVersions = versions;
+        state.versionTags = tags;
         if (
             isSavedSearchFile(file)
             && versions.length > 0
@@ -3313,48 +3270,48 @@ async function refreshQueryHistory() {
         ) {
             file.savedSearchSyncStatus = '';
         }
-        let trackedHash = restoreParentByFileId.get(file.id);
+        let trackedHash = state.restoreParentByFileId.get(file.id);
         if (!trackedHash && versions.length > 0) {
             trackedHash = versions[0].hash;
-            restoreParentByFileId.set(file.id, trackedHash);
+            state.restoreParentByFileId.set(file.id, trackedHash);
         }
         const logicalHasChanges = await resolveEffectiveUnsavedChanges(file, trackedHash, fileStatus);
-        queryHasUnsavedChanges = logicalHasChanges || forcedDraftByFileId.has(file.id);
-        selectedVersionHashes = preservedHashes.filter(hash => (
+        state.queryHasUnsavedChanges = logicalHasChanges || state.forcedDraftByFileId.has(file.id);
+        state.selectedVersionHashes = preservedHashes.filter(hash => (
             hash === DRAFT_VERSION_HASH
-                ? queryHasUnsavedChanges
+                ? state.queryHasUnsavedChanges
                 : versions.some(v => v.hash === hash)
         )).slice(-2);
         const primary = getPrimarySelectedHash();
         queryRestoreBtn.disabled = !primary || primary === DRAFT_VERSION_HASH || isMultiVersionCompare();
-        querySaveBtn.disabled = !queryHasUnsavedChanges;
+        querySaveBtn.disabled = !state.queryHasUnsavedChanges;
         if (isSavedSearchFile(file) || isDashboardFile(file)) {
             queryHistoryStatus.textContent = formatQueryHistoryStatus(file, {
-                hasUnsavedChanges: queryHasUnsavedChanges,
+                hasUnsavedChanges: state.queryHasUnsavedChanges,
                 syncStatus: file.savedSearchSyncStatus || file.dashboardSyncStatus || '',
                 draftStatus
             });
         } else {
-            queryHistoryStatus.textContent = queryHasUnsavedChanges
+            queryHistoryStatus.textContent = state.queryHasUnsavedChanges
                 ? `Unsaved (${trackedHash ? 'draft' : fileStatus.status})`
                 : 'Up to date';
         }
-        queryHistoryStatus.classList.toggle('dirty', queryHasUnsavedChanges);
+        queryHistoryStatus.classList.toggle('dirty', state.queryHasUnsavedChanges);
         if (isSavedSearchFile(file)) {
             const stanzaName = getSavedSearchStanzaName(file);
             const [drafts, headStanza] = await Promise.all([
-                listStanzaDraftsForConf(currentGit, relativePath),
+                listStanzaDraftsForConf(state.currentGit, relativePath),
                 trackedHash
-                    ? readVersionStanza(currentGit, relativePath, trackedHash, stanzaName)
+                    ? readVersionStanza(state.currentGit, relativePath, trackedHash, stanzaName)
                     : Promise.resolve('')
             ]);
             const draft = drafts.find((entry) => entry.name === stanzaName);
-            currentQueryText = resolveSavedSearchDraftPreviewText({
+            state.currentQueryText = resolveSavedSearchDraftPreviewText({
                 draftStanzaText: draft?.text || '',
                 headStanzaText: headStanza || ''
             });
         } else {
-            currentQueryText = isDashboardFile(file)
+            state.currentQueryText = isDashboardFile(file)
                 ? (current.url || current.query || '')
                 : (current.query || getSearchText(current.url || ''));
         }
@@ -3363,12 +3320,12 @@ async function refreshQueryHistory() {
         renderHistorySidebarList();
         await refreshQueryDirtyState(file.id);
         updateStatusBar({
-            hasChanges: queryHasUnsavedChanges,
+            hasChanges: state.queryHasUnsavedChanges,
             status: trackedHash ? 'draft' : fileStatus.status,
             versionCount: versions.length
         });
     } catch (err) {
-        if (generation !== queryRefreshGeneration) {
+        if (generation !== state.queryRefreshGeneration) {
             return;
         }
         queryVersionList.innerHTML = `<div style="padding:12px;color:#f48771;">Error: ${err.message}</div>`;
@@ -3377,13 +3334,13 @@ async function refreshQueryHistory() {
 
 function getTrackedBaseHash() {
     const file = getActiveFile();
-    return file ? restoreParentByFileId.get(file.id) : null;
+    return file ? state.restoreParentByFileId.get(file.id) : null;
 }
 
 function applyVersionRowClasses(item, hash) {
     const trackedHash = getTrackedBaseHash();
     const isDraft = hash === DRAFT_VERSION_HASH;
-    const selIdx = selectedVersionHashes.indexOf(hash);
+    const selIdx = state.selectedVersionHashes.indexOf(hash);
     const isMulti = isMultiVersionCompare();
     item.classList.toggle('selected', !isMulti && selIdx >= 0);
     item.classList.toggle('selected-compare-from', isMulti && selIdx === 0);
@@ -3415,12 +3372,12 @@ function appendDraftVersionRow() {
 function renderQueryVersionList() {
     queryVersionList.innerHTML = '';
 
-    if (queryHasUnsavedChanges) {
+    if (state.queryHasUnsavedChanges) {
         appendDraftVersionRow();
     }
 
-    if (queryVersions.length === 0) {
-        if (!queryHasUnsavedChanges) {
+    if (state.queryVersions.length === 0) {
+        if (!state.queryHasUnsavedChanges) {
             const empty = document.createElement('div');
             empty.style.padding = '12px';
             empty.style.color = '#888';
@@ -3430,7 +3387,7 @@ function renderQueryVersionList() {
         return;
     }
 
-    queryVersions.forEach(version => {
+    state.queryVersions.forEach(version => {
         const item = document.createElement('div');
         item.className = 'query-version-item';
         item.dataset.hash = version.hash;
@@ -3460,18 +3417,18 @@ function renderQueryVersionList() {
 }
 
 function selectDraftVersion() {
-    selectedVersionHashes = [DRAFT_VERSION_HASH];
+    state.selectedVersionHashes = [DRAFT_VERSION_HASH];
     updateVersionSelectionUi();
 }
 
 function selectQueryVersion(version) {
-    selectedVersionHashes = [version.hash];
+    state.selectedVersionHashes = [version.hash];
     updateVersionSelectionUi();
 }
 
 async function saveQueryVersion() {
     const file = getActiveFile();
-    if (!file || !currentGit) {
+    if (!file || !state.currentGit) {
         return;
     }
 
@@ -3492,7 +3449,7 @@ async function saveQueryVersion() {
 
     try {
         querySaveBtn.disabled = true;
-        const parentHash = restoreParentByFileId.get(file.id);
+        const parentHash = state.restoreParentByFileId.get(file.id);
         const saveOptions = {};
         const author = getGitAuthorFromSettings();
         if (author) {
@@ -3515,13 +3472,13 @@ async function saveQueryVersion() {
         }
         const result = isSavedSearchFile(file)
             ? await saveStanzaVersion(
-                currentGit,
+                state.currentGit,
                 relativePath,
                 getSavedSearchStanzaName(file),
                 label,
                 saveOptions
             )
-            : await saveVersion(currentGit, relativePath, label, parentHash, saveOptions);
+            : await saveVersion(state.currentGit, relativePath, label, parentHash, saveOptions);
         if (!result.saved) {
             if (result.reason === 'missing-stanza') {
                 queryHistoryStatus.textContent = 'Nothing to commit: saved search not in git yet';
@@ -3533,11 +3490,11 @@ async function saveQueryVersion() {
             queryHistoryStatus.classList.remove('dirty');
             return;
         }
-        forcedDraftByFileId.delete(file.id);
-        userDraftByFileId.delete(file.id);
-        liveAceQueryByFileId.delete(file.id);
+        state.forcedDraftByFileId.delete(file.id);
+        state.userDraftByFileId.delete(file.id);
+        state.liveAceQueryByFileId.delete(file.id);
         if (result.hash) {
-            restoreParentByFileId.set(file.id, result.hash);
+            state.restoreParentByFileId.set(file.id, result.hash);
         }
         querySaveMessage.value = '';
         if (file.savedSearch) {
@@ -3545,10 +3502,10 @@ async function saveQueryVersion() {
             await pushSavedSearchHistoryAfterSave(file);
         }
         await refreshQueryHistory();
-        if (queryVersions.length > 0) {
-            restoreParentByFileId.set(file.id, queryVersions[0].hash);
+        if (state.queryVersions.length > 0) {
+            state.restoreParentByFileId.set(file.id, state.queryVersions[0].hash);
         } else {
-            restoreParentByFileId.delete(file.id);
+            state.restoreParentByFileId.delete(file.id);
         }
     } catch (err) {
         queryHistoryStatus.textContent = `Save failed: ${err.message}`;
@@ -3560,11 +3517,11 @@ async function saveQueryVersion() {
 
 async function restoreQueryVersion(hash, { confirm = true } = {}) {
     const file = getActiveFile();
-    if (!file || !currentGit || !hash || hash === DRAFT_VERSION_HASH) {
+    if (!file || !state.currentGit || !hash || hash === DRAFT_VERSION_HASH) {
         return;
     }
 
-    const version = queryVersions.find(v => v.hash === hash);
+    const version = state.queryVersions.find(v => v.hash === hash);
     if (!version) {
         return;
     }
@@ -3579,7 +3536,7 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         }
     }
 
-    selectedVersionHashes = [hash];
+    state.selectedVersionHashes = [hash];
 
     try {
         queryRestoreBtn.disabled = true;
@@ -3587,17 +3544,17 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
 
         if (isSavedSearchFile(file)) {
             const stanzaName = getSavedSearchStanzaName(file);
-            const trackedHash = restoreParentByFileId.get(file.id);
+            const trackedHash = state.restoreParentByFileId.get(file.id);
 
             await syncFileFromViewUrl(file.id);
             const draftStatus = await getSavedSearchDraftStatus(file);
             const isDirty = draftStatus.hasDraft
-                || forcedDraftByFileId.has(file.id)
-                || userDraftByFileId.has(file.id);
+                || state.forcedDraftByFileId.has(file.id)
+                || state.userDraftByFileId.has(file.id);
 
             if (version.isAutoSave) {
                 const restored = await restoreStanzaAutoSaveVersion(
-                    currentGit,
+                    state.currentGit,
                     relativePath,
                     stanzaName,
                     hash,
@@ -3606,10 +3563,10 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
                 if (!restored.restored) {
                     throw new Error(restored.reason || 'Restore failed');
                 }
-                forcedDraftByFileId.add(file.id);
-                userDraftByFileId.delete(file.id);
-                restoreParentByFileId.set(file.id, restored.baseHash);
-                selectedVersionHashes = [DRAFT_VERSION_HASH];
+                state.forcedDraftByFileId.add(file.id);
+                state.userDraftByFileId.delete(file.id);
+                state.restoreParentByFileId.set(file.id, restored.baseHash);
+                state.selectedVersionHashes = [DRAFT_VERSION_HASH];
                 if (restored.stanzaText) {
                     await applySavedSearchAceFromStanza(file, restored.stanzaText);
                 }
@@ -3636,7 +3593,7 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
                     autoSaveOptions.seedSearchText = liveQuery;
                 }
                 autoSaveResult = await autoSaveStanzaBeforeRestore(
-                    currentGit,
+                    state.currentGit,
                     relativePath,
                     stanzaName,
                     hash,
@@ -3646,13 +3603,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
 
             if (trackedHash === hash) {
                 const draftStatus = await getSavedSearchDraftStatus(file);
-                if (draftStatus.hasDraft || forcedDraftByFileId.has(file.id) || autoSaveResult.saved) {
-                    await discardStanzaDraft(currentGit, relativePath, stanzaName);
-                    forcedDraftByFileId.delete(file.id);
-                    userDraftByFileId.delete(file.id);
-                    restoreParentByFileId.set(file.id, hash);
-                    selectedVersionHashes = [hash];
-                    const stanza = await readVersionStanza(currentGit, relativePath, hash, stanzaName);
+                if (draftStatus.hasDraft || state.forcedDraftByFileId.has(file.id) || autoSaveResult.saved) {
+                    await discardStanzaDraft(state.currentGit, relativePath, stanzaName);
+                    state.forcedDraftByFileId.delete(file.id);
+                    state.userDraftByFileId.delete(file.id);
+                    state.restoreParentByFileId.set(file.id, hash);
+                    state.selectedVersionHashes = [hash];
+                    const stanza = await readVersionStanza(state.currentGit, relativePath, hash, stanzaName);
                     if (stanza) {
                         await applySavedSearchAceFromStanza(file, stanza);
                     }
@@ -3661,13 +3618,13 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
                 }
             }
 
-            const restored = await restoreStanzaVersion(currentGit, relativePath, stanzaName, hash);
+            const restored = await restoreStanzaVersion(state.currentGit, relativePath, stanzaName, hash);
             if (!restored.restored) {
                 throw new Error(restored.reason || 'Restore failed');
             }
-            forcedDraftByFileId.add(file.id);
-            restoreParentByFileId.set(file.id, restored.baseHash || hash);
-            selectedVersionHashes = [DRAFT_VERSION_HASH];
+            state.forcedDraftByFileId.add(file.id);
+            state.restoreParentByFileId.set(file.id, restored.baseHash || hash);
+            state.selectedVersionHashes = [DRAFT_VERSION_HASH];
             if (restored.stanzaText) {
                 await applySavedSearchAceFromStanza(file, restored.stanzaText);
             }
@@ -3676,32 +3633,32 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         }
 
         if (isDashboardFile(file)) {
-            const trackedHash = restoreParentByFileId.get(file.id);
-            if (trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash)) {
-                await saveDraftStash(currentGit, relativePath, trackedHash);
-                userDraftByFileId.delete(file.id);
+            const trackedHash = state.restoreParentByFileId.get(file.id);
+            if (trackedHash && await hasDraftChanges(state.currentGit, relativePath, trackedHash)) {
+                await saveDraftStash(state.currentGit, relativePath, trackedHash);
+                state.userDraftByFileId.delete(file.id);
             }
 
             await restoreVersion(
-                currentGit,
+                state.currentGit,
                 relativePath,
                 hash,
                 trackedHash,
                 { skipAutoSave: true }
             );
-            forcedDraftByFileId.add(file.id);
-            restoreParentByFileId.set(file.id, hash);
-            selectedVersionHashes = [DRAFT_VERSION_HASH];
+            state.forcedDraftByFileId.add(file.id);
+            state.restoreParentByFileId.set(file.id, hash);
+            state.selectedVersionHashes = [DRAFT_VERSION_HASH];
             await refreshQueryHistory();
             return;
         }
 
-        const trackedHash = restoreParentByFileId.get(file.id);
-        const isDirty = !!(trackedHash && await hasDraftChanges(currentGit, relativePath, trackedHash))
-            || userDraftByFileId.has(file.id);
-        const headHash = version.isAutoSave ? (await currentGit.revparse(['HEAD'])).trim() : '';
+        const trackedHash = state.restoreParentByFileId.get(file.id);
+        const isDirty = !!(trackedHash && await hasDraftChanges(state.currentGit, relativePath, trackedHash))
+            || state.userDraftByFileId.has(file.id);
+        const headHash = version.isAutoSave ? (await state.currentGit.revparse(['HEAD'])).trim() : '';
         const restored = await restorePlainQueryVersion({
-            git: currentGit,
+            git: state.currentGit,
             relativePath,
             hash,
             version,
@@ -3719,17 +3676,17 @@ async function restoreQueryVersion(hash, { confirm = true } = {}) {
         }
 
         if (version.isAutoSave) {
-            await consumeAutoSave(currentGit, hash);
+            await consumeAutoSave(state.currentGit, hash);
             if (hash === headHash) {
-                await currentGit.raw(['reset', '--mixed', `${hash}^`]);
+                await state.currentGit.raw(['reset', '--mixed', `${hash}^`]);
             }
-            restoreParentByFileId.set(file.id, version.parentHash || trackedHash || hash);
-            forcedDraftByFileId.add(file.id);
-            selectedVersionHashes = [DRAFT_VERSION_HASH];
+            state.restoreParentByFileId.set(file.id, version.parentHash || trackedHash || hash);
+            state.forcedDraftByFileId.add(file.id);
+            state.selectedVersionHashes = [DRAFT_VERSION_HASH];
         } else {
-            forcedDraftByFileId.delete(file.id);
-            userDraftByFileId.delete(file.id);
-            restoreParentByFileId.set(file.id, hash);
+            state.forcedDraftByFileId.delete(file.id);
+            state.userDraftByFileId.delete(file.id);
+            state.restoreParentByFileId.set(file.id, hash);
         }
         await refreshQueryHistory();
     } catch (err) {
