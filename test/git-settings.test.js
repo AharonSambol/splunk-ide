@@ -19,6 +19,7 @@ describe('normalizeGitSyncSettings', () => {
     it('trims string fields and ignores unknown keys', () => {
         assert.deepEqual(
             normalizeGitSyncSettings({
+                splunkUrl: ' splunk.friendly.com ',
                 remoteUrl: ' https://example.com/repo.git ',
                 remoteName: ' upstream ',
                 sharedBranch: ' develop ',
@@ -28,6 +29,7 @@ describe('normalizeGitSyncSettings', () => {
                 token: 'abc'
             }),
             {
+                splunkUrl: 'splunk.friendly.com',
                 remoteUrl: 'https://example.com/repo.git',
                 remoteName: 'upstream',
                 sharedBranch: 'develop',
@@ -62,6 +64,7 @@ describe('readGitSyncSettings / writeGitSyncSettings', () => {
 
     it('writes and reads settings from userData', () => {
         const input = {
+            splunkUrl: 'localhost:1234',
             remoteUrl: 'https://git.example.com/team/history.git',
             remoteName: 'origin',
             sharedBranch: 'main',

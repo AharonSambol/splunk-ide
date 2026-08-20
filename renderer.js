@@ -1,12 +1,4 @@
 let fileCounter = 1;
-let splunk_url;
-try {
-    splunk_url = fs.readFileSync(String.raw`%userprofile%\.splunk`, 'utf8');
-} catch {
-    splunk_url = 'http://localhost:8010/en-US/app/search/search';
-}
-const SPLUNK_URL = splunk_url;
-
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -28,7 +20,8 @@ const {
     getNextTab,
     createDuplicateFileName,
 } = require('./lib/tabs');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, splunkUiUrlToRestBase } = require('./lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, parseDashboardFromUrl, splunkUiUrlToRestBase, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('./lib/url-utils');
+let SPLUNK_URL = DEFAULT_SPLUNK_URL;
 const { getSavedSearchId } = require('./lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('./lib/object-paths');
 const { getStanzaDraftStatus, saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('./lib/stanza-drafts');
@@ -141,6 +134,7 @@ const confirmOkBtn = document.getElementById('confirm-ok');
 const gitSyncSettingsBtn = document.getElementById('git-sync-settings-btn');
 const gitSyncSettingsModal = document.getElementById('git-sync-settings-modal');
 const gitSyncSettingsModalBox = document.getElementById('git-sync-settings-modal-box');
+const gitSyncSplunkUrlInput = document.getElementById('git-sync-splunk-url');
 const gitSyncRemoteUrlInput = document.getElementById('git-sync-remote-url');
 const gitSyncRemoteNameInput = document.getElementById('git-sync-remote-name');
 const gitSyncSharedBranchInput = document.getElementById('git-sync-shared-branch');
@@ -179,6 +173,7 @@ let modalMode = 'create';
 let modalTargetFileId = null;
 let currentGit = null;
 let gitSyncSettings = {
+    splunkUrl: '',
     remoteUrl: '',
     remoteName: 'origin',
     sharedBranch: 'main',
@@ -485,9 +480,11 @@ window.onload = async () => {
 
 async function loadGitSyncSettings() {
     gitSyncSettings = await ipcRenderer.invoke('get-git-sync-settings');
+    SPLUNK_URL = normalizeSplunkAddress(gitSyncSettings.splunkUrl);
 }
 
 function populateGitSyncSettingsForm() {
+    gitSyncSplunkUrlInput.value = gitSyncSettings.splunkUrl || SPLUNK_URL;
     gitSyncRemoteUrlInput.value = gitSyncSettings.remoteUrl || '';
     gitSyncRemoteNameInput.value = gitSyncSettings.remoteName || 'origin';
     gitSyncSharedBranchInput.value = gitSyncSettings.sharedBranch || 'main';
@@ -507,7 +504,7 @@ function openGitSyncSettingsModal() {
     populateGitSyncSettingsForm();
     setGitSyncSettingsStatus('');
     gitSyncSettingsModal.classList.add('visible');
-    setTimeout(() => gitSyncRemoteUrlInput.focus(), 0);
+    setTimeout(() => gitSyncSplunkUrlInput.focus(), 0);
 }
 
 function closeGitSyncSettingsModal() {
@@ -515,8 +512,19 @@ function closeGitSyncSettingsModal() {
     setGitSyncSettingsStatus('');
 }
 
+function retargetOpenViewsToSplunkUrl() {
+    for (const file of files) {
+        file.url = withSplunkOrigin(file.url || SPLUNK_URL, SPLUNK_URL);
+        const view = document.getElementById(file.id);
+        if (view) {
+            view.src = file.url;
+        }
+    }
+}
+
 async function saveGitSyncSettingsFromModal() {
     const settings = {
+        splunkUrl: gitSyncSplunkUrlInput.value,
         remoteUrl: gitSyncRemoteUrlInput.value,
         remoteName: gitSyncRemoteNameInput.value,
         sharedBranch: gitSyncSharedBranchInput.value,
@@ -534,6 +542,7 @@ async function saveGitSyncSettingsFromModal() {
             return;
         }
         await loadGitSyncSettings();
+        retargetOpenViewsToSplunkUrl();
         closeGitSyncSettingsModal();
     } catch (error) {
         setGitSyncSettingsStatus(error.message || 'Failed to save settings', 'error');
@@ -1374,7 +1383,7 @@ async function loadProject(projectPath) {
     });
     const seenSavedSearchIds = new Set();
     for (const filePath of sortedPaths) {
-        const url = fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL;
+        const url = withSplunkOrigin(fs.readFileSync(filePath, 'utf8').trim() || SPLUNK_URL, SPLUNK_URL);
         const name = path.relative(projectPath, filePath).replace(/\.spl$/i, '').split(path.sep).join('/');
         const savedSearch = parseSavedSearchFromUrl(url);
         if (savedSearch) {

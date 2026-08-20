@@ -1184,7 +1184,7 @@
                     <button id="prev-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Back">⬅</button>
                     <button id="next-page-btn" class="project-action" style="font-size:larger; padding: 0 10px" title="Forward">➡</button>
                     <button id="copy-url-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Copy URL of open file">Copy URL</button>
-                    <button id="git-sync-settings-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Git sync settings">⚙</button>
+                    <button id="git-sync-settings-btn" class="project-action" style="margin-right: 0; padding: 5px 10px" title="Settings">⚙</button>
                 </div>
             </div>
 
@@ -1259,7 +1259,11 @@
 
     <div id="git-sync-settings-modal" class="">
         <div id="git-sync-settings-modal-box">
-            <div id="git-sync-settings-title">Git Sync Settings</div>
+            <div id="git-sync-settings-title">Settings</div>
+            <div class="modal-row">
+                <label for="git-sync-splunk-url">Splunk address</label>
+                <input id="git-sync-splunk-url" type="text" placeholder="localhost:8010, splunk.friendly.com, or splunk/" autocomplete="off" spellcheck="false" />
+            </div>
             <div class="modal-row">
                 <label for="git-sync-remote-url">Remote repository URL</label>
                 <input id="git-sync-remote-url" type="text" placeholder="Leave blank for local-only" autocomplete="off" spellcheck="false" />

@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, splunkUiUrlToRestBase, urlsMatchForDraft } = require('../lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, splunkUiUrlToRestBase, urlsMatchForDraft, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('../lib/url-utils');
 
 describe('decodeSearchText', () => {
     it('decodes percent-encoded text', () => {
@@ -123,5 +123,43 @@ describe('splunkUiUrlToRestBase', () => {
 
     it('returns empty string for invalid input', () => {
         assert.equal(splunkUiUrlToRestBase(''), '');
+    });
+});
+
+describe('normalizeSplunkAddress', () => {
+    it('uses the default search URL when blank', () => {
+        assert.equal(normalizeSplunkAddress(''), DEFAULT_SPLUNK_URL);
+    });
+
+    it('turns a host into an http search URL', () => {
+        assert.equal(
+            normalizeSplunkAddress('splunk.friendly.com'),
+            'http://splunk.friendly.com/en-US/app/search/search'
+        );
+        assert.equal(
+            normalizeSplunkAddress('splunk/'),
+            'http://splunk/en-US/app/search/search'
+        );
+        assert.equal(
+            normalizeSplunkAddress('localhost:1234'),
+            'http://localhost:1234/en-US/app/search/search'
+        );
+    });
+
+    it('keeps an explicit path', () => {
+        assert.equal(
+            normalizeSplunkAddress('https://splunk.friendly.com/en-US/app/search/search'),
+            'https://splunk.friendly.com/en-US/app/search/search'
+        );
+    });
+});
+
+describe('withSplunkOrigin', () => {
+    it('retargets a saved search URL to another host', () => {
+        const href = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
+        assert.equal(
+            withSplunkOrigin(href, 'splunk.friendly.com'),
+            'http://splunk.friendly.com/en-US/app/search/search?q=search%20index%3Dmain'
+        );
     });
 });
