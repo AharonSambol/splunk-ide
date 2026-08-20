@@ -33,7 +33,7 @@ test.describe('Electron app launch', () => {
         await expect(window.locator('#open-project-btn')).toBeVisible();
         await expect(window.locator('#open-project-btn')).toHaveText('Open Project');
         await expect(window.locator('#new-file-btn')).toBeVisible();
-        await expect(window.locator('#new-folder-btn')).toBeVisible();
+        await expect(window.locator('#new-folder-btn')).toBeAttached();
         await expect(window.locator('.sidebar-tab[data-view="git"]')).toHaveText('Source Control');
     });
 

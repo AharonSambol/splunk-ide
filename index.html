@@ -30,7 +30,7 @@
             flex-direction: column;
             flex-shrink: 0;
             position: relative;
-            overflow: hidden;
+            overflow: visible;
         }
 
         #sidebar-resize {
@@ -61,24 +61,34 @@
             display: none;
         }
 
-        #sidebar-reopen {
+        #sidebar-reopen,
+        #query-sidebar-reopen {
             display: none;
             flex-shrink: 0;
             width: 28px;
             background: #252526;
             border: none;
-            border-right: 1px solid #333;
             color: #9cdcfe;
             cursor: pointer;
             font-size: 0.85rem;
             padding: 0;
         }
 
-        #sidebar-reopen.visible {
+        #sidebar-reopen {
+            border-right: 1px solid #333;
+        }
+
+        #query-sidebar-reopen {
+            border-left: 1px solid #333;
+        }
+
+        #sidebar-reopen.visible,
+        #query-sidebar-reopen.visible {
             display: block;
         }
 
-        #sidebar-reopen:hover {
+        #sidebar-reopen:hover,
+        #query-sidebar-reopen:hover {
             background: #2d2d30;
             color: #fff;
         }
@@ -109,6 +119,47 @@
             align-items: center;
             gap: 2px;
             flex-shrink: 0;
+            position: relative;
+        }
+
+        #new-item-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 22px;
+            z-index: 6;
+            min-width: 132px;
+            flex-direction: column;
+            background: #2d2d30;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+            padding: 4px;
+        }
+
+        #new-item-menu.visible {
+            display: flex;
+        }
+
+        #new-item-menu button {
+            background: transparent;
+            border: none;
+            color: #ccc;
+            text-align: left;
+            padding: 6px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        #new-item-menu button:hover {
+            background: #094771;
+            color: #fff;
+        }
+
+        #new-item-menu button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
 
         #sidebar-header #new-file-btn,
@@ -1165,7 +1216,11 @@
             <div id="sidebar-header">
                 <span id="sidebar-header-title">Searches</span>
                 <span id="sidebar-header-actions">
-                    <button id="new-file-btn" type="button" disabled title="New Search">+</button>
+                    <button id="new-file-btn" type="button" disabled title="New search or folder">+</button>
+                    <div id="new-item-menu">
+                        <button type="button" id="new-search-choice">New Search</button>
+                        <button type="button" id="new-folder-btn" disabled>New Folder</button>
+                    </div>
                     <button id="sidebar-collapse-btn" type="button" title="Hide searches">‹</button>
                 </span>
             </div>
@@ -1196,7 +1251,7 @@
             <div id="query-history-header">
                 <span id="query-history-title">Query History</span>
                 <span id="query-history-status"></span>
-                <button id="query-history-close" type="button" title="Collapse timeline">×</button>
+                <button id="query-history-close" type="button" title="Hide history">›</button>
             </div>
             <div id="query-history-tabs">
                 <button type="button" class="history-tab active" data-mode="history">History</button>
@@ -1219,6 +1274,7 @@
                 <button id="query-restore-btn" class="query-history-btn secondary" type="button" disabled>Restore</button>
             </div>
         </aside>
+        <button id="query-sidebar-reopen" class="visible" type="button" title="Show history">◀</button>
     </div>
 
     <div id="status-bar">

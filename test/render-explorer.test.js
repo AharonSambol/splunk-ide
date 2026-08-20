@@ -32,6 +32,7 @@ describe('renderExplorer', () => {
         const rootLabel = container.querySelector('.folder-root');
         assert.ok(rootLabel);
         assert.equal(rootLabel.textContent, 'Search Files');
+        assert.equal(container.querySelector('.explorer-item').draggable, true);
 
         const items = container.querySelectorAll('.explorer-item');
         assert.equal(items.length, 1);
@@ -113,5 +114,35 @@ describe('renderExplorer', () => {
 
         container.querySelector('.folder-actions button').click();
         assert.equal(deletedPath, 'queries');
+    });
+
+    it('hides the root label when asked', () => {
+        const document = createDocument();
+        const container = createContainer(document, 'explorer');
+        const tree = buildFileTree([{ id: 'f1', name: 'readme' }], []);
+
+        renderExplorer(container, tree, { activeFileId: null, isEmpty: false, hideRootLabel: true });
+
+        assert.equal(container.querySelector('.folder-root'), null);
+    });
+
+    it('drops a file onto a folder', () => {
+        const document = createDocument();
+        const container = createContainer(document, 'explorer');
+        const tree = buildFileTree([{ id: 'f1', name: 'readme' }], ['queries']);
+        let dropped = null;
+
+        renderExplorer(container, tree, { activeFileId: null, isEmpty: false, hideRootLabel: true }, {
+            onFileDrop: (id, folder) => { dropped = [id, folder]; },
+        });
+
+        const folder = container.querySelector('details.folder');
+        folder.dispatchEvent(new document.defaultView.Event('drop', { bubbles: true }));
+        assert.equal(dropped, null);
+
+        const event = new document.defaultView.Event('drop', { bubbles: true });
+        event.dataTransfer = { getData() { return 'f1'; } };
+        folder.dispatchEvent(event);
+        assert.deepEqual(dropped, ['f1', 'queries']);
     });
 });

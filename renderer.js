@@ -69,6 +69,20 @@ const {
     shouldScheduleLiveDraftRefresh
 } = require('./lib/saved-search-dirty');
 const { renderExplorer } = require('./lib/render-explorer');
+const {
+    IDE_FOLDERS_FILE,
+    explorerIdForFile,
+    folderNames,
+    folderForId,
+    createFolder: addIdeFolder,
+    deleteFolder: removeIdeFolder,
+    setItemFolder,
+    replaceItemId,
+    pruneIdeFolders,
+    toExplorerInput,
+    readIdeFolders,
+    writeIdeFolders,
+} = require('./lib/ide-folders');
 const { createTabElement, setActiveTab, updateTabTitle } = require('./lib/render-tabs');
 const { renderQuickSearchResults } = require('./lib/render-quick-search');
 const { attachWebviewSelectionDragHandlers } = require('./lib/webview-selection-drag-handlers');
@@ -79,6 +93,9 @@ const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
 attachParentSelectionCleanup(document);
 
 const newFileBtn = document.getElementById('new-file-btn');
+const newItemMenu = document.getElementById('new-item-menu');
+const newSearchChoice = document.getElementById('new-search-choice');
+const newFolderBtn = document.getElementById('new-folder-btn');
 const newProjectBtn = document.getElementById('new-project-btn');
 const openProjectBtn = document.getElementById('open-project-btn');
 const copyUrlBtn = document.getElementById('copy-url-btn');
@@ -111,6 +128,7 @@ const newFileCancelBtn = document.getElementById('new-file-cancel');
 
 // Query history elements
 const querySidebar = document.getElementById('query-sidebar');
+const querySidebarReopenBtn = document.getElementById('query-sidebar-reopen');
 const queryHistoryTitle = document.getElementById('query-history-title');
 const queryHistoryStatus = document.getElementById('query-history-status');
 const queryHistoryClose = document.getElementById('query-history-close');
@@ -158,9 +176,12 @@ const PROJECT_SIDEBAR_MIN_WIDTH = 180;
 const PROJECT_SIDEBAR_MAX_WIDTH = 520;
 const PROJECT_SIDEBAR_DEFAULT_WIDTH = 260;
 const DRAFT_VERSION_HASH = '__draft__';
+const EXPLORER_COLLAPSED_KEY = 'splunk-ide-explorer-collapsed';
 
 let files = [];
 let folders = [];
+let ideFolders = {};
+let collapsedExplorerFolders = new Set();
 let activeFileId = null;
 let fileMru = [];
 let currentProjectPath = null;
@@ -359,7 +380,21 @@ function getDiskRelativePath(file) {
 newProjectBtn.addEventListener('click', createNewProject);
 openProjectBtn.addEventListener('click', openProject);
 copyUrlBtn.addEventListener('click', copyActiveFileUrl);
-newFileBtn.addEventListener('click', openNewFileModal);
+newFileBtn.addEventListener('click', event => {
+    event.stopPropagation();
+    if (newFileBtn.disabled) {
+        return;
+    }
+    newItemMenu.classList.toggle('visible');
+});
+newSearchChoice.addEventListener('click', () => {
+    hideNewItemMenu();
+    openNewFileModal();
+});
+newFolderBtn.addEventListener('click', () => {
+    hideNewItemMenu();
+    openNewFolderModal();
+});
 newFileCreateBtn.addEventListener('click', confirmNewFileCreation);
 newFileCancelBtn.addEventListener('click', closeNewFileModal);
 gitSyncSettingsBtn.addEventListener('click', openGitSyncSettingsModal);
@@ -367,6 +402,7 @@ gitSyncSettingsCancelBtn.addEventListener('click', closeGitSyncSettingsModal);
 gitSyncSettingsSaveBtn.addEventListener('click', saveGitSyncSettingsFromModal);
 
 queryHistoryClose.addEventListener('click', () => setQueryHistoryPanelOpen(false));
+querySidebarReopenBtn.addEventListener('click', () => setQueryHistoryPanelOpen(true));
 sidebarCollapseBtn.addEventListener('click', () => setProjectSidebarCollapsed(true));
 sidebarReopenBtn.addEventListener('click', () => setProjectSidebarCollapsed(false));
 querySaveBtn.addEventListener('click', saveQueryVersion);
@@ -418,6 +454,9 @@ document.addEventListener('mousedown', event => {
     }
     if (gitSyncSettingsModal.classList.contains('visible') && !gitSyncSettingsModalBox.contains(target)) {
         closeGitSyncSettingsModal();
+    }
+    if (newItemMenu.classList.contains('visible') && !newItemMenu.contains(target) && target !== newFileBtn) {
+        hideNewItemMenu();
     }
     if (_findOverlay && !_findOverlay.overlay.contains(target)) {
         hideFindOverlay();
@@ -632,10 +671,6 @@ function createFileWithUrl(name, url, parentFolder = '') {
     files.push(file);
     fileMru.unshift(fileId);
 
-    const fileParentFolder = getFileFolder(relativeFileName);
-    if (fileParentFolder) {
-        addFolderForPath(fileParentFolder);
-    }
     createTab(file);
     createView(file);
     updateExplorer();
@@ -664,10 +699,6 @@ function createNewFile(name, parentFolder = '') {
     files.push(file);
     fileMru.unshift(fileId);
 
-    const fileParentFolder = getFileFolder(relativeFileName);
-    if (fileParentFolder) {
-        addFolderForPath(fileParentFolder);
-    }
     createTab(file);
     createView(file);
     updateExplorer();
@@ -675,35 +706,20 @@ function createNewFile(name, parentFolder = '') {
     onQueryFileChanged(fileId);
 }
 
-function createNewFolder(name, parentFolder = '') {
+function createNewFolder(name) {
     if (!currentProjectPath) {
         alert('Please create or open a project before creating folders.');
         return;
     }
 
-    const folderNameRaw = name ? name.trim() : '';
-    if (!folderNameRaw) {
+    const next = addIdeFolder(ideFolders, name);
+    if (JSON.stringify(next) === JSON.stringify(ideFolders)) {
         return;
     }
-
-    const normalizedFolder = normalizeRelativePath(folderNameRaw);
-    const relativeFolder = parentFolder ? `${parentFolder}/${normalizedFolder}` : normalizedFolder;
-    const folderPath = path.join(currentProjectPath, ...relativeFolder.split('/'));
-    ensureDirectoryExists(folderPath);
-
-    addFolderForPath(relativeFolder);
+    ideFolders = next;
+    syncFolderList();
+    void persistIdeFolders();
     updateExplorer();
-}
-
-function addFolderForPath(folderPath) {
-    const segments = folderPath.split('/').map(segment => segment.trim()).filter(Boolean);
-    let accumulated = '';
-    segments.forEach(segment => {
-        accumulated = accumulated ? `${accumulated}/${segment}` : segment;
-        if (!folders.includes(accumulated)) {
-            folders.push(accumulated);
-        }
-    });
 }
 
 function getOpenTabIds() {
@@ -755,41 +771,16 @@ function deleteFile(fileId) {
 }
 
 function deleteFolder(folderPath) {
-    if (!confirm(`Delete folder "${folderPath}" and all of its contents?`)) {
+    if (!confirm(`Remove folder "${folderPath}"? Searches stay in the list.`)) {
         return;
     }
 
-    const fullPath = path.join(currentProjectPath, ...folderPath.split('/'));
-    removeFolderRecursive(fullPath);
-
-    const removedFileIds = files
-        .filter(file => file.name === folderPath || file.name.startsWith(`${folderPath}/`))
-        .map(file => file.id);
-
-    removedFileIds.forEach(id => {
-        closeTab(id);
-        removeFile(id, false);
-    });
-
-    folders = folders.filter(folder => folder !== folderPath && !folder.startsWith(`${folderPath}/`));
+    ideFolders = removeIdeFolder(ideFolders, folderPath);
+    syncFolderList();
+    collapsedExplorerFolders.delete(folderPath);
+    persistCollapsedExplorerFolders();
+    void persistIdeFolders();
     updateExplorer();
-}
-
-function removeFolderRecursive(folderPath) {
-    if (!fs.existsSync(folderPath)) {
-        return;
-    }
-
-    fs.readdirSync(folderPath, { withFileTypes: true }).forEach(dirent => {
-        const fullPath = path.join(folderPath, dirent.name);
-        if (dirent.isDirectory()) {
-            removeFolderRecursive(fullPath);
-        } else {
-            fs.unlinkSync(fullPath);
-        }
-    });
-
-    fs.rmdirSync(folderPath);
 }
 
 function removeFile(fileId, deleteFromDisk = false) {
@@ -797,6 +788,12 @@ function removeFile(fileId, deleteFromDisk = false) {
     const file = files.find(f => f.id === fileId);
     files = files.filter(file => file.id !== fileId);
     fileMru = fileMru.filter(id => id !== fileId);
+
+    if (file) {
+        ideFolders = pruneIdeFolders(ideFolders, files.map(explorerIdForFile));
+        syncFolderList();
+        void persistIdeFolders();
+    }
 
     if (deleteFromDisk && file?.path && fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
@@ -1135,12 +1132,21 @@ async function handleSplunkSave(fileId) {
 }
 
 async function applySavedSearchToFile(file, savedSearch, url) {
+    const previousId = explorerIdForFile(file);
     file.savedSearch = savedSearch;
     delete file.dashboard;
     file.url = url;
 
     ensureDirectoryExists(path.dirname(file.path));
     fs.writeFileSync(file.path, url, 'utf8');
+
+    const nextId = explorerIdForFile(file);
+    if (previousId !== nextId) {
+        ideFolders = replaceItemId(ideFolders, previousId, nextId);
+        syncFolderList();
+        void persistIdeFolders();
+        updateExplorer();
+    }
 
     await enterSavedSearchHistory(file, url);
     await syncSavedSearchTrackedBase(file);
@@ -1261,7 +1267,6 @@ async function applyDashboardToFile(file, dashboard, url) {
 
     file.name = viewPath;
     file.url = url;
-    addFolderForPath(getFileFolder(file.name));
     updateTabLabel(file);
     updateExplorer();
     await syncDashboardTrackedBase(file);
@@ -1297,7 +1302,7 @@ function openMoveFileModal(file) {
     newFileModalLabel.textContent = `Move "${file.name.split('/').pop()}" to folder`;
     newFileModalInput.value = file.name.split('/').pop();
     newFileModalInput.disabled = true;
-    populateFolderSelect(getFileFolder(file.name));
+    populateFolderSelect(folderForId(ideFolders, explorerIdForFile(file)));
     showNewFileModal();
 }
 
@@ -1307,27 +1312,10 @@ async function moveFile(fileId, targetFolder) {
         return;
     }
 
-    const newPath = getMoveTargetPath(currentProjectPath, file.name, targetFolder, path);
-    const oldPath = file.path;
-    const oldRelative = getDiskRelativePath(file);
-
-    if (newPath === oldPath) {
-        return;
-    }
-
-    if (currentGit) {
-        await renameQueryFile(currentGit, currentProjectPath, oldRelative, path.relative(currentProjectPath, newPath).split(path.sep).join('/'));
-    } else {
-        ensureDirectoryExists(path.dirname(newPath));
-        fs.renameSync(oldPath, newPath);
-    }
-
-    file.name = path.relative(currentProjectPath, newPath).replace(/\.spl$/i, '').split(path.sep).join('/');
-    file.path = newPath;
-    const movedParent = getFileFolder(file.name);
-    if (movedParent) addFolderForPath(movedParent);
+    ideFolders = setItemFolder(ideFolders, explorerIdForFile(file), targetFolder);
+    syncFolderList();
+    await persistIdeFolders();
     updateExplorer();
-    onQueryFileChanged(fileId, { refreshHistory: true });
 }
 
 async function createNewProject() {
@@ -1366,14 +1354,13 @@ async function loadProject(projectPath) {
 
     files = [];
     folders = [];
+    ideFolders = {};
     fileMru = [];
     activeFileId = null;
     restoreParentByFileId.clear();
     forcedDraftByFileId.clear();
     userDraftByFileId.clear();
     clearOpenTabs();
-
-    folders = scanProjectFolders(projectPath);
 
     const filePaths = scanProjectFiles(currentProjectPath);
     const sortedPaths = [...filePaths].sort((left, right) => {
@@ -1403,6 +1390,8 @@ async function loadProject(projectPath) {
         }
     }
 
+    loadIdeFoldersFromProject();
+    loadCollapsedExplorerFolders();
     updateExplorer();
 }
 
@@ -1413,10 +1402,61 @@ function clearOpenTabs() {
     document.querySelectorAll('webview').forEach(view => view.remove());
 }
 
+function hideNewItemMenu() {
+    newItemMenu.classList.remove('visible');
+}
+
+function syncFolderList() {
+    folders = folderNames(ideFolders);
+}
+
+function collapsedFoldersStorageKey() {
+    return `${EXPLORER_COLLAPSED_KEY}:${currentProjectPath || ''}`;
+}
+
+function loadCollapsedExplorerFolders() {
+    try {
+        collapsedExplorerFolders = new Set(JSON.parse(localStorage.getItem(collapsedFoldersStorageKey()) || '[]'));
+    } catch {
+        collapsedExplorerFolders = new Set();
+    }
+}
+
+function persistCollapsedExplorerFolders() {
+    localStorage.setItem(collapsedFoldersStorageKey(), JSON.stringify([...collapsedExplorerFolders]));
+}
+
+async function persistIdeFolders() {
+    if (!currentProjectPath) {
+        return;
+    }
+    writeIdeFolders(currentProjectPath, ideFolders);
+    if (!currentGit) {
+        return;
+    }
+    try {
+        await saveVersion(currentGit, IDE_FOLDERS_FILE, 'Update search folders', undefined, {
+            author: getGitAuthorFromSettings(),
+        });
+    } catch (err) {
+        console.error('Failed to commit search folders', err);
+    }
+}
+
+function loadIdeFoldersFromProject() {
+    const knownIds = files.map(explorerIdForFile);
+    ideFolders = pruneIdeFolders(readIdeFolders(currentProjectPath), knownIds);
+    syncFolderList();
+}
+
 function updateProjectDisplay() {
     projectNameLabel.textContent = currentProjectPath ? currentProjectName : 'No project loaded';
     projectNameLabel.title = currentProjectPath || '';
     newFileBtn.disabled = !currentProjectPath;
+    newFolderBtn.disabled = !currentProjectPath;
+    if (!currentProjectPath) {
+        hideNewItemMenu();
+    }
 }
 
 function openNewFileModal() {
@@ -1450,9 +1490,8 @@ function showNewFileModal() {
         newFileModalInput.disabled = false;
     } else if (modalMode === 'folder') {
         newFileModalLabel.textContent = 'New Folder Name';
-        newFileFolderRow.style.display = 'block';
+        newFileFolderRow.style.display = 'none';
         newFileModalInput.disabled = false;
-        populateFolderSelect('');
     } else if (modalMode === 'move') {
         newFileModalLabel.textContent = `Move "${files.find(f => f.id === modalTargetFileId)?.name.split('/').pop() || ''}" to folder`;
         newFileFolderRow.style.display = 'block';
@@ -1472,7 +1511,7 @@ function showNewFileModal() {
     } else {
         newFileCreateBtn.textContent = 'Create';
     }
-    newFileModalInput.placeholder = modalMode === 'folder' ? 'Folder name or path' : 'Enter file name or path';
+    newFileModalInput.placeholder = modalMode === 'folder' ? 'Folder name' : 'Enter file name or path';
     newFileModal.classList.add('visible');
     setTimeout(() => {
         newFileModalInput.select();
@@ -1492,7 +1531,7 @@ function confirmNewFileCreation() {
     if (modalMode === 'rename' && modalTargetFileId) {
         renameFile(modalTargetFileId, name);
     } else if (modalMode === 'folder') {
-        createNewFolder(name, selectedFolder);
+        createNewFolder(name);
     } else if (modalMode === 'move' && modalTargetFileId) {
         moveFile(modalTargetFileId, selectedFolder);
     } else {
@@ -1941,62 +1980,29 @@ function setHistorySidebarMode(mode) {
 }
 
 function updateExplorer() {
-    explorer.innerHTML = '';
-
-    if (files.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'explorer-item';
-        empty.textContent = 'No searches yet. Click + to create one.';
-        explorer.appendChild(empty);
-        return;
-    }
-
-    const sorted = [...files].sort((a, b) => {
-        const aName = a.name.split('/').pop();
-        const bName = b.name.split('/').pop();
-        return aName.localeCompare(bName, undefined, { sensitivity: 'base' });
+    const { fileList, folderList } = toExplorerInput(files, ideFolders);
+    const tree = buildFileTree(fileList, folderList);
+    renderExplorer(explorer, tree, {
+        activeFileId,
+        isEmpty: files.length === 0 && folderList.length === 0,
+        hideRootLabel: true,
+    }, {
+        onFileClick: openFile,
+        onFileDblClick: openRenameModal,
+        onFileMove: openMoveFileModal,
+        onFileDelete: deleteFile,
+        onFolderDelete: deleteFolder,
+        onFileDrop: (fileId, folderPath) => { void moveFile(fileId, folderPath); },
+        isFolderOpen: folderPath => !collapsedExplorerFolders.has(folderPath),
+        onFolderToggle: (folderPath, open) => {
+            if (open) {
+                collapsedExplorerFolders.delete(folderPath);
+            } else {
+                collapsedExplorerFolders.add(folderPath);
+            }
+            persistCollapsedExplorerFolders();
+        },
     });
-
-    sorted.forEach(file => {
-        explorer.appendChild(renderFileNode({
-            ...file,
-            displayName: file.name.split('/').pop()
-        }));
-    });
-}
-
-function renderFileNode(file) {
-    const item = document.createElement('div');
-    item.className = 'explorer-item';
-    item.dataset.fileId = file.id;
-
-    const label = document.createElement('span');
-    label.className = 'file-name';
-    label.textContent = file.displayName || file.name;
-
-    const actions = document.createElement('span');
-    actions.className = 'file-actions';
-
-    const deleteButton = document.createElement('button');
-    deleteButton.className = 'file-action file-delete';
-    deleteButton.type = 'button';
-    deleteButton.title = 'Delete';
-    deleteButton.textContent = '×';
-    deleteButton.addEventListener('click', event => {
-        event.stopPropagation();
-        deleteFile(file.id);
-    });
-
-    actions.appendChild(deleteButton);
-
-    item.appendChild(label);
-    item.appendChild(actions);
-    item.addEventListener('click', () => openFile(file.id));
-    item.addEventListener('dblclick', () => openRenameModal(file));
-    if (file.id === activeFileId) {
-        item.classList.add('active');
-    }
-    return item;
 }
 
 function openMostRecentTab() {
@@ -3141,6 +3147,7 @@ function initializeLayoutControls() {
 
 function setQueryHistoryPanelOpen(open, { persist = true } = {}) {
     querySidebar.classList.toggle('collapsed', !open);
+    querySidebarReopenBtn.classList.toggle('visible', !open);
     if (persist) {
         localStorage.setItem(QUERY_SIDEBAR_COLLAPSED_KEY, String(!open));
     }

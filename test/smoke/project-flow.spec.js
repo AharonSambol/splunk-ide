@@ -34,6 +34,7 @@ test.describe('Project and sidebar flows', () => {
 
         await expect(window.locator('#project-name')).toHaveText(path.basename(tempProjectPath));
         await expect(window.locator('#new-file-btn')).toBeEnabled();
+        await window.click('#new-file-btn');
         await expect(window.locator('#new-folder-btn')).toBeEnabled();
     });
 
@@ -47,6 +48,7 @@ test.describe('Project and sidebar flows', () => {
         await expect(window.locator('#new-file-btn')).toBeEnabled();
 
         await window.click('#new-file-btn');
+        await window.click('#new-search-choice');
         await expect(window.locator('#new-file-modal.visible')).toBeVisible();
         await window.fill('#new-file-modal-input', 'smoke-search');
         await window.click('#new-file-create');
@@ -65,6 +67,7 @@ test.describe('Project and sidebar flows', () => {
         await mockProjectFolderDialog(electronApp, tempProjectPath);
         await window.click('#new-project-btn');
         await window.click('#new-file-btn');
+        await window.click('#new-search-choice');
         await window.fill('#new-file-modal-input', 'quick-search-target');
         await window.click('#new-file-create');
         await expect(window.locator('.explorer-item .file-name', { hasText: 'quick-search-target' })).toBeVisible();
