@@ -459,6 +459,8 @@ Split into two files if the splice is huge; still **one** `renderer.js` owner.
 
 `createView` keeps preload, injectors, `splunk-save` IPC, selection-drag handlers. Do not inline `lib/webview-*`.
 
+**Status:** moved tab bar/webview helpers into `renderer/tabs.js`. `switchToFile` wrapper (nav buttons, dirty refresh, `syncFileFromViewUrl`, maybe `setQueryHistoryPanelOpen(true)`) now lives inside `tabs.js` (`activateFile` + history sync); `originalSwitchToFile` is gone. `attachTabs({...})` replaced the copy-URL / prev / next listeners. `handleKeyboardShortcut` and `syncFileFromViewUrl` (`shouldClearTabObjectOnNavigate`) stay in `renderer.js`. Commit: this atom. Before: tab functions + wrapper in `renderer.js`; `node --check` ok; 20 tab, 21 folder, 5 restore; smoke shell + 3 drag pass. After: `function createView` / `function switchToFile` / `originalSwitchToFile` gone from `renderer.js`, present in `renderer/tabs.js`; same checks pass. Leftover `renderer.js` callers: `attachExplorer` (`createTab`, `createView`, `closeTab`, `switchToFile`, `updateTabLabel`), `syncFileFromViewUrl` → `getViewUrl`, `applyDashboardToFile` → `updateTabLabel`, keymap → `duplicateCurrentTab` / `openMostRecentTab` / `switchToPreviousTab` / `switchToNextTab`.
+
 ### G2 — query history / restore
 
 **Own:** `renderer/history.js`.  
