@@ -103,10 +103,12 @@ const sidebarResize = document.getElementById('sidebar-resize');
 const querySidebarResize = document.getElementById('query-sidebar-resize');
 const sidebarDragOverlay = document.getElementById('sidebar-drag-overlay');
 const quickSearchOverlay = document.getElementById('quick-search-overlay');
+const quickSearchModal = document.getElementById('quick-search-modal');
 const quickSearchHint = document.getElementById('quick-search-hint');
 const quickSearchInput = document.getElementById('quick-search-input');
 const quickSearchResults = document.getElementById('quick-search-results');
 const newFileModal = document.getElementById('new-file-modal');
+const newFileModalBox = document.getElementById('new-file-modal-box');
 const newFileModalLabel = document.getElementById('new-file-modal-label');
 const newFileModalInput = document.getElementById('new-file-modal-input');
 const newFileFolderRow = document.getElementById('new-file-folder-row');
@@ -131,12 +133,14 @@ const querySaveMessage = document.getElementById('query-save-message');
 const querySaveBtn = document.getElementById('query-save-btn');
 const queryRestoreBtn = document.getElementById('query-restore-btn');
 const confirmModal = document.getElementById('confirm-modal');
+const confirmModalBox = document.getElementById('confirm-modal-box');
 const confirmModalTitle = document.getElementById('confirm-modal-title');
 const confirmModalBody = document.getElementById('confirm-modal-body');
 const confirmCancelBtn = document.getElementById('confirm-cancel');
 const confirmOkBtn = document.getElementById('confirm-ok');
 const gitSyncSettingsBtn = document.getElementById('git-sync-settings-btn');
 const gitSyncSettingsModal = document.getElementById('git-sync-settings-modal');
+const gitSyncSettingsModalBox = document.getElementById('git-sync-settings-modal-box');
 const gitSyncRemoteUrlInput = document.getElementById('git-sync-remote-url');
 const gitSyncRemoteNameInput = document.getElementById('git-sync-remote-name');
 const gitSyncSharedBranchInput = document.getElementById('git-sync-shared-branch');
@@ -401,8 +405,27 @@ tagPopupInput.addEventListener('keydown', event => {
     }
 });
 document.addEventListener('mousedown', event => {
-    if (tagPopup.classList.contains('visible') && !tagPopup.contains(event.target)) {
+    const target = event.target;
+    if (!(target instanceof Node)) {
+        return;
+    }
+    if (tagPopup.classList.contains('visible') && !tagPopup.contains(target)) {
         closeTagPopup();
+    }
+    if (quickSearchOverlay.classList.contains('visible') && !quickSearchModal.contains(target)) {
+        closeQuickSearch();
+    }
+    if (newFileModal.classList.contains('visible') && !newFileModalBox.contains(target)) {
+        closeNewFileModal();
+    }
+    if (confirmModal.classList.contains('visible') && !confirmModalBox.contains(target)) {
+        closeConfirmModal(false);
+    }
+    if (gitSyncSettingsModal.classList.contains('visible') && !gitSyncSettingsModalBox.contains(target)) {
+        closeGitSyncSettingsModal();
+    }
+    if (_findOverlay && !_findOverlay.overlay.contains(target)) {
+        hideFindOverlay();
     }
 });
 queryPreviewModeBtns.forEach(btn => {
