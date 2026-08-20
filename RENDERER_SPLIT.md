@@ -197,7 +197,7 @@ Move the **data**, not the behavior. Two commits: DOM first (destructure is safe
 | Check | Expect |
 |---|---|
 | `node --check renderer.js renderer/dom.js` | exit 0 |
-| `rg "getElementById" renderer.js` | no hits |
+| `rg "getElementById\\('explorer'\\)|getElementById\\('new-file-btn'\\)" renderer.js` | no hits (webview `getElementById(file.id)` stays) |
 | `rg "getElementById\\('explorer'\\)" renderer/dom.js` | hit |
 | source-grep three tests | pass |
 | folder three tests | pass |

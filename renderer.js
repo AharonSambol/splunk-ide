@@ -92,78 +92,78 @@ const { diffLines, renderDiffHtml } = require('./lib/diff-lines');
 
 attachParentSelectionCleanup(document);
 
-const newFileBtn = document.getElementById('new-file-btn');
-const newItemMenu = document.getElementById('new-item-menu');
-const newSearchChoice = document.getElementById('new-search-choice');
-const newFolderBtn = document.getElementById('new-folder-btn');
-const newProjectBtn = document.getElementById('new-project-btn');
-const openProjectBtn = document.getElementById('open-project-btn');
-const copyUrlBtn = document.getElementById('copy-url-btn');
-const prevPageBtn = document.getElementById('prev-page-btn');
-const nextPageBtn = document.getElementById('next-page-btn');
-const projectNameLabel = document.getElementById('project-name');
-const tabBar = document.getElementById('tab-bar');
-const viewsContainer = document.getElementById('views-container');
-const explorer = document.getElementById('explorer');
-const historyTabs = document.querySelectorAll('.history-tab');
-const sidebar = document.getElementById('sidebar');
-const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
-const sidebarReopenBtn = document.getElementById('sidebar-reopen');
-const sidebarResize = document.getElementById('sidebar-resize');
-const querySidebarResize = document.getElementById('query-sidebar-resize');
-const sidebarDragOverlay = document.getElementById('sidebar-drag-overlay');
-const quickSearchOverlay = document.getElementById('quick-search-overlay');
-const quickSearchModal = document.getElementById('quick-search-modal');
-const quickSearchHint = document.getElementById('quick-search-hint');
-const quickSearchInput = document.getElementById('quick-search-input');
-const quickSearchResults = document.getElementById('quick-search-results');
-const newFileModal = document.getElementById('new-file-modal');
-const newFileModalBox = document.getElementById('new-file-modal-box');
-const newFileModalLabel = document.getElementById('new-file-modal-label');
-const newFileModalInput = document.getElementById('new-file-modal-input');
-const newFileFolderRow = document.getElementById('new-file-folder-row');
-const newFileFolderSelect = document.getElementById('new-file-folder-select');
-const newFileCreateBtn = document.getElementById('new-file-create');
-const newFileCancelBtn = document.getElementById('new-file-cancel');
-
-// Query history elements
-const querySidebar = document.getElementById('query-sidebar');
-const querySidebarReopenBtn = document.getElementById('query-sidebar-reopen');
-const queryHistoryTitle = document.getElementById('query-history-title');
-const queryHistoryStatus = document.getElementById('query-history-status');
-const queryHistoryClose = document.getElementById('query-history-close');
-const queryVersionList = document.getElementById('query-version-list');
-const tagPopup = document.getElementById('tag-popup');
-const tagPopupInput = document.getElementById('tag-popup-input');
-const tagPopupCancel = document.getElementById('tag-popup-cancel');
-const tagPopupClear = document.getElementById('tag-popup-clear');
-const tagPopupSave = document.getElementById('tag-popup-save');
-const queryVersionPreviewText = document.getElementById('query-version-preview-text');
-const queryPreviewModeBtns = document.querySelectorAll('.preview-mode-btn');
-const querySaveMessage = document.getElementById('query-save-message');
-const querySaveBtn = document.getElementById('query-save-btn');
-const queryRestoreBtn = document.getElementById('query-restore-btn');
-const confirmModal = document.getElementById('confirm-modal');
-const confirmModalBox = document.getElementById('confirm-modal-box');
-const confirmModalTitle = document.getElementById('confirm-modal-title');
-const confirmModalBody = document.getElementById('confirm-modal-body');
-const confirmCancelBtn = document.getElementById('confirm-cancel');
-const confirmOkBtn = document.getElementById('confirm-ok');
-const gitSyncSettingsBtn = document.getElementById('git-sync-settings-btn');
-const gitSyncSettingsModal = document.getElementById('git-sync-settings-modal');
-const gitSyncSettingsModalBox = document.getElementById('git-sync-settings-modal-box');
-const gitSyncSplunkUrlInput = document.getElementById('git-sync-splunk-url');
-const gitSyncRemoteUrlInput = document.getElementById('git-sync-remote-url');
-const gitSyncRemoteNameInput = document.getElementById('git-sync-remote-name');
-const gitSyncSharedBranchInput = document.getElementById('git-sync-shared-branch');
-const gitSyncUserNameInput = document.getElementById('git-sync-user-name');
-const gitSyncUserEmailInput = document.getElementById('git-sync-user-email');
-const gitSyncSettingsStatus = document.getElementById('git-sync-settings-status');
-const gitSyncSettingsCancelBtn = document.getElementById('git-sync-settings-cancel');
-const gitSyncSettingsSaveBtn = document.getElementById('git-sync-settings-save');
-const statusFile = document.getElementById('status-file');
-const statusSave = document.getElementById('status-save');
-const statusVersions = document.getElementById('status-versions');
+const {
+    newFileBtn,
+    newItemMenu,
+    newSearchChoice,
+    newFolderBtn,
+    newProjectBtn,
+    openProjectBtn,
+    copyUrlBtn,
+    prevPageBtn,
+    nextPageBtn,
+    projectNameLabel,
+    tabBar,
+    viewsContainer,
+    explorer,
+    historyTabs,
+    sidebar,
+    sidebarCollapseBtn,
+    sidebarReopenBtn,
+    sidebarResize,
+    querySidebarResize,
+    sidebarDragOverlay,
+    quickSearchOverlay,
+    quickSearchModal,
+    quickSearchHint,
+    quickSearchInput,
+    quickSearchResults,
+    newFileModal,
+    newFileModalBox,
+    newFileModalLabel,
+    newFileModalInput,
+    newFileFolderRow,
+    newFileFolderSelect,
+    newFileCreateBtn,
+    newFileCancelBtn,
+    querySidebar,
+    querySidebarReopenBtn,
+    queryHistoryTitle,
+    queryHistoryStatus,
+    queryHistoryClose,
+    queryVersionList,
+    tagPopup,
+    tagPopupInput,
+    tagPopupCancel,
+    tagPopupClear,
+    tagPopupSave,
+    queryVersionPreviewText,
+    queryPreviewModeBtns,
+    querySaveMessage,
+    querySaveBtn,
+    queryRestoreBtn,
+    confirmModal,
+    confirmModalBox,
+    confirmModalTitle,
+    confirmModalBody,
+    confirmCancelBtn,
+    confirmOkBtn,
+    gitSyncSettingsBtn,
+    gitSyncSettingsModal,
+    gitSyncSettingsModalBox,
+    gitSyncSplunkUrlInput,
+    gitSyncRemoteUrlInput,
+    gitSyncRemoteNameInput,
+    gitSyncSharedBranchInput,
+    gitSyncUserNameInput,
+    gitSyncUserEmailInput,
+    gitSyncSettingsStatus,
+    gitSyncSettingsCancelBtn,
+    gitSyncSettingsSaveBtn,
+    statusFile,
+    statusSave,
+    statusVersions,
+} = require('./renderer/dom');
 
 const QUERY_SIDEBAR_COLLAPSED_KEY = 'splunk-ide-query-sidebar-collapsed';
 const QUERY_SIDEBAR_WIDTH_KEY = 'splunk-ide-query-sidebar-width';
