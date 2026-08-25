@@ -1,0 +1,58 @@
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const { diffLines, renderDiffHtml } = require('../../lib/git/diff-lines');
+
+describe('diffLines', () => {
+    it('returns same lines for identical text', () => {
+        const result = diffLines('index=main\n| stats count', 'index=main\n| stats count');
+        assert.deepEqual(result, [
+            { type: 'same', text: 'index=main' },
+            { type: 'same', text: '| stats count' }
+        ]);
+    });
+
+    it('detects added and removed lines', () => {
+        const result = diffLines('index=main', 'index=main error');
+        assert.deepEqual(result, [
+            { type: 'removed', text: 'index=main' },
+            { type: 'added', text: 'index=main error' }
+        ]);
+    });
+
+    it('handles empty to non-empty text', () => {
+        const result = diffLines('', 'index=main');
+        assert.deepEqual(result, [
+            { type: 'removed', text: '' },
+            { type: 'added', text: 'index=main' }
+        ]);
+    });
+});
+
+describe('renderDiffHtml', () => {
+    it('escapes HTML and marks added lines', () => {
+        const html = renderDiffHtml([{ type: 'added', text: '<script>' }]);
+        assert.match(html, /diff-added/);
+        assert.match(html, /&lt;script&gt;/);
+        assert.doesNotMatch(html, /<script>/);
+    });
+
+    it('highlights changed tokens inline for similar line pairs', () => {
+        const html = renderDiffHtml([
+            { type: 'removed', text: '| stats count' },
+            { type: 'added', text: '| stats avg' },
+        ]);
+        assert.match(html, /<span class="diff-removed">count<\/span>/);
+        assert.match(html, /<span class="diff-added">avg<\/span>/);
+        assert.match(html, /\| stats /);
+    });
+
+    it('keeps whole-line rendering when lines do not share tokens', () => {
+        const html = renderDiffHtml([
+            { type: 'removed', text: 'index=main' },
+            { type: 'added', text: 'error=timeout' },
+        ]);
+        assert.doesNotMatch(html, /<span class="diff-removed">index=main<\/span>/);
+        assert.match(html, /diff-removed">- index=main</);
+        assert.match(html, /diff-added">\+ error=timeout</);
+    });
+});

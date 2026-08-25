@@ -1,7 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
-const { buildSplunkSaveInjectorSource } = require('../../lib/webview-splunk-save-hooks');
+const { buildSplunkSaveInjectorSource } = require('../../lib/webview/webview-splunk-save-hooks');
 
 function createWindow() {
     const mainWindow = new BrowserWindow({

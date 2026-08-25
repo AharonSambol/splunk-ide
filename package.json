@@ -7,11 +7,10 @@
     "start:user-a": "electron-forge start -- --user-data-dir=/tmp/splunk-ide-user-a",
     "start:user-b": "electron-forge start -- --user-data-dir=/tmp/splunk-ide-user-b",
     "test": "npm run test:unit",
-    "test:unit": "node --test test/**/*.test.js",
+    "test:unit": "node --test $(find test -name '*.test.js' | sort)",
     "test:smoke": "playwright test",
-    "test:e2e": "playwright test",
-    "test:ui": "npm run test:unit && npm run test:e2e",
-    "test:syntax": "node --check main.js && node --check renderer.js && node --check webview-preload.js && node --check injector.js && node --check injector-selection-cleanup.js && node --check lib/end-ace-selection-drag.js && node --check lib/webview-selection-drag-handlers.js && node --check lib/parent-selection-cleanup.js && node --check lib/selection-drag-tracker.js",
+    "test:ui": "npm run test:unit && npm run test:smoke",
+    "test:syntax": "for f in main.js renderer.js renderer/*.js webview-preload.js injectors/*.js lib/*.js lib/*/*.js; do node --check \"$f\" || exit 1; done",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
@@ -32,23 +31,8 @@
     "electron": "^41.7.1",
     "jsdom": "^29.1.1"
   },
-  "build": {
-    "win": {
-      "icon": "build/icon.ico"
-    }
-  },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
     "simple-git": "^3.36.0"
-  },
-  "makers": [
-    {
-      "name": "@electron-forge/maker-squirrel",
-      "config": {
-        "name": "splunk-ide",
-        "icon": "build/icon.ico",
-        "setupIcon": "build/icon.ico"
-      }
-    }
-  ]
+  }
 }
