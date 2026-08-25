@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const RENDERER_PATH = path.join(__dirname, '..', 'renderer/history.js');
+const RENDERER_PATH = path.join(__dirname, '../..', 'renderer/history.js');
 
 describe('plain restore renderer dispatch', () => {
     it('plain branch uses restorePlainQueryVersion instead of hardcoded skipAutoSave', () => {
@@ -22,10 +22,10 @@ describe('plain restore renderer dispatch', () => {
     });
 
     it('restorePlainQueryVersion applies shouldSkipAutoSaveOnRestore', async () => {
-        const { restorePlainQueryVersion } = require('../lib/git/plain-query-restore');
-        const { shouldSkipAutoSaveOnRestore } = require('../lib/git/query-versions');
-        const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('./helpers/temp-git-repo');
-        const { saveVersion, listVersions } = require('../lib/git/query-versions');
+        const { restorePlainQueryVersion } = require('../../lib/git/plain-query-restore');
+        const { shouldSkipAutoSaveOnRestore } = require('../../lib/git/query-versions');
+        const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('../helpers/temp-git-repo');
+        const { saveVersion, listVersions } = require('../../lib/git/query-versions');
 
         const SPL_URL_V1 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
         const SPL_URL_V2 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20error';

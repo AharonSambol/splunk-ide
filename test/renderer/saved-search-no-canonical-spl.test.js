@@ -4,7 +4,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getSavedSearchConfPath } = require('../lib/objects/object-paths');
+const { getSavedSearchConfPath } = require('../../lib/objects/object-paths');
 
 const SAVED_SEARCH_META = {
     instance: 'prod',
@@ -22,8 +22,8 @@ describe('saved search — no canonical .spl hot path', () => {
     });
 
     it('renderer does not call getSavedSearchPath', () => {
-        const rendererSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
-        const historySrc = fs.readFileSync(path.join(__dirname, '..', 'renderer/history.js'), 'utf8');
+        const rendererSrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer.js'), 'utf8');
+        const historySrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer/history.js'), 'utf8');
         assert.ok(!rendererSrc.includes('getSavedSearchPath'));
         assert.ok(!historySrc.includes('getSavedSearchPath'));
     });

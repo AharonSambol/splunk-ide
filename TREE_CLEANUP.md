@@ -670,7 +670,7 @@ npm run test:unit
 
 **Done when:** all three pass; they still fail if you delete `restorePlainQueryVersion({` from `renderer/history.js` (do not actually delete it — that is the invariant).
 
-**Status:**
+**Status:** done (HEAD before this atom `928bd82`). Moved `plain-restore-dispatch.test.js`, `saved-search-restore-tracked-base.test.js`, `saved-search-no-canonical-spl.test.js` into `test/renderer/`. Path-only: `__dirname` `../..` for `renderer.js` / `renderer/history.js`; `require('../../lib/git/…')` / `require('../../lib/objects/…')`; `require('../helpers/temp-git-repo')`. **Coverage:** these three files are the source-grep pins — no extra tests added. **Before:** 5 pass / 0 fail. **After:** `node --test test/renderer/*.test.js` → 5 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `restorePlainQueryVersion({` still at `renderer/history.js` 1964; diff gate empty.
 
 ---
 
