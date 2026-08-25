@@ -12,8 +12,8 @@ const {
     filterQuickSearchResults,
     getQuickSearchEmptyMessage,
     moveQuickSearchSelection,
-} = require('../lib/quick-search');
-const { renderQuickSearchResults } = require('../lib/render-quick-search');
+} = require('../lib/ui/quick-search');
+const { renderQuickSearchResults } = require('../lib/ui/render-quick-search');
 const { extractQueryFromUrl } = require('../lib/url-utils');
 
 let openFile;

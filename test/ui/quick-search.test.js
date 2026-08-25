@@ -10,7 +10,7 @@ const {
     filterQuickSearchResults,
     getQuickSearchEmptyMessage,
     moveQuickSearchSelection,
-} = require('../lib/quick-search');
+} = require('../../lib/ui/quick-search');
 
 const sampleFiles = [
     { id: '1', name: 'queries/main', path: '/p/queries/main.spl' },

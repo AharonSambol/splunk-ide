@@ -604,7 +604,7 @@ npm run test:unit
 
 **Done when:** 374 pass; `lib/tabs.js` gone; `lib/ui/tabs.js` present.
 
-**Status:**
+**Status:** done (HEAD before this atom `dd9fdbb`). Moved five lib modules into `lib/ui/` (basenames unchanged; no barrel): `tabs.js`, `render-tabs.js`, `quick-search.js`, `render-quick-search.js`, `query-history-ui.js`. Matching tests into `test/ui/`. **Exports unchanged:** `closeFileState`, `reorderTabs`, `getPreviousTab`, `getNextTab`, `getFallbackActiveTab`, `createDuplicateFileName`; `createTabElement`, `renderTabs`, `setActiveTab`, `updateTabTitle`; `normalizeQuickSearchQuery`, `getFileSearchLabel`, `matchesFileQuery`, `filterFileModeResults`, `matchesContentQuery`, `buildContentSearchResult`, `filterContentModeResults`, `filterQuickSearchResults`, `getQuickSearchEmptyMessage`, `moveQuickSearchSelection`; `renderQuickSearchResults`; `formatQueryHistoryStatus`, `getQueryHistoryEmptyMessage`, `isStaleSplunkImportSyncStatus`. **Callers (path only):** `renderer/tabs.js` `../lib/ui/tabs` and `../lib/ui/render-tabs`; `renderer/quick-search.js` `../lib/ui/quick-search` and `../lib/ui/render-quick-search`; `renderer/history.js` `../lib/ui/query-history-ui`. Tests `../../lib/ui/…`; `render-tabs` / `render-quick-search` tests `../helpers/dom`. Injector `readFileSync` in `renderer/tabs.js` untouched (Atom I). **Coverage:** existing 53 UI tests load those exports — no extra tests added. **Before:** `node --test` of the five files → 53 pass / 0 fail. **After:** `node --test test/ui/*.test.js` → 53 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `lib/tabs.js` gone; `lib/ui/tabs.js` present; explorer chain 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; diff gate empty.
 
 ---
 

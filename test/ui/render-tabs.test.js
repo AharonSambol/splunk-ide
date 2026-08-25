@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { renderTabs, setActiveTab, updateTabTitle } = require('../lib/render-tabs');
-const { createDocument, createContainer } = require('./helpers/dom');
+const { renderTabs, setActiveTab, updateTabTitle } = require('../../lib/ui/render-tabs');
+const { createDocument, createContainer } = require('../helpers/dom');
 
 const sampleFiles = [
     { id: 'a', name: 'queries/main' },

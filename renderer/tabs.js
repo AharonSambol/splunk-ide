@@ -10,9 +10,9 @@ const {
     getPreviousTab,
     getNextTab,
     createDuplicateFileName,
-} = require('../lib/tabs');
+} = require('../lib/ui/tabs');
 const { getFileFolder } = require('../lib/url-utils');
-const { createTabElement, setActiveTab, updateTabTitle } = require('../lib/render-tabs');
+const { createTabElement, setActiveTab, updateTabTitle } = require('../lib/ui/render-tabs');
 const { attachWebviewSelectionDragHandlers } = require('../lib/webview/webview-selection-drag-handlers');
 const { buildSplunkSaveInjectorSource } = require('../lib/webview/webview-splunk-save-hooks');
 const state = require('./state');

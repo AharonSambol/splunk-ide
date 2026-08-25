@@ -19,7 +19,7 @@ const {
     formatQueryHistoryStatus,
     getQueryHistoryEmptyMessage,
     isStaleSplunkImportSyncStatus,
-} = require('../lib/query-history-ui');
+} = require('../lib/ui/query-history-ui');
 const { openDashboardHistory } = require('../lib/objects/dashboard-open');
 const { ensureRemote, pushSharedHistoryWithReconcile } = require('../lib/git/git-sync');
 const {

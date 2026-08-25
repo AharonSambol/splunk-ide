@@ -4,7 +4,7 @@ const {
     formatQueryHistoryStatus,
     getQueryHistoryEmptyMessage,
     isStaleSplunkImportSyncStatus
-} = require('../lib/query-history-ui');
+} = require('../../lib/ui/query-history-ui');
 
 describe('formatQueryHistoryStatus', () => {
     it('matches plain .spl copy for non-saved-search files', () => {
