@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {
     DESELECT_ON_POINTER_EXIT_JS,
     attachWebviewSelectionDragHandlers,
-} = require('../../lib/webview-selection-drag-handlers');
+} = require('../../lib/webview/webview-selection-drag-handlers');
 
 describe('attachWebviewSelectionDragHandlers', () => {
     it('registers mouseleave and pointerleave handlers only', () => {

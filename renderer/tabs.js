@@ -13,8 +13,8 @@ const {
 } = require('../lib/tabs');
 const { getFileFolder } = require('../lib/url-utils');
 const { createTabElement, setActiveTab, updateTabTitle } = require('../lib/render-tabs');
-const { attachWebviewSelectionDragHandlers } = require('../lib/webview-selection-drag-handlers');
-const { buildSplunkSaveInjectorSource } = require('../lib/webview-splunk-save-hooks');
+const { attachWebviewSelectionDragHandlers } = require('../lib/webview/webview-selection-drag-handlers');
+const { buildSplunkSaveInjectorSource } = require('../lib/webview/webview-splunk-save-hooks');
 const state = require('./state');
 const {
     copyUrlBtn,

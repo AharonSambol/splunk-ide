@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { attachSelectionDragTracker } = require('../../lib/selection-drag-tracker');
+const { attachSelectionDragTracker } = require('../../lib/webview/selection-drag-tracker');
 
 function createMockDoc() {
     const listeners = new Map();

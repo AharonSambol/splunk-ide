@@ -26,8 +26,8 @@
     <script>
         const fs = require('node:fs');
         const path = require('node:path');
-        const { attachWebviewSelectionDragHandlers } = require('../../lib/webview-selection-drag-handlers');
-        const { attachParentSelectionCleanup } = require('../../lib/parent-selection-cleanup');
+        const { attachWebviewSelectionDragHandlers } = require('../../lib/webview/webview-selection-drag-handlers');
+        const { attachParentSelectionCleanup } = require('../../lib/webview/parent-selection-cleanup');
 
         attachParentSelectionCleanup(document);
 

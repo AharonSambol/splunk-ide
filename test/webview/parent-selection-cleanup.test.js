@@ -4,7 +4,7 @@ const {
     GUEST_CLEAR_SELECTION_JS,
     GUEST_RECOVER_JS,
     attachParentSelectionCleanup,
-} = require('../../lib/parent-selection-cleanup');
+} = require('../../lib/webview/parent-selection-cleanup');
 
 describe('attachParentSelectionCleanup', () => {
     it('registers document mouse handlers', () => {

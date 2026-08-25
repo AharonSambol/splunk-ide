@@ -11,7 +11,7 @@ const {
     attachSplunkSaveHooks,
     buildSplunkSaveInjectorSource,
     SPLUNK_SAVE_EVENT,
-} = require('../../lib/webview-splunk-save-hooks');
+} = require('../../lib/webview/webview-splunk-save-hooks');
 
 describe('isSavedSearchSaveRequest', () => {
     it('matches saved-search POST and PUT writes', () => {

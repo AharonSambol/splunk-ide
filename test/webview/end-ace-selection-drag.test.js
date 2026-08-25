@@ -6,7 +6,7 @@ const {
     endAceSelectionDrag,
     recoverFromMissedDrag,
     resetDragState,
-} = require('../../lib/end-ace-selection-drag');
+} = require('../../lib/webview/end-ace-selection-drag');
 
 function createMockEditor(overrides = {}) {
     const selection = {

@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron');
-const { attachParentSelectionCleanup } = require('./lib/parent-selection-cleanup');
+const { attachParentSelectionCleanup } = require('./lib/webview/parent-selection-cleanup');
 const state = require('./renderer/state');
 const { closeConfirmModal, attachConfirmModal } = require('./renderer/confirm-modal');
 const { showFindOverlay, hideFindOverlay } = require('./renderer/find-overlay');
