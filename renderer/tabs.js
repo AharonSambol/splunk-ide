@@ -272,8 +272,8 @@ function createView(file) {
     view.addEventListener('did-navigate', syncUrlFromView);
     view.addEventListener('did-stop-loading', syncUrlFromView);
     const injectorCode = [
-        fs.readFileSync(path.join(PROJECT_ROOT, 'injector.js'), 'utf8'),
-        fs.readFileSync(path.join(PROJECT_ROOT, 'injector-selection-cleanup.js'), 'utf8'),
+        fs.readFileSync(path.join(PROJECT_ROOT, 'injectors', 'injector.js'), 'utf8'),
+        fs.readFileSync(path.join(PROJECT_ROOT, 'injectors', 'injector-selection-cleanup.js'), 'utf8'),
     ].join('\n');
     const saveHookCode = buildSplunkSaveInjectorSource();
     const injectGuestScripts = () => {

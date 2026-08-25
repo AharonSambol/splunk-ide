@@ -35,7 +35,7 @@
         const preloadPath = path.join(__dirname, '../../webview-preload.js');
         const fixturePath = path.join(__dirname, '../fixtures/ace-editor-mock.html');
         const injectorCode = [
-            fs.readFileSync(path.join(__dirname, '../../injector-selection-cleanup.js'), 'utf8'),
+            fs.readFileSync(path.join(__dirname, '../../injectors/injector-selection-cleanup.js'), 'utf8'),
         ].join('\n');
 
         view.setAttribute('preload', `file://${preloadPath}`);

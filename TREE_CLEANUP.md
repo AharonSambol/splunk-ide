@@ -647,7 +647,7 @@ npm run test:unit
 
 **Done when:** injector file bytes identical (`git diff` shows rename + path strings only); 374 pass.
 
-**Status:**
+**Status:** done (HEAD before this atom `0a96c46`). Moved `injector.js` and `injector-selection-cleanup.js` into `injectors/` (R100, basenames unchanged). `PROJECT_ROOT` still `path.join(__dirname, '..')`. **Callers (path only):** `renderer/tabs.js` `path.join(PROJECT_ROOT, 'injectors', 'injector.js')` and `…, 'injectors', 'injector-selection-cleanup.js'`; `test/harness/index.html` `../../injectors/injector-selection-cleanup.js`; `package.json` `test:syntax` now `injectors/*.js`. **Coverage:** `node --check` + R100 rename prove bytes; unit suite does not execute injectors — no extra tests added. **Before:** `node --check` of root injectors + `renderer/tabs.js`. **After:** `node --check injectors/*.js renderer/tabs.js`; `npm run test:syntax` exit 0; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; diff gate empty.
 
 ---
 
