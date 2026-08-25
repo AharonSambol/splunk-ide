@@ -1181,7 +1181,7 @@ async function saveTagFromPopup() {
     }
     const relativePath = getRelativePath(file);
     const tagStanza = getVersionTagStanzaName(file);
-    const preservedHashes = [...selectedVersionHashes];
+    const preservedHashes = [...state.selectedVersionHashes];
     try {
         await setVersionTag(state.currentGit, relativePath, hash, name, tagStanza);
         state.versionTags = await listVersionTags(state.currentGit, relativePath, tagStanza);
@@ -1214,7 +1214,7 @@ async function clearTagFromPopup() {
     }
     const relativePath = getRelativePath(file);
     const tagStanza = getVersionTagStanzaName(file);
-    const preservedHashes = [...selectedVersionHashes];
+    const preservedHashes = [...state.selectedVersionHashes];
     try {
         await deleteVersionTag(state.currentGit, relativePath, name, tagStanza);
         state.versionTags = await listVersionTags(state.currentGit, relativePath, tagStanza);
@@ -1333,7 +1333,7 @@ function renderTagsList() {
         return;
     }
 
-    const sorted = [...versionTags].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sorted = [...state.versionTags].sort((a, b) => new Date(b.date) - new Date(a.date));
     for (const entry of sorted) {
         const version = state.queryVersions.find(v => v.hash === entry.hash);
         const item = document.createElement('div');
@@ -1564,7 +1564,7 @@ async function refreshQueryHistory() {
             return;
         }
 
-        const preservedHashes = [...selectedVersionHashes];
+        const preservedHashes = [...state.selectedVersionHashes];
         state.queryVersions = versions;
         state.versionTags = tags;
         if (
