@@ -314,12 +314,16 @@ node --test test/plain-restore-dispatch.test.js test/saved-search-restore-tracke
 npx playwright test --list
 ```
 
-**Record**
+**Record** (2026-08-25, HEAD `3c70dbc`)
 
-- Unit pass count. Last renderer Wave 2: **374 pass**. Expect the same number after every atom (no tests added or deleted).
-- Syntax exit 0.
-- Three folder tests pass. Three source-grep tests pass.
-- Playwright `--list`: 17 tests in 5 files, including `selection-drag`.
+- Unit: **374 pass**, 0 fail, 133 suites (`npm run test:unit`, 24114ms).
+- Syntax: exit 0 (`npm run test:syntax`).
+- Folder tests: **21 pass** (`ide-folders` + `file-tree` + `render-explorer`).
+- Source-grep tests: **5 pass** (three files: `plain-restore-dispatch`, `saved-search-restore-tracked-base`, `saved-search-no-canonical-spl`).
+- Playwright `--list`: **17 tests in 5 files**, including `selection-drag`.
+- Grep snapshot: `toExplorerInput` → `buildFileTree` → `renderExplorer` at `renderer/explorer.js` 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; `getSavedSearchPath` no hits in `renderer.js` / `renderer/history.js`; `ideFolders` present in `renderer/explorer.js`.
+- `index.html`: only `src="./renderer.js"`.
+- Invariant for every atom: **374 pass**, zero new failures.
 
 Optional (do not “fix”): `npm run test:smoke`. Copy failing titles. Expect the same 8/9 split as Wave 2.
 
