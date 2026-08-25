@@ -530,6 +530,8 @@ Add new `renderer/*.js` paths to `package.json` `test:syntax` (`node --check` ea
 
 **Do not ship if** explorer grouping changed, `ide-folders.json` shape changed, CSS/HTML folder rules changed, restore dispatch skipped auto-save differently, or a source-grep test was deleted to go green.
 
+**Status:** Wave 2 ran on HEAD `2d78511`. `package.json` `test:syntax` now `node --check`s each `renderer/*.js` (one file per invocation). `test:unit` uses `find test -name '*.test.js'` so top-level tests run. `index.html` still loads only `./renderer.js`. `renderer.js` 350 lines (wiring). Explorer chain intact in `renderer/explorer.js`. Restore snippets only in `history.js`. Checks: syntax ok; `find` unit **374 pass**; Playwright `--list` 17 tests including `selection-drag`; full smoke **8 pass / 9 fail** — same baseline titles (hidden `#new-project-btn`, auto `searches`, no git Source Control tab, `splunk-save-flow` guest evaluate). Shell + 3 selection-drag + 4 save-harness still pass. Did not “fix” stale smoke. Commit: this atom.
+
 ---
 
 ## Parallelism (if subagents)
