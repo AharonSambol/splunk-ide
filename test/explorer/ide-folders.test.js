@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { getSavedSearchId } = require('../lib/objects/saved-search-id');
+const { getSavedSearchId } = require('../../lib/objects/saved-search-id');
 const {
     IDE_FOLDERS_FILE,
     sanitizeFolderName,
@@ -20,7 +20,7 @@ const {
     toExplorerInput,
     readIdeFolders,
     writeIdeFolders,
-} = require('../lib/ide-folders');
+} = require('../../lib/explorer/ide-folders');
 
 const SEARCH = { instance: 'prod', app: 'search', owner: 'nobody', name: 'Error Rate' };
 const SEARCH_ID = getSavedSearchId(SEARCH);

@@ -51,7 +51,7 @@ const {
     resolveSavedSearchDirtyOnNavigate,
     shouldScheduleLiveDraftRefresh,
 } = require('../lib/objects/saved-search-dirty');
-const { explorerIdForFile, replaceItemId } = require('../lib/ide-folders');
+const { explorerIdForFile, replaceItemId } = require('../lib/explorer/ide-folders');
 const { diffLines, renderDiffHtml } = require('../lib/git/diff-lines');
 const state = require('./state');
 const { showConfirmModal } = require('./confirm-modal');

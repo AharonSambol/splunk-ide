@@ -10,7 +10,7 @@ const {
     scanProjectFiles,
     scanProjectFolders,
     getMoveTargetPath,
-} = require('../../lib/project-files');
+} = require('../../lib/explorer/project-files');
 
 describe('project-files integration', () => {
     let projectPath;

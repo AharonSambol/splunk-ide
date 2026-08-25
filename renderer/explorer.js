@@ -3,19 +3,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { ipcRenderer } = require('electron');
-const { buildFileTree } = require('../lib/file-tree');
+const { buildFileTree } = require('../lib/explorer/file-tree');
 const {
     normalizeRelativePath,
     getProjectFilePath: buildProjectFilePath,
     ensureDirectoryExists: ensureProjectDirectoryExists,
     scanProjectFiles: scanProjectFilesOnDisk,
     scanProjectFolders: scanProjectFoldersOnDisk,
-} = require('../lib/project-files');
+} = require('../lib/explorer/project-files');
 const { parseSavedSearchFromUrl, getFileFolder, withSplunkOrigin } = require('../lib/url-utils');
 const { getSavedSearchId } = require('../lib/objects/saved-search-id');
 const { getDashboardViewPath } = require('../lib/objects/object-paths');
 const { saveVersion, renameQueryFile } = require('../lib/git/query-versions');
-const { renderExplorer } = require('../lib/render-explorer');
+const { renderExplorer } = require('../lib/explorer/render-explorer');
 const {
     IDE_FOLDERS_FILE,
     explorerIdForFile,
@@ -28,7 +28,7 @@ const {
     toExplorerInput,
     readIdeFolders,
     writeIdeFolders,
-} = require('../lib/ide-folders');
+} = require('../lib/explorer/ide-folders');
 const { getGitAuthorFromSettings } = require('./git-settings');
 const state = require('./state');
 const {

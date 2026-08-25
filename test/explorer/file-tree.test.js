@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildFileTree } = require('../lib/file-tree');
+const { buildFileTree } = require('../../lib/explorer/file-tree');
 
 describe('buildFileTree', () => {
     it('groups files under nested folders', () => {
