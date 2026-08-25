@@ -689,7 +689,7 @@ Rewrite `README.md` to a short tree map (entrypoints, `lib/*` folders, `test/` m
 
 **After:** `git grep playwright.config.mjs` empty; `npm run test:unit` still 374 (docs-only).
 
-**Status:**
+**Status:** done (HEAD before this atom `d84ddba`). Moved `NAVIGATION_OVERHAUL.md`, `RENDERER_SPLIT.md`, `TREE_CLEANUP.md` into `docs/`; `NATIVE_OBJECT_GIT_LEDGER.md` and `SAVED_SEARCH_GIT_LEDGER.md` into `docs/archive/`. Deleted unused `playwright.config.mjs` (pointed at dead `test/e2e`; live config is `playwright.config.js` → `test/smoke`). Rewrote `README.md` to the tree map. No `.js` product files. `git grep playwright.config.mjs` empty.
 
 ---
 
