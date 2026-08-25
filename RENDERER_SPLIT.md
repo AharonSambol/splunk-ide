@@ -498,6 +498,8 @@ Expect `renderer.js` **under ~400 lines**. History file will be large; that is O
 
 **Done when** save version, restore, tag popup, multi-select compare, saved-search vs dashboard vs plain `.spl` restore still match pre-split. Source-grep tests pass on the new path.
 
+**Status:** moved query history, restore, Ace, and Splunk-save into `renderer/history.js`. `handleKeyboardShortcut`, document mousedown closer, onload, and context-menu IPC stay in `renderer.js`. Listeners for save/restore/tags/preview live in `attachHistory`. Dropped unused draft `getDiskRelativePath` (explorer already has it). Source-grep tests retargeted to `renderer/history.js` (no-canonical-spl reads both files). Commit: this atom. Before: restore snippets + `function restoreQueryVersion` in `renderer.js` (2325 lines); `node --check` ok; 5 restore, 41 folder+tabs; smoke shell + 3 drag pass. After: those snippets in `history.js` only; `function handleKeyboardShortcut` still in `renderer.js` (350 lines); `function createView` only in `tabs.js`; same checks pass; optional `node --test $(find test -name '*.test.js' | sort)` 374 pass.
+
 ---
 
 ## Wave 2 — integrate

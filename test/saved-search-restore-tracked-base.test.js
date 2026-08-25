@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const RENDERER_PATH = path.join(__dirname, '..', 'renderer.js');
+const RENDERER_PATH = path.join(__dirname, '..', 'renderer/history.js');
 
 describe('saved-search restore tracked base', () => {
     it('discards draft instead of restoreStanzaVersion when restoring tracked base with draft', () => {
