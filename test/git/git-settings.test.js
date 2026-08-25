@@ -9,7 +9,7 @@ const {
     normalizeGitSyncSettings,
     readGitSyncSettings,
     writeGitSyncSettings
-} = require('../lib/git-settings');
+} = require('../../lib/git/git-settings');
 
 describe('normalizeGitSyncSettings', () => {
     it('returns defaults for empty input', () => {

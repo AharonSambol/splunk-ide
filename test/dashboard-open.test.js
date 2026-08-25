@@ -11,7 +11,7 @@ const {
     listVersions,
     restoreVersion,
     readCurrentQuery
-} = require('../lib/query-versions');
+} = require('../lib/git/query-versions');
 const { cleanupTempRepo } = require('./helpers/temp-git-repo');
 
 const DASHBOARD_META = {

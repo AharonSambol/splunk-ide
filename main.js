@@ -6,7 +6,7 @@ const path = require('node:path');
 const { createContextMenuTemplate } = require('./lib/main/context-menu');
 const { findInPage, stopFindInPage } = require('./lib/main/find-in-page');
 const { attachAppShortcuts } = require('./lib/main/app-shortcuts');
-const { readGitSyncSettings, writeGitSyncSettings } = require('./lib/git-settings');
+const { readGitSyncSettings, writeGitSyncSettings } = require('./lib/git/git-settings');
 
 attachAppShortcuts({ app, BrowserWindow });
 

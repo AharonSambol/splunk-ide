@@ -2,9 +2,9 @@ const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { extractStanza } = require('../lib/conf-stanza');
-const { saveVersion, listVersions, readVersionStanza } = require('../lib/query-versions');
-const { createTempGitRepo, cleanupTempRepo } = require('./helpers/temp-git-repo');
+const { extractStanza } = require('../../lib/conf-stanza');
+const { saveVersion, listVersions, readVersionStanza } = require('../../lib/git/query-versions');
+const { createTempGitRepo, cleanupTempRepo } = require('../helpers/temp-git-repo');
 
 const CONF_PATH = 'prod/apps/search/local/savedsearches.conf';
 
@@ -96,7 +96,7 @@ describe('file-scoped listVersions without stanza option', () => {
     beforeEach(async () => {
         ({ repoPath, git, relativePath } = await createTempGitRepo('queries/main.spl', SPL_URL_V1));
         await saveVersion(git, relativePath, 'First save');
-        const { writeSplFile } = require('./helpers/temp-git-repo');
+        const { writeSplFile } = require('../helpers/temp-git-repo');
         writeSplFile(repoPath, relativePath, SPL_URL_V2);
         await saveVersion(git, relativePath, 'Second save');
     });

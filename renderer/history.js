@@ -13,7 +13,7 @@ const {
 } = require('../lib/url-utils');
 const { getSavedSearchId } = require('../lib/saved-search-id');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('../lib/object-paths');
-const { getStanzaDraftStatus, saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('../lib/stanza-drafts');
+const { getStanzaDraftStatus, saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('../lib/git/stanza-drafts');
 const { openSavedSearchHistory } = require('../lib/saved-search-open');
 const {
     formatQueryHistoryStatus,
@@ -21,7 +21,7 @@ const {
     isStaleSplunkImportSyncStatus,
 } = require('../lib/query-history-ui');
 const { openDashboardHistory } = require('../lib/dashboard-open');
-const { ensureRemote, pushSharedHistoryWithReconcile } = require('../lib/git-sync');
+const { ensureRemote, pushSharedHistoryWithReconcile } = require('../lib/git/git-sync');
 const {
     getFileStatus,
     hasDraftChanges,
@@ -44,15 +44,15 @@ const {
     listVersionTags,
     formatSplunkSaveTagName,
     extractSearchFromStanza,
-} = require('../lib/query-versions');
-const { restorePlainQueryVersion } = require('../lib/plain-query-restore');
+} = require('../lib/git/query-versions');
+const { restorePlainQueryVersion } = require('../lib/git/plain-query-restore');
 const { resolveSavedSearchDraftPreviewText } = require('../lib/saved-search-preview');
 const {
     resolveSavedSearchDirtyOnNavigate,
     shouldScheduleLiveDraftRefresh,
 } = require('../lib/saved-search-dirty');
 const { explorerIdForFile, replaceItemId } = require('../lib/ide-folders');
-const { diffLines, renderDiffHtml } = require('../lib/diff-lines');
+const { diffLines, renderDiffHtml } = require('../lib/git/diff-lines');
 const state = require('./state');
 const { showConfirmModal } = require('./confirm-modal');
 const { getGitAuthorFromSettings, getGitRemoteSettings } = require('./git-settings');

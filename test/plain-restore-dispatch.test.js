@@ -22,10 +22,10 @@ describe('plain restore renderer dispatch', () => {
     });
 
     it('restorePlainQueryVersion applies shouldSkipAutoSaveOnRestore', async () => {
-        const { restorePlainQueryVersion } = require('../lib/plain-query-restore');
-        const { shouldSkipAutoSaveOnRestore } = require('../lib/query-versions');
+        const { restorePlainQueryVersion } = require('../lib/git/plain-query-restore');
+        const { shouldSkipAutoSaveOnRestore } = require('../lib/git/query-versions');
         const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('./helpers/temp-git-repo');
-        const { saveVersion, listVersions } = require('../lib/query-versions');
+        const { saveVersion, listVersions } = require('../lib/git/query-versions');
 
         const SPL_URL_V1 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
         const SPL_URL_V2 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20error';

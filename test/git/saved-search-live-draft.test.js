@@ -2,14 +2,14 @@ const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { saveVersion } = require('../lib/query-versions');
+const { saveVersion } = require('../../lib/git/query-versions');
 const {
     saveStanzaDraft,
     listStanzaDraftsForConf,
     recomposeWorktree
-} = require('../lib/stanza-drafts');
-const { urlsMatchForDraft } = require('../lib/url-utils');
-const { createTempGitRepo, cleanupTempRepo } = require('./helpers/temp-git-repo');
+} = require('../../lib/git/stanza-drafts');
+const { urlsMatchForDraft } = require('../../lib/url-utils');
+const { createTempGitRepo, cleanupTempRepo } = require('../helpers/temp-git-repo');
 
 const CONF_PATH = 'prod/apps/search/local/savedsearches.conf';
 const SPL_URL_V1 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain&s=%2FservicesNS%2Fnobody%2Fsearch%2Fsaved%2Fsearches%2FError%2520Rate&sid=1';

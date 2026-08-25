@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { diffLines, renderDiffHtml } = require('../lib/diff-lines');
+const { diffLines, renderDiffHtml } = require('../../lib/git/diff-lines');
 
 describe('diffLines', () => {
     it('returns same lines for identical text', () => {

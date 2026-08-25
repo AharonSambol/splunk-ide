@@ -8,9 +8,9 @@ const { openSavedSearchHistory } = require('../lib/saved-search-open');
 const { getSavedSearchId } = require('../lib/saved-search-id');
 const { getSavedSearchConfPath } = require('../lib/object-paths');
 const { extractStanza } = require('../lib/conf-stanza');
-const { listVersions } = require('../lib/query-versions');
-const { saveStanzaDraft } = require('../lib/stanza-drafts');
-const { ensureRemote, pushSharedHistory } = require('../lib/git-sync');
+const { listVersions } = require('../lib/git/query-versions');
+const { saveStanzaDraft } = require('../lib/git/stanza-drafts');
+const { ensureRemote, pushSharedHistory } = require('../lib/git/git-sync');
 const { cleanupTempRepo } = require('./helpers/temp-git-repo');
 
 const SAVED_SEARCH_META = {

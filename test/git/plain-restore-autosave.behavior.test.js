@@ -8,9 +8,9 @@ const {
     readCurrentQuery,
     hasDraftChanges,
     consumeAutoSave
-} = require('../lib/query-versions');
-const { restorePlainQueryVersion } = require('../lib/plain-query-restore');
-const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('./helpers/temp-git-repo');
+} = require('../../lib/git/query-versions');
+const { restorePlainQueryVersion } = require('../../lib/git/plain-query-restore');
+const { createTempGitRepo, writeSplFile, cleanupTempRepo } = require('../helpers/temp-git-repo');
 
 const SPL_URL_V1 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';
 const SPL_URL_V2 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain%20error';

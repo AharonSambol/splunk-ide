@@ -4,18 +4,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { simpleGit } = require('simple-git');
-const { extractStanza } = require('../lib/conf-stanza');
-const { getSavedSearchConfPath } = require('../lib/object-paths');
-const { saveStanzaVersion } = require('../lib/query-versions');
+const { extractStanza } = require('../../lib/conf-stanza');
+const { getSavedSearchConfPath } = require('../../lib/object-paths');
+const { saveStanzaVersion } = require('../../lib/git/query-versions');
 const {
     saveStanzaDraft,
     getStanzaDraft,
     listStanzaDraftsForConf,
     recomposeWorktree
-} = require('../lib/stanza-drafts');
-const { ensureRemote, pushSharedHistory, pushSharedHistoryWithReconcile } = require('../lib/git-sync');
-const { reconcileConfFromRest, STANZA_CONFLICT_STATUS } = require('../lib/reconcile');
-const { cleanupTempRepo } = require('./helpers/temp-git-repo');
+} = require('../../lib/git/stanza-drafts');
+const { ensureRemote, pushSharedHistory, pushSharedHistoryWithReconcile } = require('../../lib/git/git-sync');
+const { reconcileConfFromRest, STANZA_CONFLICT_STATUS } = require('../../lib/git/reconcile');
+const { cleanupTempRepo } = require('../helpers/temp-git-repo');
 
 const META = { instance: 'prod', app: 'search', owner: 'nobody', name: 'Error Rate' };
 const CONF_PATH = getSavedSearchConfPath(META);

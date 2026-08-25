@@ -14,7 +14,7 @@ const {
 const { parseSavedSearchFromUrl, getFileFolder, withSplunkOrigin } = require('../lib/url-utils');
 const { getSavedSearchId } = require('../lib/saved-search-id');
 const { getDashboardViewPath } = require('../lib/object-paths');
-const { saveVersion, renameQueryFile } = require('../lib/query-versions');
+const { saveVersion, renameQueryFile } = require('../lib/git/query-versions');
 const { renderExplorer } = require('../lib/render-explorer');
 const {
     IDE_FOLDERS_FILE,
