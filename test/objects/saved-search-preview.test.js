@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveSavedSearchDraftPreviewText } = require('../lib/saved-search-preview');
+const { resolveSavedSearchDraftPreviewText } = require('../../lib/objects/saved-search-preview');
 
 const DRAFT_STANZA = `[Error Rate]
 search = index=main | stats count

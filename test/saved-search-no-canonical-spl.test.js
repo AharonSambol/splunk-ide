@@ -4,7 +4,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getSavedSearchConfPath } = require('../lib/object-paths');
+const { getSavedSearchConfPath } = require('../lib/objects/object-paths');
 
 const SAVED_SEARCH_META = {
     instance: 'prod',

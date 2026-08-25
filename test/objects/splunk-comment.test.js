@@ -5,7 +5,7 @@ const {
     shouldAddComment,
     toggleCommentLine,
     toggleCommentLines,
-} = require('../lib/splunk-comment');
+} = require('../../lib/objects/splunk-comment');
 
 describe('isCommentedLine', () => {
     it('treats blank lines as commented', () => {

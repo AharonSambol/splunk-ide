@@ -4,7 +4,7 @@ const {
     shouldScheduleLiveDraftRefresh,
     savedSearchLiveDiffersFromHead,
     resolveSavedSearchDirtyOnNavigate
-} = require('../lib/saved-search-dirty');
+} = require('../../lib/objects/saved-search-dirty');
 
 describe('saved-search run-only dirty', () => {
     it('does not schedule live draft refresh while typing in a saved search', () => {

@@ -2,7 +2,7 @@ const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { extractStanza } = require('../../lib/conf-stanza');
+const { extractStanza } = require('../../lib/objects/conf-stanza');
 const {
     saveVersion,
     saveStanzaVersion,

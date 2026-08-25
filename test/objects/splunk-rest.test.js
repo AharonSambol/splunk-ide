@@ -1,12 +1,12 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { upsertStanza, extractStanza } = require('../lib/conf-stanza');
+const { upsertStanza, extractStanza } = require('../../lib/objects/conf-stanza');
 const {
     fetchSavedSearchStanza,
     fetchDashboardView,
     serializeSavedSearchStanza,
     buildAuthHeader
-} = require('../lib/splunk-rest');
+} = require('../../lib/objects/splunk-rest');
 
 const BASE = 'https://splunk.example.com:8089';
 

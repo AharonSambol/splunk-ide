@@ -19,7 +19,7 @@ const {
     draftStashRef,
     versionRecordRef
 } = require('../../lib/git/query-versions');
-const { getSavedSearchId, getSavedSearchPath } = require('../../lib/saved-search-id');
+const { getSavedSearchId, getSavedSearchPath } = require('../../lib/objects/saved-search-id');
 const { cleanupTempRepo, writeSplFile } = require('../helpers/temp-git-repo');
 
 const SPL_URL_V1 = 'http://localhost:8010/en-US/app/search/search?q=search%20index%3Dmain';

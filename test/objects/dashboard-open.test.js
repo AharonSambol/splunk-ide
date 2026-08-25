@@ -4,15 +4,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { simpleGit } = require('simple-git');
-const { openDashboardHistory, detectViewExt } = require('../lib/dashboard-open');
-const { getDashboardViewPath } = require('../lib/object-paths');
+const { openDashboardHistory, detectViewExt } = require('../../lib/objects/dashboard-open');
+const { getDashboardViewPath } = require('../../lib/objects/object-paths');
 const {
     saveVersion,
     listVersions,
     restoreVersion,
     readCurrentQuery
-} = require('../lib/git/query-versions');
-const { cleanupTempRepo } = require('./helpers/temp-git-repo');
+} = require('../../lib/git/query-versions');
+const { cleanupTempRepo } = require('../helpers/temp-git-repo');
 
 const DASHBOARD_META = {
     instance: 'prod',

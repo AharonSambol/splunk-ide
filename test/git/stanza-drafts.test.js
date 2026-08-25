@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { simpleGit } = require('simple-git');
-const { extractStanza, listStanzaNames } = require('../../lib/conf-stanza');
+const { extractStanza, listStanzaNames } = require('../../lib/objects/conf-stanza');
 const { saveVersion } = require('../../lib/git/query-versions');
 const {
     stanzaDraftStashRef,

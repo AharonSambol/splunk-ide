@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { getSavedSearchId, getSavedSearchPath } = require('../lib/saved-search-id');
+const { getSavedSearchId, getSavedSearchPath } = require('../../lib/objects/saved-search-id');
 
 function expectedSha12(canonicalId) {
     return crypto.createHash('sha256').update(canonicalId, 'utf8').digest('hex').slice(0, 12);

@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { getSavedSearchConfPath, getDashboardViewPath } = require('../lib/object-paths');
-const { getSavedSearchId } = require('../lib/saved-search-id');
+const { getSavedSearchConfPath, getDashboardViewPath } = require('../../lib/objects/object-paths');
+const { getSavedSearchId } = require('../../lib/objects/saved-search-id');
 
 describe('getSavedSearchConfPath', () => {
     it('uses apps path for shared nobody owner', () => {

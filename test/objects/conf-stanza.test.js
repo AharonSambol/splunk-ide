@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { extractStanza, upsertStanza, listStanzaNames } = require('../lib/conf-stanza');
+const { extractStanza, upsertStanza, listStanzaNames } = require('../../lib/objects/conf-stanza');
 
 const MULTI_STANZA = `[Error Rate]
 search = index=main

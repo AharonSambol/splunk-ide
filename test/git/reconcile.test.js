@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { simpleGit } = require('simple-git');
-const { extractStanza } = require('../../lib/conf-stanza');
-const { getSavedSearchConfPath } = require('../../lib/object-paths');
+const { extractStanza } = require('../../lib/objects/conf-stanza');
+const { getSavedSearchConfPath } = require('../../lib/objects/object-paths');
 const { saveStanzaVersion } = require('../../lib/git/query-versions');
 const {
     saveStanzaDraft,
