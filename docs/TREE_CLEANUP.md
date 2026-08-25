@@ -737,7 +737,7 @@ rg -n "require\\(['\"]\\.\\./lib/(query-versions|ide-folders|tabs|parent-selecti
 rg -n "path\\.join\\(PROJECT_ROOT, 'injector" renderer/
 ```
 
-**Status:**
+**Status:** done (HEAD before this atom `80ddea1`). `test:syntax` now checks `lib/*.js lib/*/*.js` (covers `url-utils.js` plus git/objects/explorer/ui/webview/main). Glob expand matches `find lib -name '*.js'` (36 files). **Coverage:** syntax is the glob; unit/explorer/renderer already existed. **After:** `npm run test:syntax` pass; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; explorer chain `toExplorerInput` → `buildFileTree` → `renderExplorer` at `renderer/explorer.js` 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; leftover `require('../lib/query-versions|ide-folders|tabs|parent-selection-cleanup')` empty; `path.join(PROJECT_ROOT, 'injector…` hits are Atom I `injectors/` paths; `index.html` only `./renderer.js`; Playwright list 17 including `selection-drag`. Full smoke not re-run (baseline 8/9).
 
 ---
 

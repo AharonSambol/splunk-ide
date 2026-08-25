@@ -10,7 +10,7 @@
     "test:unit": "node --test $(find test -name '*.test.js' | sort)",
     "test:smoke": "playwright test",
     "test:ui": "npm run test:unit && npm run test:smoke",
-    "test:syntax": "for f in main.js renderer.js renderer/*.js webview-preload.js injectors/*.js lib/webview/*.js; do node --check \"$f\" || exit 1; done",
+    "test:syntax": "for f in main.js renderer.js renderer/*.js webview-preload.js injectors/*.js lib/*.js lib/*/*.js; do node --check \"$f\" || exit 1; done",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
