@@ -9,7 +9,7 @@ const {
     toKeyInfo,
     windowForContents,
     attachAppShortcuts
-} = require('../lib/main/app-shortcuts');
+} = require('../../lib/main/app-shortcuts');
 
 function input(overrides = {}) {
     return {

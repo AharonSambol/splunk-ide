@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { findInPage, stopFindInPage } = require('../lib/main/find-in-page');
+const { findInPage, stopFindInPage } = require('../../lib/main/find-in-page');
 
 function makeWebContents(targets = new Map()) {
     return {

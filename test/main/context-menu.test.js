@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { createContextMenuTemplate } = require('../lib/main/context-menu');
+const { createContextMenuTemplate } = require('../../lib/main/context-menu');
 
 function findItem(template, label) {
     return template.find((item) => item.label === label);

@@ -370,7 +370,7 @@ npm run test:unit
 
 **Done when:** 374 pass; `lib/main/` untouched.
 
-**Status:**
+**Status:** done (Wave 0 HEAD `5b07c2c`). Moved `test/main-app-shortcuts.test.js` → `test/main/app-shortcuts.test.js`, `test/main-context-menu.test.js` → `test/main/context-menu.test.js`, `test/main-find-in-page.test.js` → `test/main/find-in-page.test.js` (dropped `main-` prefix; bodies identical except `require('../lib/main/…')` → `require('../../lib/main/…')`). **Exports (lib/main untouched):** `shouldForwardKey`, `shouldInterceptShortcut`, `toKeyInfo`, `windowForContents`, `attachAppShortcuts`; `createContextMenuTemplate`; `findInPage`, `stopFindInPage`. **Callers of lib/main:** `main.js` only (paths unchanged). No other test required the old files. **Coverage:** existing 24 tests load those exports; a wrong require depth fails the suite with MODULE_NOT_FOUND — no extra tests added. **Before:** `node --test test/main-*.test.js` → 24 pass / 0 fail. **After:** `node --check` on the three files; `node --test test/main/*.test.js` → 24 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; old `require('../lib/main/` gone in non-md files; diff gate empty; `lib/main/` git-clean. Commit hash: after this commit.
 
 ---
 
