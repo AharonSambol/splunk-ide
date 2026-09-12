@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
-const { getSavedSearchId } = require('../lib/objects/saved-search-id');
+const { getSavedSearchId } = require('../../lib/objects/saved-search-id');
 const {
     hasDraftChanges,
     saveDraftStash,
@@ -13,12 +13,12 @@ const {
     consumeAutoSave,
     shouldSkipAutoSaveOnRestore,
     autoSaveStanzaBeforeRestore,
-} = require('../lib/git/query-versions');
-const { restorePlainQueryVersion } = require('../lib/git/plain-query-restore');
-const state = require('./state');
-const { showConfirmModal } = require('./confirm-modal');
-const { getGitAuthorFromSettings } = require('./git-settings');
-const { queryRestoreBtn, queryHistoryStatus } = require('./dom');
+} = require('../../lib/git/query-versions');
+const { restorePlainQueryVersion } = require('../../lib/git/plain-query-restore');
+const state = require('../state');
+const { showConfirmModal } = require('../confirm-modal');
+const { getGitAuthorFromSettings } = require('../git-settings');
+const { queryRestoreBtn, queryHistoryStatus } = require('../dom');
 
 let DRAFT_VERSION_HASH;
 let getActiveFile;

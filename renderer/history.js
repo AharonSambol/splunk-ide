@@ -48,11 +48,11 @@ const {
     attachHistoryRestore,
     restoreQueryVersion,
     restoreSelectedVersion,
-} = require('./history-restore');
+} = require('./history/restore');
 const {
     attachHistorySave,
     saveQueryVersion,
-} = require('./history-save');
+} = require('./history/save');
 const {
     attachHistorySync,
     SAVED_SEARCH_SYNC_STATUS,
@@ -78,7 +78,7 @@ const {
     syncSavedSearchTrackedBase,
     pushSavedSearchHistoryAfterSave,
     enterSavedSearchHistory,
-} = require('./history-sync');
+} = require('./history/sync');
 const {
     attachHistoryTags,
     getTagsForHash,
@@ -89,14 +89,14 @@ const {
     closeTagPopup,
     saveTagFromPopup,
     clearTagFromPopup,
-} = require('./history-tags');
+} = require('./history/tags');
 const {
     attachHistoryPreview,
     versionPreviewText,
     getDraftPreviewQuery,
     setPreviewMode,
     renderVersionPreview,
-} = require('./history-preview');
+} = require('./history/preview');
 const {
     attachHistoryDirty,
     getSavedSearchDraftStatus,
@@ -105,7 +105,7 @@ const {
     scheduleRefreshLiveDraftState,
     refreshLiveDraftState,
     refreshQueryDirtyState,
-} = require('./history-dirty');
+} = require('./history/dirty');
 
 const DRAFT_VERSION_HASH = '__draft__';
 

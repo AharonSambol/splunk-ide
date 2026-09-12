@@ -1,9 +1,9 @@
 'use strict';
 
-const { extractSearchFromStanza } = require('../lib/git/query-versions');
-const { diffLines, renderDiffHtml } = require('../lib/git/diff-lines');
-const state = require('./state');
-const { queryVersionPreviewText, queryPreviewModeBtns } = require('./dom');
+const { extractSearchFromStanza } = require('../../lib/git/query-versions');
+const { diffLines, renderDiffHtml } = require('../../lib/git/diff-lines');
+const state = require('../state');
+const { queryVersionPreviewText, queryPreviewModeBtns } = require('../dom');
 
 let DRAFT_VERSION_HASH;
 let getPrimarySelectedHash;

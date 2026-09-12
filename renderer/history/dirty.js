@@ -1,17 +1,17 @@
 'use strict';
 
-const { getStanzaDraftStatus } = require('../lib/git/stanza-drafts');
-const { getFileStatus, hasDraftChanges } = require('../lib/git/query-versions');
-const { formatQueryHistoryStatus } = require('../lib/ui/query-history-ui');
-const { shouldScheduleLiveDraftRefresh } = require('../lib/objects/saved-search-dirty');
-const state = require('./state');
+const { getStanzaDraftStatus } = require('../../lib/git/stanza-drafts');
+const { getFileStatus, hasDraftChanges } = require('../../lib/git/query-versions');
+const { formatQueryHistoryStatus } = require('../../lib/ui/query-history-ui');
+const { shouldScheduleLiveDraftRefresh } = require('../../lib/objects/saved-search-dirty');
+const state = require('../state');
 const {
     queryHistoryStatus,
     querySaveBtn,
     queryRestoreBtn,
     querySidebar,
     tabBar,
-} = require('./dom');
+} = require('../dom');
 
 let DRAFT_VERSION_HASH;
 let isSavedSearchFile;

@@ -24,8 +24,8 @@ describe('saved search — no canonical .spl hot path', () => {
     it('renderer does not call getSavedSearchPath', () => {
         const rendererSrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer.js'), 'utf8');
         const historySrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer/history.js'), 'utf8');
-        const restoreSrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer/history-restore.js'), 'utf8');
-        const syncSrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer/history-sync.js'), 'utf8');
+        const restoreSrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer/history/restore.js'), 'utf8');
+        const syncSrc = fs.readFileSync(path.join(__dirname, '../..', 'renderer/history/sync.js'), 'utf8');
         assert.ok(!rendererSrc.includes('getSavedSearchPath'));
         assert.ok(!historySrc.includes('getSavedSearchPath'));
         assert.ok(!restoreSrc.includes('getSavedSearchPath'));

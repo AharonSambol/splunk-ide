@@ -8,14 +8,14 @@ const {
     parseDashboardFromUrl,
     shouldClearTabObjectOnNavigate,
     splunkUiUrlToRestBase,
-} = require('../lib/splunk-url');
-const { getSavedSearchId } = require('../lib/objects/saved-search-id');
-const { getSavedSearchConfPath } = require('../lib/objects/object-paths');
-const { saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('../lib/git/stanza-drafts');
-const { openSavedSearchHistory } = require('../lib/objects/saved-search-open');
-const { isStaleSplunkImportSyncStatus } = require('../lib/ui/query-history-ui');
-const { openDashboardHistory } = require('../lib/objects/dashboard-open');
-const { ensureRemote, pushSharedHistoryWithReconcile } = require('../lib/git/git-sync');
+} = require('../../lib/splunk-url');
+const { getSavedSearchId } = require('../../lib/objects/saved-search-id');
+const { getSavedSearchConfPath } = require('../../lib/objects/object-paths');
+const { saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('../../lib/git/stanza-drafts');
+const { openSavedSearchHistory } = require('../../lib/objects/saved-search-open');
+const { isStaleSplunkImportSyncStatus } = require('../../lib/ui/query-history-ui');
+const { openDashboardHistory } = require('../../lib/objects/dashboard-open');
+const { ensureRemote, pushSharedHistoryWithReconcile } = require('../../lib/git/git-sync');
 const {
     hasDraftChanges,
     saveDraftStash,
@@ -26,18 +26,18 @@ const {
     setVersionTag,
     formatSplunkSaveTagName,
     extractSearchFromStanza,
-} = require('../lib/git/query-versions');
-const { resolveSavedSearchDirtyOnNavigate } = require('../lib/objects/saved-search-dirty');
-const { explorerIdForFile, replaceItemId } = require('../lib/explorer/ide-folders');
-const state = require('./state');
-const { getGitAuthorFromSettings, getGitRemoteSettings } = require('./git-settings');
+} = require('../../lib/git/query-versions');
+const { resolveSavedSearchDirtyOnNavigate } = require('../../lib/objects/saved-search-dirty');
+const { explorerIdForFile, replaceItemId } = require('../../lib/explorer/ide-folders');
+const state = require('../state');
+const { getGitAuthorFromSettings, getGitRemoteSettings } = require('../git-settings');
 const {
     queryHistoryTitle,
     queryHistoryStatus,
     queryVersionList,
     querySaveBtn,
     queryRestoreBtn,
-} = require('./dom');
+} = require('../dom');
 
 let getViewUrl;
 let ensureDirectoryExists;

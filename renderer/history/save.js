@@ -1,11 +1,11 @@
 'use strict';
 
 const fs = require('node:fs');
-const { getSavedSearchId } = require('../lib/objects/saved-search-id');
-const { saveVersion, saveStanzaVersion } = require('../lib/git/query-versions');
-const state = require('./state');
-const { getGitAuthorFromSettings } = require('./git-settings');
-const { querySaveMessage, querySaveBtn, queryHistoryStatus } = require('./dom');
+const { getSavedSearchId } = require('../../lib/objects/saved-search-id');
+const { saveVersion, saveStanzaVersion } = require('../../lib/git/query-versions');
+const state = require('../state');
+const { getGitAuthorFromSettings } = require('../git-settings');
+const { querySaveMessage, querySaveBtn, queryHistoryStatus } = require('../dom');
 
 let getActiveFile;
 let syncFileFromViewUrl;

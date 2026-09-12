@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const RENDERER_PATH = path.join(__dirname, '../..', 'renderer/history-restore.js');
+const RENDERER_PATH = path.join(__dirname, '../..', 'renderer/history/restore.js');
 
 describe('plain restore renderer dispatch', () => {
     it('plain branch uses restorePlainQueryVersion instead of hardcoded skipAutoSave', () => {

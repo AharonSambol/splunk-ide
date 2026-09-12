@@ -4,8 +4,8 @@ const {
     setVersionTag,
     deleteVersionTag,
     listVersionTags,
-} = require('../lib/git/query-versions');
-const state = require('./state');
+} = require('../../lib/git/query-versions');
+const state = require('../state');
 const {
     tagPopup,
     tagPopupInput,
@@ -13,7 +13,7 @@ const {
     tagPopupClear,
     queryHistoryStatus,
     queryVersionList,
-} = require('./dom');
+} = require('../dom');
 
 let DRAFT_VERSION_HASH;
 let getActiveFile;
