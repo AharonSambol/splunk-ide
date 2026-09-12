@@ -20,7 +20,7 @@ let getSavedSearchStanzaName;
 let pushSavedSearchHistoryAfterSave;
 let refreshQueryHistory;
 
-function bindHistorySave(deps) {
+function attachHistorySave(deps) {
     getActiveFile = deps.getActiveFile;
     syncFileFromViewUrl = deps.syncFileFromViewUrl;
     resolveSavedSearchFromFile = deps.resolveSavedSearchFromFile;
@@ -125,6 +125,6 @@ async function saveQueryVersion() {
 }
 
 module.exports = {
-    bindHistorySave,
+    attachHistorySave,
     saveQueryVersion,
 };

@@ -62,7 +62,7 @@ let getDashboardViewRelativePath;
 let refreshQueryHistory;
 let syncSavedSearchAceEditor;
 
-function bindHistorySync(deps) {
+function attachHistorySync(deps) {
     ({
         getViewUrl = getViewUrl,
         ensureDirectoryExists = ensureDirectoryExists,
@@ -717,7 +717,7 @@ async function enterSavedSearchHistory(file, currentUrl) {
 
 module.exports = {
     SAVED_SEARCH_SYNC_STATUS,
-    bindHistorySync,
+    attachHistorySync,
     getSplunkRestSettings,
     classifyPushSyncStatus,
     getLatestFileCommit,

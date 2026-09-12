@@ -51,16 +51,16 @@ const {
     statusVersions,
 } = require('./dom');
 const {
-    bindHistoryRestore,
+    attachHistoryRestore,
     restoreQueryVersion,
     restoreSelectedVersion,
 } = require('./history-restore');
 const {
-    bindHistorySave,
+    attachHistorySave,
     saveQueryVersion,
 } = require('./history-save');
 const {
-    bindHistorySync,
+    attachHistorySync,
     SAVED_SEARCH_SYNC_STATUS,
     getSplunkRestSettings,
     classifyPushSyncStatus,
@@ -1137,7 +1137,8 @@ function attachHistory({
     ensureDirectoryExists = ensureDirectoryExistsFn;
     getViewUrl = getViewUrlFn;
 
-    bindHistorySync({
+    // phase 2: deps that only exist after attachHistory assigns the lets above
+    attachHistorySync({
         getViewUrl,
         ensureDirectoryExists,
         persistIdeFolders,
@@ -1181,7 +1182,7 @@ function attachHistory({
     });
 }
 
-bindHistorySync({
+attachHistorySync({
     onQueryFileChanged,
     renderVersionPreview,
     updateStatusBar,
@@ -1199,7 +1200,7 @@ bindHistorySync({
     refreshQueryHistory,
     syncSavedSearchAceEditor,
 });
-bindHistoryRestore({
+attachHistoryRestore({
     DRAFT_VERSION_HASH,
     getActiveFile,
     getRelativePath,
@@ -1216,7 +1217,7 @@ bindHistoryRestore({
     getPrimarySelectedHash,
     isMultiVersionCompare,
 });
-bindHistorySave({
+attachHistorySave({
     getActiveFile,
     syncFileFromViewUrl,
     resolveSavedSearchFromFile,

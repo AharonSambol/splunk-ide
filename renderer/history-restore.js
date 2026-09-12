@@ -36,7 +36,7 @@ let isDashboardFile;
 let getPrimarySelectedHash;
 let isMultiVersionCompare;
 
-function bindHistoryRestore(deps) {
+function attachHistoryRestore(deps) {
     DRAFT_VERSION_HASH = deps.DRAFT_VERSION_HASH;
     getActiveFile = deps.getActiveFile;
     getRelativePath = deps.getRelativePath;
@@ -242,7 +242,7 @@ async function restoreSelectedVersion() {
 }
 
 module.exports = {
-    bindHistoryRestore,
+    attachHistoryRestore,
     restoreQueryVersion,
     restoreSelectedVersion,
 };
