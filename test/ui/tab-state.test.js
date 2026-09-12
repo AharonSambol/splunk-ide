@@ -7,7 +7,7 @@ const {
     getNextTab,
     getFallbackActiveTab,
     createDuplicateFileName,
-} = require('../../lib/ui/tabs');
+} = require('../../lib/ui/tab-state');
 
 describe('getFallbackActiveTab', () => {
     it('returns the first remaining tab after close', () => {

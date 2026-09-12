@@ -10,7 +10,7 @@ const {
     getPreviousTab,
     getNextTab,
     createDuplicateFileName,
-} = require('../lib/ui/tabs');
+} = require('../lib/ui/tab-state');
 const { getFileFolder } = require('../lib/url-utils');
 const { createTabElement, setActiveTab, updateTabTitle } = require('../lib/ui/render-tabs');
 const { attachWebviewSelectionDragHandlers } = require('../lib/webview/webview-selection-drag-handlers');
