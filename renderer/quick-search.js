@@ -14,7 +14,7 @@ const {
     moveQuickSearchSelection,
 } = require('../lib/ui/quick-search');
 const { renderQuickSearchResults } = require('../lib/ui/render-quick-search');
-const { extractQueryFromUrl } = require('../lib/url-utils');
+const { extractQueryFromUrl } = require('../lib/splunk-url');
 
 let openFile;
 

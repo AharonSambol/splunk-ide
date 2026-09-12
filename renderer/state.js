@@ -1,6 +1,6 @@
 'use strict';
 
-const { DEFAULT_SPLUNK_URL } = require('../lib/url-utils');
+const { DEFAULT_SPLUNK_URL } = require('../lib/splunk-url');
 
 module.exports = {
     fileCounter: 1,

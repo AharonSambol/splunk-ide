@@ -8,7 +8,7 @@ const {
     listStanzaDraftsForConf,
     recomposeWorktree
 } = require('../../lib/git/stanza-drafts');
-const { urlsMatchForDraft } = require('../../lib/url-utils');
+const { urlsMatchForDraft } = require('../../lib/splunk-url');
 const { createTempGitRepo, cleanupTempRepo } = require('../helpers/temp-git-repo');
 
 const CONF_PATH = 'prod/apps/search/local/savedsearches.conf';

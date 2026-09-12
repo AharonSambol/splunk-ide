@@ -1,7 +1,7 @@
 'use strict';
 
 const { ipcRenderer } = require('electron');
-const { normalizeSplunkAddress, withSplunkOrigin } = require('../lib/url-utils');
+const { normalizeSplunkAddress, withSplunkOrigin } = require('../lib/splunk-url');
 const state = require('./state');
 const {
     gitSyncSettingsBtn,

@@ -6,7 +6,7 @@ const { simpleGit } = require('simple-git');
 const {
     extractQueryFromUrl,
     getSearchText,
-} = require('../lib/url-utils');
+} = require('../lib/splunk-url');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('../lib/objects/object-paths');
 const { getStanzaDraftStatus, listStanzaDraftsForConf } = require('../lib/git/stanza-drafts');
 const {

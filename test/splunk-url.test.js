@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, splunkUiUrlToRestBase, urlsMatchForDraft, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('../lib/url-utils');
+const { decodeSearchText, extractQueryFromUrl, getFileFolder, getSearchText, parseSavedSearchFromUrl, splunkUiUrlToRestBase, urlsMatchForDraft, DEFAULT_SPLUNK_URL, normalizeSplunkAddress, withSplunkOrigin } = require('../lib/splunk-url');
 
 describe('decodeSearchText', () => {
     it('decodes percent-encoded text', () => {

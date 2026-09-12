@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { ipcRenderer } = require('electron');
-const { parseSavedSearchFromUrl, withSplunkOrigin } = require('../lib/url-utils');
+const { parseSavedSearchFromUrl, withSplunkOrigin } = require('../lib/splunk-url');
 const { getSavedSearchId } = require('../lib/objects/saved-search-id');
 const { saveVersion } = require('../lib/git/query-versions');
 const {

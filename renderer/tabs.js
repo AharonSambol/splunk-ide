@@ -11,7 +11,7 @@ const {
     getNextTab,
     createDuplicateFileName,
 } = require('../lib/ui/tab-state');
-const { getFileFolder } = require('../lib/url-utils');
+const { getFileFolder } = require('../lib/splunk-url');
 const { createTabElement, setActiveTab, updateTabTitle } = require('../lib/ui/render-tabs');
 const { attachWebviewSelectionDragHandlers } = require('../lib/webview/webview-selection-drag-handlers');
 const { buildSplunkSaveInjectorSource } = require('../lib/webview/webview-splunk-save-hooks');

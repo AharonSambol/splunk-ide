@@ -10,7 +10,7 @@ const {
     scanProjectFiles: scanProjectFilesOnDisk,
     scanProjectFolders: scanProjectFoldersOnDisk,
 } = require('../lib/explorer/project-files');
-const { parseSavedSearchFromUrl, getFileFolder } = require('../lib/url-utils');
+const { parseSavedSearchFromUrl, getFileFolder } = require('../lib/splunk-url');
 const { getDashboardViewPath } = require('../lib/objects/object-paths');
 const { renameQueryFile } = require('../lib/git/query-versions');
 const { renderExplorer } = require('../lib/explorer/render-explorer');

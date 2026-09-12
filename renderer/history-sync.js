@@ -8,7 +8,7 @@ const {
     parseDashboardFromUrl,
     shouldClearTabObjectOnNavigate,
     splunkUiUrlToRestBase,
-} = require('../lib/url-utils');
+} = require('../lib/splunk-url');
 const { getSavedSearchId } = require('../lib/objects/saved-search-id');
 const { getSavedSearchConfPath } = require('../lib/objects/object-paths');
 const { saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('../lib/git/stanza-drafts');
