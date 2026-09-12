@@ -9,6 +9,7 @@ const {
 } = require('../lib/splunk-url');
 const { getSavedSearchConfPath, getDashboardViewPath } = require('../lib/objects/object-paths');
 const { getStanzaDraftStatus, listStanzaDraftsForConf } = require('../lib/git/stanza-drafts');
+const { setStanzaSearch } = require('../lib/git/stanza-versions');
 const {
     formatQueryHistoryStatus,
     getQueryHistoryEmptyMessage,
@@ -348,22 +349,6 @@ async function syncSavedSearchAceEditor(file) {
     if (stanza) {
         await applySavedSearchAceFromStanza(file, stanza);
     }
-}
-
-function setStanzaSearch(stanzaText, stanzaName, search) {
-    if (!stanzaText) {
-        return `[${stanzaName}]\nsearch = ${search}\n\n`;
-    }
-    if (/^search\s*=/m.test(stanzaText)) {
-        return stanzaText.replace(/^search\s*=.*$/m, `search = ${search}`);
-    }
-    const lines = stanzaText.split('\n');
-    if (lines[0]?.startsWith('[')) {
-        lines.splice(1, 0, `search = ${search}`);
-        const block = lines.join('\n');
-        return block.endsWith('\n') ? block : `${block}\n`;
-    }
-    return `[${stanzaName}]\nsearch = ${search}\n\n`;
 }
 
 async function getLiveAceOrUrlQuery(file) {
