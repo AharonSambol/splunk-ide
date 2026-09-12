@@ -48,7 +48,7 @@ const {
     showNewFileModal,
     closeNewFileModal,
     confirmNewFileCreation,
-} = require('./explorer-modals');
+} = require('./explorer/modals');
 const {
     attachExplorerProject,
     EXPLORER_COLLAPSED_KEY,
@@ -64,7 +64,7 @@ const {
     persistIdeFolders,
     loadIdeFoldersFromProject,
     updateProjectDisplay,
-} = require('./explorer-project');
+} = require('./explorer/project');
 
 function createFileWithUrl(name, url, parentFolder = '') {
     if (!state.currentProjectPath) {

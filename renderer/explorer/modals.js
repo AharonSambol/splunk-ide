@@ -1,7 +1,7 @@
 'use strict';
 
-const { folderForId, explorerIdForFile } = require('../lib/explorer/ide-folders');
-const state = require('./state');
+const { folderForId, explorerIdForFile } = require('../../lib/explorer/ide-folders');
+const state = require('../state');
 const {
     newItemMenu,
     newFileModal,
@@ -10,7 +10,7 @@ const {
     newFileFolderRow,
     newFileFolderSelect,
     newFileCreateBtn,
-} = require('./dom');
+} = require('../dom');
 
 let createNewFile;
 let createNewFolder;
