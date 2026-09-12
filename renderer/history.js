@@ -25,7 +25,6 @@ const {
 } = require('../lib/git/query-versions');
 const { resolveSavedSearchDraftPreviewText } = require('../lib/objects/saved-search-preview');
 const { shouldScheduleLiveDraftRefresh } = require('../lib/objects/saved-search-dirty');
-const { diffLines, renderDiffHtml } = require('../lib/git/diff-lines');
 const state = require('./state');
 const {
     historyTabs,
@@ -37,7 +36,6 @@ const {
     tagPopupCancel,
     tagPopupClear,
     tagPopupSave,
-    queryVersionPreviewText,
     queryPreviewModeBtns,
     querySaveMessage,
     querySaveBtn,
@@ -94,6 +92,13 @@ const {
     saveTagFromPopup,
     clearTagFromPopup,
 } = require('./history-tags');
+const {
+    attachHistoryPreview,
+    versionPreviewText,
+    getDraftPreviewQuery,
+    setPreviewMode,
+    renderVersionPreview,
+} = require('./history-preview');
 
 const DRAFT_VERSION_HASH = '__draft__';
 
@@ -192,20 +197,6 @@ function getVersionTagStanzaName(file) {
 function getListVersionsOptions(file) {
     const stanza = getSavedSearchStanzaName(file);
     return stanza ? { stanza } : {};
-}
-
-function versionPreviewText(version) {
-    if (!version) {
-        return '';
-    }
-    if (version.stanzaText) {
-        return extractSearchFromStanza(version.stanzaText) || version.stanzaText;
-    }
-    const raw = String(version.url || '').trim();
-    if (raw.startsWith('<') || raw.startsWith('{') || raw.startsWith('[')) {
-        return raw;
-    }
-    return version.query || raw;
 }
 
 async function getSavedSearchDraftStatus(file) {
@@ -357,14 +348,6 @@ async function syncSavedSearchAceEditor(file) {
     if (stanza) {
         await applySavedSearchAceFromStanza(file, stanza);
     }
-}
-
-function getDraftPreviewQuery() {
-    const file = getActiveFile();
-    if (file && isSavedSearchFile(file)) {
-        return state.currentQueryText || '';
-    }
-    return getLiveQueryText() || state.currentQueryText || '';
 }
 
 function setStanzaSearch(stanzaText, stanzaName, search) {
@@ -619,71 +602,6 @@ function onQueryFileChanged(fileId, { refreshHistory = false } = {}) {
     if (refreshHistory && fileId === state.activeFileId && !querySidebar.classList.contains('collapsed')) {
         refreshQueryHistory();
     }
-}
-
-function setPreviewMode(mode) {
-    state.previewMode = mode;
-    queryPreviewModeBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.mode === mode);
-    });
-    renderVersionPreview();
-}
-
-function renderVersionPreview() {
-    const primary = getPrimarySelectedHash();
-    const isDraftSelected = primary === DRAFT_VERSION_HASH;
-
-    if (state.previewMode === 'diff') {
-        if (isMultiVersionCompare()) {
-            const [fromHash, toHash] = state.selectedVersionHashes;
-            const fromVersion = state.queryVersions.find(v => v.hash === fromHash);
-            const toVersion = state.queryVersions.find(v => v.hash === toHash);
-            if (fromVersion && toVersion) {
-                const diff = diffLines(
-                    versionPreviewText(fromVersion),
-                    versionPreviewText(toVersion)
-                );
-                queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
-            } else {
-                queryVersionPreviewText.textContent = 'Could not load selected versions.';
-            }
-            return;
-        }
-        if (isDraftSelected) {
-            const baseHash = getTrackedBaseHash();
-            const baseVersion = baseHash ? state.queryVersions.find(v => v.hash === baseHash) : null;
-            const draftQuery = getDraftPreviewQuery();
-            if (baseVersion) {
-                const diff = diffLines(
-                    versionPreviewText(baseVersion),
-                    draftQuery
-                );
-                queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
-            } else {
-                queryVersionPreviewText.textContent = 'No saved base version to compare against.';
-            }
-            return;
-        }
-        if (!primary) {
-            queryVersionPreviewText.textContent = 'Select a version to diff.';
-            return;
-        }
-        const version = state.queryVersions.find(v => v.hash === primary);
-        if (version) {
-            const diff = diffLines(versionPreviewText(version), state.currentQueryText || '');
-            queryVersionPreviewText.innerHTML = renderDiffHtml(diff);
-            return;
-        }
-    }
-
-    if (isDraftSelected || !primary) {
-        const draftQuery = isDraftSelected ? getDraftPreviewQuery() : state.currentQueryText;
-        queryVersionPreviewText.textContent = draftQuery || '(empty query)';
-        return;
-    }
-
-    const version = state.queryVersions.find(v => v.hash === primary);
-    queryVersionPreviewText.textContent = versionPreviewText(version) || '(empty query)';
 }
 
 function updateStatusBar({ hasChanges, status, versionCount, syncStatus } = {}) {
@@ -1102,6 +1020,15 @@ attachHistoryTags({
     getVersionTagStanzaName,
     renderHistorySidebarList,
     applyVersionRowClasses,
+});
+attachHistoryPreview({
+    DRAFT_VERSION_HASH,
+    getPrimarySelectedHash,
+    isMultiVersionCompare,
+    getTrackedBaseHash,
+    getActiveFile,
+    isSavedSearchFile,
+    getLiveQueryText,
 });
 
 module.exports = {
