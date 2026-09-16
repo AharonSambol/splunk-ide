@@ -1,0 +1,19 @@
+services:
+  splunk:
+    build: ./splunk
+    image: splunk-ide-splunk:local
+    platform: linux/amd64
+    container_name: splunk-ide-splunk
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD:-Changeme123!}
+    ports:
+      # splunk-ide default: http://localhost:8010/en-US/app/search/search
+      - "8010:8000"
+    volumes:
+      - splunk-data:/opt/splunk/var
+    restart: unless-stopped
+
+volumes:
+  splunk-data:
