@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { ipcRenderer } = require('electron');
-const { attachWebviewSelectionDragHandlers } = require('../../lib/webview/webview-selection-drag-handlers');
-const { buildSplunkSaveInjectorSource } = require('../../lib/webview/webview-splunk-save-hooks');
+const { attachWebviewSelectionDragHandlers } = require('../../lib/webview/selection-drag-handlers');
+const { buildSplunkSaveInjectorSource } = require('../../lib/webview/splunk-save-hooks');
 const state = require('../state');
 const {
     prevPageBtn,
@@ -118,7 +118,7 @@ function createView(file) {
     view.addEventListener('did-stop-loading', syncUrlFromView);
     const injectorCode = [
         fs.readFileSync(path.join(PROJECT_ROOT, 'injectors', 'injector.js'), 'utf8'),
-        fs.readFileSync(path.join(PROJECT_ROOT, 'injectors', 'injector-selection-cleanup.js'), 'utf8'),
+        fs.readFileSync(path.join(PROJECT_ROOT, 'injectors', 'selection-cleanup.js'), 'utf8'),
     ].join('\n');
     const saveHookCode = buildSplunkSaveInjectorSource();
     const injectGuestScripts = () => {

@@ -2,7 +2,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { buildFileTree } = require('../../lib/explorer/file-tree');
 const { renderExplorer, EMPTY_MESSAGE } = require('../../lib/explorer/render-explorer');
-const { createDocument, createContainer } = require('../helpers/dom');
+const { createDocument, createContainer } = require('../helpers/dom-fixture');
 
 const sampleFiles = [
     { id: 'f1', name: 'root-file' },

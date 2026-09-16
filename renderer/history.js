@@ -13,7 +13,7 @@ const { setStanzaSearch } = require('../lib/git/stanza-versions');
 const {
     formatQueryHistoryStatus,
     isStaleSplunkImportSyncStatus,
-} = require('../lib/ui/query-history-ui');
+} = require('../lib/ui/history-status');
 const {
     getFileStatus,
     listVersions,

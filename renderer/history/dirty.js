@@ -2,7 +2,7 @@
 
 const { getStanzaDraftStatus } = require('../../lib/git/stanza-drafts');
 const { getFileStatus, hasDraftChanges } = require('../../lib/git/query-versions');
-const { formatQueryHistoryStatus } = require('../../lib/ui/query-history-ui');
+const { formatQueryHistoryStatus } = require('../../lib/ui/history-status');
 const { shouldScheduleLiveDraftRefresh } = require('../../lib/objects/saved-search-dirty');
 const state = require('../state');
 const {

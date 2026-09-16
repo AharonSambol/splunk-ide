@@ -19,7 +19,7 @@ const {
     resetDragState,
 } = require('./lib/webview/end-ace-selection-drag.js');
 const { attachSelectionDragTracker } = require('./lib/webview/selection-drag-tracker.js');
-const { SPLUNK_SAVE_EVENT } = require('./lib/webview/webview-splunk-save-hooks.js');
+const { SPLUNK_SAVE_EVENT } = require('./lib/webview/splunk-save-hooks.js');
 
 window.__splunkIdeClearSelection = () => clearAceSelection(document);
 window.__splunkIdeRecoverFromMissedDrag = () => recoverFromMissedDrag(document);

@@ -12,7 +12,7 @@ const {
     filterQuickSearchResults,
     getQuickSearchEmptyMessage,
     moveQuickSearchSelection,
-} = require('../lib/ui/quick-search');
+} = require('../lib/ui/quick-search-model');
 const { renderQuickSearchResults } = require('../lib/ui/render-quick-search');
 const { extractQueryFromUrl } = require('../lib/splunk-url');
 

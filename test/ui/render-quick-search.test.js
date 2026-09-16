@@ -1,8 +1,8 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { getQuickSearchEmptyMessage } = require('../../lib/ui/quick-search');
+const { getQuickSearchEmptyMessage } = require('../../lib/ui/quick-search-model');
 const { renderQuickSearchResults } = require('../../lib/ui/render-quick-search');
-const { createDocument, createContainer } = require('../helpers/dom');
+const { createDocument, createContainer } = require('../helpers/dom-fixture');
 
 const sampleResults = [
     { id: '1', name: 'queries/main' },

@@ -1,6 +1,6 @@
 'use strict';
 
-const { getQueryHistoryEmptyMessage } = require('../../lib/ui/query-history-ui');
+const { getQueryHistoryEmptyMessage } = require('../../lib/ui/history-status');
 const state = require('../state');
 const { queryVersionList } = require('../dom');
 const { appendTagPills, attachVersionRowContextMenu } = require('./tags');

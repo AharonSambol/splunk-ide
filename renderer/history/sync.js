@@ -13,7 +13,7 @@ const { getSavedSearchId } = require('../../lib/objects/saved-search-id');
 const { getSavedSearchConfPath } = require('../../lib/objects/object-paths');
 const { saveStanzaDraft, recomposeWorktree, listStanzaDraftsForConf } = require('../../lib/git/stanza-drafts');
 const { openSavedSearchHistory } = require('../../lib/objects/saved-search-open');
-const { isStaleSplunkImportSyncStatus } = require('../../lib/ui/query-history-ui');
+const { isStaleSplunkImportSyncStatus } = require('../../lib/ui/history-status');
 const { openDashboardHistory } = require('../../lib/objects/dashboard-open');
 const { ensureRemote, pushSharedHistoryWithReconcile } = require('../../lib/git/git-sync');
 const {
