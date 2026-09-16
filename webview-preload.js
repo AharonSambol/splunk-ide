@@ -1,3 +1,6 @@
+// Webview preload: runs in the guest's isolated context before page scripts.
+// Bridges guest -> renderer via ipcRenderer.sendToHost.
+
 const { contextBridge, ipcRenderer } = require('electron');
 
 function sendSplunkSave() {

@@ -1,3 +1,5 @@
+// Guest-page IIFE (see injector.js header). Injected alongside injector.js.
+
 (function () {
     try {
         const DRAG_THRESHOLD_PX = 3;

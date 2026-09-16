@@ -1,3 +1,6 @@
+// Guest-page IIFE. Injected into the Splunk webview via executeJavaScript
+// from renderer/tabs/view.js. Runs inside the Splunk page, not the renderer.
+
 (function () {
     try {
         document.addEventListener('keyup', function (event) {
