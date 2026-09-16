@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseDashboardFromUrl, shouldClearTabObjectOnNavigate } = require('../lib/splunk-url');
+const { parseDashboardFromUrl, shouldClearTabObjectOnNavigate } = require('../../lib/splunk-url');
 
 describe('parseDashboardFromUrl', () => {
     it('extracts dashboard metadata from app view path', () => {
