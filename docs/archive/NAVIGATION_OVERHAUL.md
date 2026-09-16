@@ -22,9 +22,9 @@ Master commits `df02afe` and `7e072d2` wired the nested explorer. The live path 
 
 | File | Role |
 |---|---|
-| `lib/ide-folders.js` | `ide-folders.json` CRUD, `toExplorerInput`, folder ids |
-| `lib/file-tree.js` | `buildFileTree` — nested tree from file/folder lists |
-| `lib/render-explorer.js` | DOM: files, `<details class="folder">`, drag/drop, Move/Delete |
+| `lib/explorer/ide-folders.js` | `ide-folders.json` CRUD, `toExplorerInput`, folder ids |
+| `lib/explorer/file-tree.js` | `buildFileTree` — nested tree from file/folder lists |
+| `lib/explorer/render-explorer.js` | DOM: files, `<details class="folder">`, drag/drop, Move/Delete |
 | `test/ide-folders.test.js` | unit coverage for folder map |
 | `test/file-tree.test.js` | unit coverage for tree shape |
 | `test/render-explorer.test.js` | unit coverage for nested render + `hideRootLabel` |
@@ -48,9 +48,9 @@ Six tracks, **disjoint files**. Run them in one wave. None of them touch the pro
 
 | Track | Files you may touch | Do not touch |
 |---|---|---|
-| A Dead git UI | `lib/git-view-model.js`, `test/git-view-model.test.js`, `test/integration/git.integration.test.js` | `lib/git-sync.js`, `lib/git-settings.js`, `lib/ide-folders.js`, renderer (`saveVersion` of `ide-folders.json`) |
+| A Dead git UI | `lib/git-view-model.js`, `test/git-view-model.test.js`, `test/integration/git.integration.test.js` | `lib/git/git-sync.js`, `lib/git/git-settings.js`, `lib/explorer/ide-folders.js`, renderer (`saveVersion` of `ide-folders.json`) |
 | C Squirrel comments | `main.js` (comment block under line 1 only) | live `electron-squirrel-startup` gate, IPC, window create |
-| D Deprecated alias | `lib/parent-selection-cleanup.js` | injectors, preload, selection-drag modules |
+| D Deprecated alias | `lib/webview/parent-selection-cleanup.js` | injectors, preload, selection-drag modules |
 | E Dead package.json | `package.json` (`makers`, `build`, `test:e2e`, `test:ui`) | `forge.config.js`, dependencies |
 | F CSS extract | `index.html` `<style>` → new `styles.css` | body markup, inline `style=""` attributes, `renderer.js`, any folder CSS/HTML |
 | G Orphan e2e | `test/e2e/selection-drag.spec.mjs` → `test/smoke/selection-drag.spec.mjs` | `playwright.config.js` unless the move fails to list |
@@ -96,7 +96,7 @@ npm run test:smoke
 **Grep snapshot** (folder lines must **remain** after every track):
 
 ```bash
-rg -n "git-view-model|buildGitChangesFromStatus|formatCommitHistory" --glob '!NAVIGATION_OVERHAUL.md'
+rg -n "git-view-model|buildGitChangesFromStatus|formatCommitHistory" --glob '!docs/archive/NAVIGATION_OVERHAUL.md'
 rg -n "buildFileTree|renderExplorer|toExplorerInput|ide-folders" renderer.js
 rg -n "GUEST_DESELECT_JS"
 rg -n "handleSquirrelEvent"
@@ -108,12 +108,12 @@ Expect `renderer.js` to keep `buildFileTree`, `renderExplorer`, and `toExplorerI
 
 ## Track A — delete dead git status UI
 
-`lib/git-view-model.js` formats stage/commit/reset rows. No app file requires it. Live git is `lib/git-sync.js` + settings. Folder membership is saved through `saveVersion(..., IDE_FOLDERS_FILE, ...)` — that is **not** this module.
+`lib/git-view-model.js` formats stage/commit/reset rows. No app file requires it. Live git is `lib/git/git-sync.js` + settings. Folder membership is saved through `saveVersion(..., IDE_FOLDERS_FILE, ...)` — that is **not** this module.
 
 **Before**
 
 ```bash
-rg -n "git-view-model|buildGitChangesFromStatus|formatGitStatus|formatCommitHistory" --glob '!NAVIGATION_OVERHAUL.md'
+rg -n "git-view-model|buildGitChangesFromStatus|formatGitStatus|formatCommitHistory" --glob '!docs/archive/NAVIGATION_OVERHAUL.md'
 node --test test/git-view-model.test.js test/integration/git.integration.test.js
 node --test test/git-sync.test.js test/git-settings.test.js test/ide-folders.test.js
 ```
@@ -128,12 +128,12 @@ Delete:
 - `test/git-view-model.test.js`
 - `test/integration/git.integration.test.js`
 
-Do not delete `test/helpers/temp-git-repo.js`, `test/integration/project-files.integration.test.js`, `lib/git-sync.js`, or `lib/ide-folders.js`.
+Do not delete `test/helpers/temp-git-repo.js`, `test/integration/project-files.integration.test.js`, `lib/git/git-sync.js`, or `lib/explorer/ide-folders.js`.
 
 **After**
 
 ```bash
-rg -n "git-view-model|buildGitChangesFromStatus|formatGitStatus|formatCommitHistory" --glob '!NAVIGATION_OVERHAUL.md'
+rg -n "git-view-model|buildGitChangesFromStatus|formatGitStatus|formatCommitHistory" --glob '!docs/archive/NAVIGATION_OVERHAUL.md'
 # expect: no hits
 node --test test/git-sync.test.js test/git-settings.test.js test/ide-folders.test.js
 npm run test:unit
@@ -156,7 +156,7 @@ npm run test:unit
 
 ```bash
 node --check main.js
-node --test test/main-app-shortcuts.test.js test/main-context-menu.test.js test/main-find-in-page.test.js
+node --test test/main/app-shortcuts.test.js test/main/context-menu.test.js test/main/find-in-page.test.js
 ```
 
 Confirm line 1 stays: `if (require('electron-squirrel-startup')) return;`
@@ -171,7 +171,7 @@ Delete the commented block through the blank lines before `const { app, BrowserW
 rg -n "handleSquirrelEvent|squirrel_app|--squirrel-install" main.js
 # expect: no hits
 node --check main.js
-node --test test/main-app-shortcuts.test.js test/main-context-menu.test.js test/main-find-in-page.test.js
+node --test test/main/app-shortcuts.test.js test/main/context-menu.test.js test/main/find-in-page.test.js
 ```
 
 Smoke `app-launch` “launches, opens main window…” still passes.
@@ -194,7 +194,7 @@ rg -n "GUEST_DESELECT_JS"
 node --test test/unit/parent-selection-cleanup.test.js test/unit/webview-selection-drag-handlers.test.js
 ```
 
-Expect: hits only in `lib/parent-selection-cleanup.js` (define + export).
+Expect: hits only in `lib/webview/parent-selection-cleanup.js` (define + export).
 
 **Change**
 

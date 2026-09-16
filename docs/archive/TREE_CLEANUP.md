@@ -6,7 +6,7 @@ HEAD at plan write: `63c469f` (renderer split Wave 2). Rebase onto `master` agai
 
 Goal: make `lib/` and `test/` match the mental model (git / objects / explorer / ui / webview). **No behavior change.** No bundler. No `src/`. No `renderer/` nesting. No file splits. No export or function renames.
 
-Cheap cuts: `NAVIGATION_OVERHAUL.md`. Renderer split: `RENDERER_SPLIT.md`. This file is the next execution plan.
+Cheap cuts: `docs/archive/NAVIGATION_OVERHAUL.md`. Renderer split: `docs/archive/RENDERER_SPLIT.md`. This file is the next execution plan.
 
 ---
 
@@ -75,7 +75,7 @@ Forbidden (revert the atom if you do any of these):
 - Change a function body, condition, default, or export name
 - Add/remove `module.exports` keys
 - Merge or split files
-- Rename a basename (`query-versions.js` stays `query-versions.js`; `injector.js` stays `injector.js`)
+- Rename a basename (`query-versions.js` stays `query-versions.js`; `injectors/injector.js` stays `injectors/injector.js`)
 - Dedupe slug helpers, open-helpers, or injectors
 - Edit `index.html` markup or `styles.css`
 - Nest `renderer/` or introduce `src/`
@@ -110,9 +110,9 @@ Live explorer path (do not rewrite, only **change the require path** to the new 
 
 | Today | After Atom E |
 |---|---|
-| `lib/ide-folders.js` | `lib/explorer/ide-folders.js` |
-| `lib/file-tree.js` | `lib/explorer/file-tree.js` |
-| `lib/render-explorer.js` | `lib/explorer/render-explorer.js` |
+| `lib/explorer/ide-folders.js` | `lib/explorer/ide-folders.js` |
+| `lib/explorer/file-tree.js` | `lib/explorer/file-tree.js` |
+| `lib/explorer/render-explorer.js` | `lib/explorer/render-explorer.js` |
 | `test/ide-folders.test.js` | `test/explorer/ide-folders.test.js` |
 | `test/file-tree.test.js` | `test/explorer/file-tree.test.js` |
 | `test/render-explorer.test.js` | `test/explorer/render-explorer.test.js` |
@@ -143,9 +143,9 @@ renderer.js                 # require paths only
 index.html                  # still <script src="./renderer.js">
 styles.css
 webview-preload.js          # require paths only
-injectors/injector.js       # same bytes as today’s injector.js
-injectors/injector-selection-cleanup.js
-lib/url-utils.js            # stays at lib root (shared)
+injectors/injectors/injector.js       # same bytes as today’s injectors/injector.js
+injectors/injectors/injector-selection-cleanup.js
+lib/splunk-url.js            # stays at lib root (shared)
 lib/main/                   # already nested; stay
 lib/git/
 lib/objects/
@@ -172,7 +172,7 @@ Keep **basenames**. Collision with `renderer/tabs.js` vs `lib/ui/tabs.js` is sol
 |---|---|
 | `main.js`, `renderer.js`, `index.html`, `styles.css`, `webview-preload.js` | Electron entry; preload path is load-bearing |
 | `renderer/*.js` | Already named by UI surface |
-| `lib/url-utils.js` | Shared by renderer, explorer, git, settings |
+| `lib/splunk-url.js` | Shared by renderer, explorer, git, settings |
 | `lib/main/*.js` | Already nested |
 | `test/helpers/`, `test/fixtures/`, `test/harness/`, `test/smoke/` | Not domain code (harness `require`s of `lib/webview/*` update in Atom W) |
 | `playwright.config.js`, `forge.config.js`, `package.json` (except `test:syntax` globs) | |
@@ -182,14 +182,14 @@ Keep **basenames**. Collision with `renderer/tabs.js` vs `lib/ui/tabs.js` is sol
 
 | From | To |
 |---|---|
-| `lib/git-settings.js` | `lib/git/git-settings.js` |
-| `lib/git-sync.js` | `lib/git/git-sync.js` |
-| `lib/query-versions.js` | `lib/git/query-versions.js` |
-| `lib/stanza-drafts.js` | `lib/git/stanza-drafts.js` |
-| `lib/conf-lock.js` | `lib/git/conf-lock.js` |
-| `lib/reconcile.js` | `lib/git/reconcile.js` |
-| `lib/diff-lines.js` | `lib/git/diff-lines.js` |
-| `lib/plain-query-restore.js` | `lib/git/plain-query-restore.js` |
+| `lib/git/git-settings.js` | `lib/git/git-settings.js` |
+| `lib/git/git-sync.js` | `lib/git/git-sync.js` |
+| `lib/git/query-versions.js` | `lib/git/query-versions.js` |
+| `lib/git/stanza-drafts.js` | `lib/git/stanza-drafts.js` |
+| `lib/git/conf-lock.js` | `lib/git/conf-lock.js` |
+| `lib/git/reconcile.js` | `lib/git/reconcile.js` |
+| `lib/git/diff-lines.js` | `lib/git/diff-lines.js` |
+| `lib/git/plain-query-restore.js` | `lib/git/plain-query-restore.js` |
 | `test/git-settings.test.js` | `test/git/git-settings.test.js` |
 | `test/git-sync.test.js` | `test/git/git-sync.test.js` |
 | `test/query-versions.test.js` | `test/git/query-versions.test.js` |
@@ -200,33 +200,33 @@ Keep **basenames**. Collision with `renderer/tabs.js` vs `lib/ui/tabs.js` is sol
 | `test/native-object-trailers-tags.test.js` | `test/git/native-object-trailers-tags.test.js` |
 | `test/saved-search-live-draft.test.js` | `test/git/saved-search-live-draft.test.js` |
 
-Leave `test/plain-restore-dispatch.test.js` at `test/` until Atom R (it pins `renderer/history.js` **and** calls git helpers).
+Leave `test/renderer/plain-restore-dispatch.test.js` at `test/` until Atom R (it pins `renderer/history.js` **and** calls git helpers).
 
 ### `lib/objects/` + `test/objects/` (Atom O)
 
 | From | To |
 |---|---|
-| `lib/conf-stanza.js` | `lib/objects/conf-stanza.js` |
-| `lib/object-paths.js` | `lib/objects/object-paths.js` |
-| `lib/saved-search-id.js` | `lib/objects/saved-search-id.js` |
-| `lib/saved-search-open.js` | `lib/objects/saved-search-open.js` |
-| `lib/dashboard-open.js` | `lib/objects/dashboard-open.js` |
-| `lib/splunk-rest.js` | `lib/objects/splunk-rest.js` |
-| `lib/splunk-comment.js` | `lib/objects/splunk-comment.js` |
-| `lib/saved-search-preview.js` | `lib/objects/saved-search-preview.js` |
-| `lib/saved-search-dirty.js` | `lib/objects/saved-search-dirty.js` |
+| `lib/objects/conf-stanza.js` | `lib/objects/conf-stanza.js` |
+| `lib/objects/object-paths.js` | `lib/objects/object-paths.js` |
+| `lib/objects/saved-search-id.js` | `lib/objects/saved-search-id.js` |
+| `lib/objects/saved-search-open.js` | `lib/objects/saved-search-open.js` |
+| `lib/objects/dashboard-open.js` | `lib/objects/dashboard-open.js` |
+| `lib/objects/splunk-rest.js` | `lib/objects/splunk-rest.js` |
+| `injectors/injector.js (comment toggle lives in the guest IIFE)` | `lib/objects/splunk-comment.js` |
+| `lib/objects/saved-search-preview.js` | `lib/objects/saved-search-preview.js` |
+| `lib/objects/saved-search-dirty.js` | `lib/objects/saved-search-dirty.js` |
 | matching `test/*.test.js` | `test/objects/<same basename>` |
 
-`test/dashboard-url-utils.test.js` stays next to `lib/url-utils.js` coverage — **do not merge** it into `url-utils.test.js` (could drop a case). Leave both at `test/` or, if you want them off the root, `test/url-utils.test.js` + `test/url-utils-dashboard.test.js` is a **rename** and is **out of scope**. Keep them at `test/`.
+`test/dashboard-url.test.js` stays next to `lib/splunk-url.js` coverage — **do not merge** it into `url-utils.test.js` (could drop a case). Leave both at `test/` or, if you want them off the root, `test/splunk-url.test.js` + `test/url-utils-dashboard.test.js` is a **rename** and is **out of scope**. Keep them at `test/`.
 
 ### `lib/explorer/` + `test/explorer/` (Atom E)
 
 | From | To |
 |---|---|
-| `lib/ide-folders.js` | `lib/explorer/ide-folders.js` |
-| `lib/file-tree.js` | `lib/explorer/file-tree.js` |
-| `lib/render-explorer.js` | `lib/explorer/render-explorer.js` |
-| `lib/project-files.js` | `lib/explorer/project-files.js` |
+| `lib/explorer/ide-folders.js` | `lib/explorer/ide-folders.js` |
+| `lib/explorer/file-tree.js` | `lib/explorer/file-tree.js` |
+| `lib/explorer/render-explorer.js` | `lib/explorer/render-explorer.js` |
+| `lib/explorer/project-files.js` | `lib/explorer/project-files.js` |
 | `test/ide-folders.test.js` | `test/explorer/ide-folders.test.js` |
 | `test/file-tree.test.js` | `test/explorer/file-tree.test.js` |
 | `test/render-explorer.test.js` | `test/explorer/render-explorer.test.js` |
@@ -239,22 +239,22 @@ Remove empty `test/integration/` after the move.
 
 | From | To |
 |---|---|
-| `lib/tabs.js` | `lib/ui/tabs.js` |
-| `lib/render-tabs.js` | `lib/ui/render-tabs.js` |
-| `lib/quick-search.js` | `lib/ui/quick-search.js` |
-| `lib/render-quick-search.js` | `lib/ui/render-quick-search.js` |
-| `lib/query-history-ui.js` | `lib/ui/query-history-ui.js` |
+| `lib/ui/tab-state.js` | `lib/ui/tabs.js` |
+| `lib/ui/render-tabs.js` | `lib/ui/render-tabs.js` |
+| `lib/ui/quick-search.js` | `lib/ui/quick-search.js` |
+| `lib/ui/render-quick-search.js` | `lib/ui/render-quick-search.js` |
+| `lib/ui/query-history-ui.js` | `lib/ui/query-history-ui.js` |
 | matching tests | `test/ui/<same basename>` |
 
 ### `lib/webview/` + `test/webview/` (Atom W)
 
 | From | To |
 |---|---|
-| `lib/end-ace-selection-drag.js` | `lib/webview/end-ace-selection-drag.js` |
-| `lib/selection-drag-tracker.js` | `lib/webview/selection-drag-tracker.js` |
-| `lib/parent-selection-cleanup.js` | `lib/webview/parent-selection-cleanup.js` |
-| `lib/webview-selection-drag-handlers.js` | `lib/webview/webview-selection-drag-handlers.js` |
-| `lib/webview-splunk-save-hooks.js` | `lib/webview/webview-splunk-save-hooks.js` |
+| `lib/webview/end-ace-selection-drag.js` | `lib/webview/end-ace-selection-drag.js` |
+| `lib/webview/selection-drag-tracker.js` | `lib/webview/selection-drag-tracker.js` |
+| `lib/webview/parent-selection-cleanup.js` | `lib/webview/parent-selection-cleanup.js` |
+| `lib/webview/webview-selection-drag-handlers.js` | `lib/webview/webview-selection-drag-handlers.js` |
+| `lib/webview/webview-splunk-save-hooks.js` | `lib/webview/webview-splunk-save-hooks.js` |
 | `test/unit/*.test.js` (five files) | `test/webview/<same basename>` |
 
 Remove empty `test/unit/` after the move.
@@ -263,8 +263,8 @@ Remove empty `test/unit/` after the move.
 
 | From | To |
 |---|---|
-| `injector.js` | `injectors/injector.js` |
-| `injector-selection-cleanup.js` | `injectors/injector-selection-cleanup.js` |
+| `injectors/injector.js` | `injectors/injectors/injector.js` |
+| `injectors/injector-selection-cleanup.js` | `injectors/injectors/injector-selection-cleanup.js` |
 
 Same bytes. Do **not** rename to `comment.js`.
 
@@ -272,9 +272,9 @@ Same bytes. Do **not** rename to `comment.js`.
 
 | From | To |
 |---|---|
-| `test/main-app-shortcuts.test.js` | `test/main/app-shortcuts.test.js` |
-| `test/main-context-menu.test.js` | `test/main/context-menu.test.js` |
-| `test/main-find-in-page.test.js` | `test/main/find-in-page.test.js` |
+| `test/main/app-shortcuts.test.js` | `test/main/app-shortcuts.test.js` |
+| `test/main/context-menu.test.js` | `test/main/context-menu.test.js` |
+| `test/main/find-in-page.test.js` | `test/main/find-in-page.test.js` |
 
 This atom **may** drop the `main-` prefix because the folder already says `main`. That is the only basename change in the plan; test **bodies** stay identical except `require` depth.
 
@@ -282,9 +282,9 @@ This atom **may** drop the `main-` prefix because the folder already says `main`
 
 | From | To |
 |---|---|
-| `test/plain-restore-dispatch.test.js` | `test/renderer/plain-restore-dispatch.test.js` |
-| `test/saved-search-restore-tracked-base.test.js` | `test/renderer/saved-search-restore-tracked-base.test.js` |
-| `test/saved-search-no-canonical-spl.test.js` | `test/renderer/saved-search-no-canonical-spl.test.js` |
+| `test/renderer/plain-restore-dispatch.test.js` | `test/renderer/plain-restore-dispatch.test.js` |
+| `test/renderer/saved-search-restore-tracked-base.test.js` | `test/renderer/saved-search-restore-tracked-base.test.js` |
+| `test/renderer/saved-search-no-canonical-spl.test.js` | `test/renderer/saved-search-no-canonical-spl.test.js` |
 
 They pin `renderer.js` / `renderer/history.js` source. After the move, `__dirname` parents become `../..`.
 
@@ -310,7 +310,7 @@ cd /Users/ilais/Projects/kedem/splunk-ide.navigation-overhaul
 npm run test:unit
 npm run test:syntax
 node --test test/ide-folders.test.js test/file-tree.test.js test/render-explorer.test.js
-node --test test/plain-restore-dispatch.test.js test/saved-search-restore-tracked-base.test.js test/saved-search-no-canonical-spl.test.js
+node --test test/renderer/plain-restore-dispatch.test.js test/renderer/saved-search-restore-tracked-base.test.js test/renderer/saved-search-no-canonical-spl.test.js
 npx playwright test --list
 ```
 
@@ -347,16 +347,16 @@ rg -n "ideFolders" renderer/explorer.js
 **Before**
 
 ```bash
-node --test test/main-app-shortcuts.test.js test/main-context-menu.test.js test/main-find-in-page.test.js
+node --test test/main/app-shortcuts.test.js test/main/context-menu.test.js test/main/find-in-page.test.js
 ```
 
 **Change**
 
 ```bash
 mkdir -p test/main
-git mv test/main-app-shortcuts.test.js test/main/app-shortcuts.test.js
-git mv test/main-context-menu.test.js test/main/context-menu.test.js
-git mv test/main-find-in-page.test.js test/main/find-in-page.test.js
+git mv test/main/app-shortcuts.test.js test/main/app-shortcuts.test.js
+git mv test/main/context-menu.test.js test/main/context-menu.test.js
+git mv test/main/find-in-page.test.js test/main/find-in-page.test.js
 ```
 
 Rewrite `require('../lib/main/…')` → `require('../../lib/main/…')`.
@@ -370,7 +370,7 @@ npm run test:unit
 
 **Done when:** 374 pass; `lib/main/` untouched.
 
-**Status:** done (Wave 0 HEAD `5b07c2c`). Moved `test/main-app-shortcuts.test.js` → `test/main/app-shortcuts.test.js`, `test/main-context-menu.test.js` → `test/main/context-menu.test.js`, `test/main-find-in-page.test.js` → `test/main/find-in-page.test.js` (dropped `main-` prefix; bodies identical except `require('../lib/main/…')` → `require('../../lib/main/…')`). **Exports (lib/main untouched):** `shouldForwardKey`, `shouldInterceptShortcut`, `toKeyInfo`, `windowForContents`, `attachAppShortcuts`; `createContextMenuTemplate`; `findInPage`, `stopFindInPage`. **Callers of lib/main:** `main.js` only (paths unchanged). No other test required the old files. **Coverage:** existing 24 tests load those exports; a wrong require depth fails the suite with MODULE_NOT_FOUND — no extra tests added. **Before:** `node --test test/main-*.test.js` → 24 pass / 0 fail. **After:** `node --check` on the three files; `node --test test/main/*.test.js` → 24 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; old `require('../lib/main/` gone in non-md files; diff gate empty; `lib/main/` git-clean. Commit hash: after this commit.
+**Status:** done (Wave 0 HEAD `5b07c2c`). Moved `test/main/app-shortcuts.test.js` → `test/main/app-shortcuts.test.js`, `test/main/context-menu.test.js` → `test/main/context-menu.test.js`, `test/main/find-in-page.test.js` → `test/main/find-in-page.test.js` (dropped `main-` prefix; bodies identical except `require('../lib/main/…')` → `require('../../lib/main/…')`). **Exports (lib/main untouched):** `shouldForwardKey`, `shouldInterceptShortcut`, `toKeyInfo`, `windowForContents`, `attachAppShortcuts`; `createContextMenuTemplate`; `findInPage`, `stopFindInPage`. **Callers of lib/main:** `main.js` only (paths unchanged). No other test required the old files. **Coverage:** existing 24 tests load those exports; a wrong require depth fails the suite with MODULE_NOT_FOUND — no extra tests added. **Before:** `node --test test/main-*.test.js` → 24 pass / 0 fail. **After:** `node --check` on the three files; `node --test test/main/*.test.js` → 24 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; old `require('../lib/main/` gone in non-md files; diff gate empty; `lib/main/` git-clean. Commit hash: after this commit.
 
 ---
 
@@ -413,9 +413,9 @@ npm run test:unit
 | `renderer/history.js` | `../lib/plain-query-restore` | `../lib/git/plain-query-restore` |
 | `renderer/history.js` | `../lib/diff-lines` | `../lib/git/diff-lines` |
 | `renderer/explorer.js` | `../lib/query-versions` | `../lib/git/query-versions` |
-| still-flat `lib/saved-search-open.js` | `./query-versions` `./git-sync` `./stanza-drafts` | `./git/query-versions` `./git/git-sync` `./git/stanza-drafts` |
-| still-flat `lib/dashboard-open.js` | `./query-versions` `./git-sync` | `./git/query-versions` `./git/git-sync` |
-| still-flat `lib/saved-search-preview.js` | `./query-versions` | `./git/query-versions` |
+| still-flat `lib/objects/saved-search-open.js` | `./query-versions` `./git-sync` `./stanza-drafts` | `./git/query-versions` `./git/git-sync` `./git/stanza-drafts` |
+| still-flat `lib/objects/dashboard-open.js` | `./query-versions` `./git-sync` | `./git/query-versions` `./git/git-sync` |
+| still-flat `lib/objects/saved-search-preview.js` | `./query-versions` | `./git/query-versions` |
 | tests moved to `test/git/` | `../lib/<name>` and `./helpers/` | `../../lib/git/<name>` and `../helpers/` |
 | tests still at `test/` that import git modules (`plain-restore-dispatch`, `saved-search-open`, `dashboard-open`, `saved-search-no-canonical-spl` does **not** import git) | `../lib/query-versions` etc. | `../lib/git/query-versions` etc. |
 
@@ -432,16 +432,16 @@ node --test test/git-settings.test.js test/git-sync.test.js test/query-versions.
 
 ```bash
 rg -n "lib/(git-settings|git-sync|query-versions|stanza-drafts|conf-lock|reconcile|diff-lines|plain-query-restore)['\"]" \
-  --glob '!TREE_CLEANUP.md' --glob '!*.md'
+  --glob '!docs/archive/TREE_CLEANUP.md' --glob '!*.md'
 # expect: only lib/git/… and comments in docs
 node --test test/git/*.test.js
-node --test test/plain-restore-dispatch.test.js test/saved-search-open.test.js test/dashboard-open.test.js
+node --test test/renderer/plain-restore-dispatch.test.js test/saved-search-open.test.js test/dashboard-open.test.js
 npm run test:unit
 ```
 
 **Done when:** 374 pass; diff gate clean; `function saveVersion` still in `lib/git/query-versions.js` (not rewritten).
 
-**Status:** done (HEAD before this atom `ef2e015`). Moved eight lib modules into `lib/git/` (basenames unchanged; no barrel): `git-settings.js`, `git-sync.js`, `query-versions.js`, `stanza-drafts.js`, `conf-lock.js`, `reconcile.js`, `diff-lines.js`, `plain-query-restore.js`. Moved matching tests into `test/git/` (all nine `stanza-*.test.js`, plus `git-settings`, `git-sync`, `query-versions`, `reconcile`, `diff-lines`, `plain-restore-autosave.behavior`, `native-object-trailers-tags`, `saved-search-live-draft`). Left `test/plain-restore-dispatch.test.js` at `test/` (Atom R) and `lib/conf-stanza.js` at `lib/` (Atom O). **Exports unchanged:** `SETTINGS_FILE_NAME`, `DEFAULT_GIT_SYNC_SETTINGS`, `getSettingsFilePath`, `normalizeGitSyncSettings`, `readGitSyncSettings`, `writeGitSyncSettings`; `ensureRemote`, `fetchSharedHistory`, `hasRemoteBranch`, `alignSharedBranchWithRemote`, `pushSharedHistory`, `pushSharedHistoryWithReconcile`, `isNonFastForwardPushError`, `buildFetchRefspecs`, `buildPushRefspecs`; `ensureRepo`, `resolveAuthor`, `getFileStatus`, `hasDraftChanges`, `getDraftStash`, `saveDraftStash`, `popDraftStash`, `listVersions`, `readVersionStanza`, `readCurrentQuery`, `saveVersion`, `saveStanzaVersion`, `autoSaveStanzaBeforeRestore`, `commitFileContentOnParent`, `restoreStanzaVersion`, `restoreStanzaAutoSaveVersion`, `discardStanzaDraft`, `restoreVersion`, `shouldSkipAutoSaveOnRestore`, `renameQueryFile`, `consumeAutoSave`, `setVersionTag`, `deleteVersionTag`, `listVersionTags`, `formatSplunkSaveTagName`, `extractSearchFromStanza`, `versionTagRef`, `draftStashRef`, `versionRecordRef`; `stanzaDraftStashRef`, `recompose`, `getStanzaDraft`, `getStanzaDraftStatus`, `isCommitAncestor`, `saveStanzaDraft`, `saveStanzaDraftImpl`, `deleteStanzaDraft`, `listStanzaDraftsForConf`, `recomposeWorktree`, `recomposeWorktreeImpl`; `withConfLock`, `normalizeConfPath`; `STANZA_CONFLICT_STATUS`, `detectStanzaConflicts`, `reconcileConfFromRest`; `diffLines`, `renderDiffHtml`; `restorePlainQueryVersion`. **Internal requires:** same-folder stays `./` (`conf-lock`, `stanza-drafts`, `query-versions`, `git-sync`, `reconcile`, including lazy `require('./stanza-drafts')` / `require('./git-sync')`); still-flat `../conf-stanza`, `../url-utils`, `../splunk-rest`. **Callers (path only):** `main.js` `./lib/git/git-settings`; `renderer/history.js` and `renderer/explorer.js` `../lib/git/…`; still-flat `lib/saved-search-open.js`, `lib/dashboard-open.js`, `lib/saved-search-preview.js` `./git/…`; tests at `test/` that import git modules; tests in `test/git/` `../../lib/git/…` plus `../../lib/conf-stanza` / `object-paths` / `url-utils` / `saved-search-id` and `../helpers/`. **Coverage:** existing 121 git-domain tests load those exports; wrong require depth fails with MODULE_NOT_FOUND — no extra tests added. **Before:** `node --test` of all files that later moved → 121 pass / 0 fail. **After:** `node --check` on every touched `.js`; `node --test test/git/*.test.js` → 121 pass / 0 fail; `node --test test/plain-restore-dispatch.test.js test/saved-search-open.test.js test/dashboard-open.test.js` → 18 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `function saveVersion` still in `lib/git/query-versions.js`; explorer chain `toExplorerInput` → `buildFileTree` → `renderExplorer` at `renderer/explorer.js` 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; old flat `lib/<git-module>` requires gone in non-md files; diff gate empty. Commit hash: after this commit.
+**Status:** done (HEAD before this atom `ef2e015`). Moved eight lib modules into `lib/git/` (basenames unchanged; no barrel): `git-settings.js`, `git-sync.js`, `query-versions.js`, `stanza-drafts.js`, `conf-lock.js`, `reconcile.js`, `diff-lines.js`, `plain-query-restore.js`. Moved matching tests into `test/git/` (all nine `stanza-*.test.js`, plus `git-settings`, `git-sync`, `query-versions`, `reconcile`, `diff-lines`, `plain-restore-autosave.behavior`, `native-object-trailers-tags`, `saved-search-live-draft`). Left `test/renderer/plain-restore-dispatch.test.js` at `test/` (Atom R) and `lib/objects/conf-stanza.js` at `lib/` (Atom O). **Exports unchanged:** `SETTINGS_FILE_NAME`, `DEFAULT_GIT_SYNC_SETTINGS`, `getSettingsFilePath`, `normalizeGitSyncSettings`, `readGitSyncSettings`, `writeGitSyncSettings`; `ensureRemote`, `fetchSharedHistory`, `hasRemoteBranch`, `alignSharedBranchWithRemote`, `pushSharedHistory`, `pushSharedHistoryWithReconcile`, `isNonFastForwardPushError`, `buildFetchRefspecs`, `buildPushRefspecs`; `ensureRepo`, `resolveAuthor`, `getFileStatus`, `hasDraftChanges`, `getDraftStash`, `saveDraftStash`, `popDraftStash`, `listVersions`, `readVersionStanza`, `readCurrentQuery`, `saveVersion`, `saveStanzaVersion`, `autoSaveStanzaBeforeRestore`, `commitFileContentOnParent`, `restoreStanzaVersion`, `restoreStanzaAutoSaveVersion`, `discardStanzaDraft`, `restoreVersion`, `shouldSkipAutoSaveOnRestore`, `renameQueryFile`, `consumeAutoSave`, `setVersionTag`, `deleteVersionTag`, `listVersionTags`, `formatSplunkSaveTagName`, `extractSearchFromStanza`, `versionTagRef`, `draftStashRef`, `versionRecordRef`; `stanzaDraftStashRef`, `recompose`, `getStanzaDraft`, `getStanzaDraftStatus`, `isCommitAncestor`, `saveStanzaDraft`, `saveStanzaDraftImpl`, `deleteStanzaDraft`, `listStanzaDraftsForConf`, `recomposeWorktree`, `recomposeWorktreeImpl`; `withConfLock`, `normalizeConfPath`; `STANZA_CONFLICT_STATUS`, `detectStanzaConflicts`, `reconcileConfFromRest`; `diffLines`, `renderDiffHtml`; `restorePlainQueryVersion`. **Internal requires:** same-folder stays `./` (`conf-lock`, `stanza-drafts`, `query-versions`, `git-sync`, `reconcile`, including lazy `require('./stanza-drafts')` / `require('./git-sync')`); still-flat `../conf-stanza`, `../url-utils`, `../splunk-rest`. **Callers (path only):** `main.js` `./lib/git/git-settings`; `renderer/history.js` and `renderer/explorer.js` `../lib/git/…`; still-flat `lib/objects/saved-search-open.js`, `lib/objects/dashboard-open.js`, `lib/objects/saved-search-preview.js` `./git/…`; tests at `test/` that import git modules; tests in `test/git/` `../../lib/git/…` plus `../../lib/conf-stanza` / `object-paths` / `url-utils` / `saved-search-id` and `../helpers/`. **Coverage:** existing 121 git-domain tests load those exports; wrong require depth fails with MODULE_NOT_FOUND — no extra tests added. **Before:** `node --test` of all files that later moved → 121 pass / 0 fail. **After:** `node --check` on every touched `.js`; `node --test test/git/*.test.js` → 121 pass / 0 fail; `node --test test/renderer/plain-restore-dispatch.test.js test/saved-search-open.test.js test/dashboard-open.test.js` → 18 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `function saveVersion` still in `lib/git/query-versions.js`; explorer chain `toExplorerInput` → `buildFileTree` → `renderExplorer` at `renderer/explorer.js` 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; old flat `lib/<git-module>` requires gone in non-md files; diff gate empty. Commit hash: after this commit.
 
 ---
 
@@ -491,7 +491,7 @@ node --test test/conf-stanza.test.js test/object-paths.test.js test/saved-search
 
 ```bash
 rg -n "lib/(conf-stanza|object-paths|saved-search-|dashboard-open|splunk-rest|splunk-comment)['\"]" \
-  --glob '!TREE_CLEANUP.md' --glob '!*.md'
+  --glob '!docs/archive/TREE_CLEANUP.md' --glob '!*.md'
 # expect: lib/objects/… only
 node --test test/objects/*.test.js
 node --test test/git/*.test.js
@@ -501,7 +501,7 @@ npm run test:unit
 
 **Done when:** 374 pass; `getSavedSearchId` / `getSavedSearchConfPath` export names unchanged.
 
-**Status:** done (HEAD before this atom `5e2ec51`; overseer died on Cursor API key after G; Atom O was already staged path-only — parent finished Status/tests/commit). Moved nine lib modules into `lib/objects/` (basenames unchanged; no barrel): `conf-stanza.js`, `object-paths.js`, `saved-search-id.js`, `saved-search-open.js`, `dashboard-open.js`, `splunk-rest.js`, `splunk-comment.js`, `saved-search-preview.js`, `saved-search-dirty.js`. Matching tests into `test/objects/` (same basenames). Left `test/dashboard-url-utils.test.js` at `test/`. Left `test/plain-restore-dispatch.test.js` / restore greps at `test/` (Atom R). **Exports unchanged:** `extractStanza`, `upsertStanza`, `listStanzaNames`; `getSavedSearchConfPath`, `getDashboardViewPath`; `getSavedSearchId`, `getSavedSearchPath`; `openSavedSearchHistory`; `detectViewExt`, `openDashboardHistory`, `resolveDashboardViewPath`; `fetchSavedSearchStanza`, `fetchDashboardView`, `serializeSavedSearchStanza`, `buildAuthHeader`; `isCommentedLine`, `shouldAddComment`, `toggleCommentLine`, `toggleCommentLines`; `resolveSavedSearchDraftPreviewText`; `normalizeSavedSearchQuery`, `savedSearchLiveDiffersFromHead`, `shouldScheduleLiveDraftRefresh`, `resolveSavedSearchDirtyOnNavigate`. **Internal requires:** same-folder stays `./`; git callers `../git/…`. **Callers (path only):** `lib/git/{query-versions,stanza-drafts,reconcile}` `../objects/conf-stanza` (+ `reconcile` `../objects/splunk-rest`); still-flat `lib/ide-folders.js` `./objects/saved-search-id`; `renderer/history.js` and `renderer/explorer.js` `../lib/objects/…`; `test/git/*` `../../lib/objects/…`; `test/ide-folders.test.js` and `test/saved-search-no-canonical-spl.test.js` `../lib/objects/…`. **Coverage:** existing 65 object tests + 121 git tests + 10 ide-folders load those exports; wrong require fails MODULE_NOT_FOUND — no extra tests added. **After:** `node --test test/objects/*.test.js` → 65 pass / 0 fail; `node --test test/git/*.test.js` → 121 pass / 0 fail; `node --test test/ide-folders.test.js` → 10 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `function getSavedSearchId` / `function getSavedSearchConfPath` unchanged; explorer chain `toExplorerInput` → `buildFileTree` → `renderExplorer` at `renderer/explorer.js` 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; old flat `lib/<object-module>` requires gone in non-md files; diff gate empty.
+**Status:** done (HEAD before this atom `5e2ec51`; overseer died on Cursor API key after G; Atom O was already staged path-only — parent finished Status/tests/commit). Moved nine lib modules into `lib/objects/` (basenames unchanged; no barrel): `conf-stanza.js`, `object-paths.js`, `saved-search-id.js`, `saved-search-open.js`, `dashboard-open.js`, `splunk-rest.js`, `splunk-comment.js`, `saved-search-preview.js`, `saved-search-dirty.js`. Matching tests into `test/objects/` (same basenames). Left `test/dashboard-url.test.js` at `test/`. Left `test/renderer/plain-restore-dispatch.test.js` / restore greps at `test/` (Atom R). **Exports unchanged:** `extractStanza`, `upsertStanza`, `listStanzaNames`; `getSavedSearchConfPath`, `getDashboardViewPath`; `getSavedSearchId`, `getSavedSearchPath`; `openSavedSearchHistory`; `detectViewExt`, `openDashboardHistory`, `resolveDashboardViewPath`; `fetchSavedSearchStanza`, `fetchDashboardView`, `serializeSavedSearchStanza`, `buildAuthHeader`; `isCommentedLine`, `shouldAddComment`, `toggleCommentLine`, `toggleCommentLines`; `resolveSavedSearchDraftPreviewText`; `normalizeSavedSearchQuery`, `savedSearchLiveDiffersFromHead`, `shouldScheduleLiveDraftRefresh`, `resolveSavedSearchDirtyOnNavigate`. **Internal requires:** same-folder stays `./`; git callers `../git/…`. **Callers (path only):** `lib/git/{query-versions,stanza-drafts,reconcile}` `../objects/conf-stanza` (+ `reconcile` `../objects/splunk-rest`); still-flat `lib/explorer/ide-folders.js` `./objects/saved-search-id`; `renderer/history.js` and `renderer/explorer.js` `../lib/objects/…`; `test/git/*` `../../lib/objects/…`; `test/ide-folders.test.js` and `test/renderer/saved-search-no-canonical-spl.test.js` `../lib/objects/…`. **Coverage:** existing 65 object tests + 121 git tests + 10 ide-folders load those exports; wrong require fails MODULE_NOT_FOUND — no extra tests added. **After:** `node --test test/objects/*.test.js` → 65 pass / 0 fail; `node --test test/git/*.test.js` → 121 pass / 0 fail; `node --test test/ide-folders.test.js` → 10 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `function getSavedSearchId` / `function getSavedSearchConfPath` unchanged; explorer chain `toExplorerInput` → `buildFileTree` → `renderExplorer` at `renderer/explorer.js` 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; old flat `lib/<object-module>` requires gone in non-md files; diff gate empty.
 
 ---
 
@@ -602,9 +602,9 @@ node --test test/ui/*.test.js
 npm run test:unit
 ```
 
-**Done when:** 374 pass; `lib/tabs.js` gone; `lib/ui/tabs.js` present.
+**Done when:** 374 pass; `lib/ui/tab-state.js` gone; `lib/ui/tabs.js` present.
 
-**Status:** done (HEAD before this atom `dd9fdbb`). Moved five lib modules into `lib/ui/` (basenames unchanged; no barrel): `tabs.js`, `render-tabs.js`, `quick-search.js`, `render-quick-search.js`, `query-history-ui.js`. Matching tests into `test/ui/`. **Exports unchanged:** `closeFileState`, `reorderTabs`, `getPreviousTab`, `getNextTab`, `getFallbackActiveTab`, `createDuplicateFileName`; `createTabElement`, `renderTabs`, `setActiveTab`, `updateTabTitle`; `normalizeQuickSearchQuery`, `getFileSearchLabel`, `matchesFileQuery`, `filterFileModeResults`, `matchesContentQuery`, `buildContentSearchResult`, `filterContentModeResults`, `filterQuickSearchResults`, `getQuickSearchEmptyMessage`, `moveQuickSearchSelection`; `renderQuickSearchResults`; `formatQueryHistoryStatus`, `getQueryHistoryEmptyMessage`, `isStaleSplunkImportSyncStatus`. **Callers (path only):** `renderer/tabs.js` `../lib/ui/tabs` and `../lib/ui/render-tabs`; `renderer/quick-search.js` `../lib/ui/quick-search` and `../lib/ui/render-quick-search`; `renderer/history.js` `../lib/ui/query-history-ui`. Tests `../../lib/ui/…`; `render-tabs` / `render-quick-search` tests `../helpers/dom`. Injector `readFileSync` in `renderer/tabs.js` untouched (Atom I). **Coverage:** existing 53 UI tests load those exports — no extra tests added. **Before:** `node --test` of the five files → 53 pass / 0 fail. **After:** `node --test test/ui/*.test.js` → 53 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `lib/tabs.js` gone; `lib/ui/tabs.js` present; explorer chain 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; diff gate empty.
+**Status:** done (HEAD before this atom `dd9fdbb`). Moved five lib modules into `lib/ui/` (basenames unchanged; no barrel): `tabs.js`, `render-tabs.js`, `quick-search.js`, `render-quick-search.js`, `query-history-ui.js`. Matching tests into `test/ui/`. **Exports unchanged:** `closeFileState`, `reorderTabs`, `getPreviousTab`, `getNextTab`, `getFallbackActiveTab`, `createDuplicateFileName`; `createTabElement`, `renderTabs`, `setActiveTab`, `updateTabTitle`; `normalizeQuickSearchQuery`, `getFileSearchLabel`, `matchesFileQuery`, `filterFileModeResults`, `matchesContentQuery`, `buildContentSearchResult`, `filterContentModeResults`, `filterQuickSearchResults`, `getQuickSearchEmptyMessage`, `moveQuickSearchSelection`; `renderQuickSearchResults`; `formatQueryHistoryStatus`, `getQueryHistoryEmptyMessage`, `isStaleSplunkImportSyncStatus`. **Callers (path only):** `renderer/tabs.js` `../lib/ui/tabs` and `../lib/ui/render-tabs`; `renderer/quick-search.js` `../lib/ui/quick-search` and `../lib/ui/render-quick-search`; `renderer/history.js` `../lib/ui/query-history-ui`. Tests `../../lib/ui/…`; `render-tabs` / `render-quick-search` tests `../helpers/dom`. Injector `readFileSync` in `renderer/tabs.js` untouched (Atom I). **Coverage:** existing 53 UI tests load those exports — no extra tests added. **Before:** `node --test` of the five files → 53 pass / 0 fail. **After:** `node --test test/ui/*.test.js` → 53 pass / 0 fail; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; `lib/ui/tab-state.js` gone; `lib/ui/tabs.js` present; explorer chain 566–568; `restorePlainQueryVersion({` at `renderer/history.js` 1964; diff gate empty.
 
 ---
 
@@ -615,15 +615,15 @@ npm run test:unit
 `PROJECT_ROOT` stays `path.join(__dirname, '..')` (repo root). Change:
 
 ```javascript
-path.join(PROJECT_ROOT, 'injector.js')
-path.join(PROJECT_ROOT, 'injector-selection-cleanup.js')
+path.join(PROJECT_ROOT, 'injectors/injector.js')
+path.join(PROJECT_ROOT, 'injectors/injector-selection-cleanup.js')
 ```
 
 to:
 
 ```javascript
-path.join(PROJECT_ROOT, 'injectors', 'injector.js')
-path.join(PROJECT_ROOT, 'injectors', 'injector-selection-cleanup.js')
+path.join(PROJECT_ROOT, 'injectors', 'injectors/injector.js')
+path.join(PROJECT_ROOT, 'injectors', 'injectors/injector-selection-cleanup.js')
 ```
 
 Do not concatenate differently. Do not inline file contents.
@@ -631,23 +631,23 @@ Do not concatenate differently. Do not inline file contents.
 **Before**
 
 ```bash
-node --check injector.js injector-selection-cleanup.js renderer/tabs.js
+node --check injectors/injector.js injectors/injector-selection-cleanup.js renderer/tabs.js
 rg -n "injector\\.js" renderer/tabs.js package.json
 ```
 
 **After**
 
 ```bash
-node --check injectors/injector.js injectors/injector-selection-cleanup.js renderer/tabs.js
-rg -n "['\"]injector\\.js['\"]" --glob '!TREE_CLEANUP.md' --glob '!*.md'
-# expect: no repo-root reads; injectors/injector.js in tabs.js
+node --check injectors/injectors/injector.js injectors/injectors/injector-selection-cleanup.js renderer/tabs.js
+rg -n "['\"]injector\\.js['\"]" --glob '!docs/archive/TREE_CLEANUP.md' --glob '!*.md'
+# expect: no repo-root reads; injectors/injectors/injector.js in tabs.js
 npm run test:syntax
 npm run test:unit
 ```
 
 **Done when:** injector file bytes identical (`git diff` shows rename + path strings only); 374 pass.
 
-**Status:** done (HEAD before this atom `0a96c46`). Moved `injector.js` and `injector-selection-cleanup.js` into `injectors/` (R100, basenames unchanged). `PROJECT_ROOT` still `path.join(__dirname, '..')`. **Callers (path only):** `renderer/tabs.js` `path.join(PROJECT_ROOT, 'injectors', 'injector.js')` and `…, 'injectors', 'injector-selection-cleanup.js'`; `test/harness/index.html` `../../injectors/injector-selection-cleanup.js`; `package.json` `test:syntax` now `injectors/*.js`. **Coverage:** `node --check` + R100 rename prove bytes; unit suite does not execute injectors — no extra tests added. **Before:** `node --check` of root injectors + `renderer/tabs.js`. **After:** `node --check injectors/*.js renderer/tabs.js`; `npm run test:syntax` exit 0; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; diff gate empty.
+**Status:** done (HEAD before this atom `0a96c46`). Moved `injectors/injector.js` and `injectors/injector-selection-cleanup.js` into `injectors/` (R100, basenames unchanged). `PROJECT_ROOT` still `path.join(__dirname, '..')`. **Callers (path only):** `renderer/tabs.js` `path.join(PROJECT_ROOT, 'injectors', 'injectors/injector.js')` and `…, 'injectors', 'injectors/injector-selection-cleanup.js'`; `test/harness/index.html` `../../injectors/injectors/injector-selection-cleanup.js`; `package.json` `test:syntax` now `injectors/*.js`. **Coverage:** `node --check` + R100 rename prove bytes; unit suite does not execute injectors — no extra tests added. **Before:** `node --check` of root injectors + `renderer/tabs.js`. **After:** `node --check injectors/*.js renderer/tabs.js`; `npm run test:syntax` exit 0; `npm run test:unit` → **374 pass**, 0 fail, 133 suites; diff gate empty.
 
 ---
 
@@ -680,8 +680,8 @@ npm run test:unit
 
 ```bash
 mkdir -p docs/archive
-git mv NAVIGATION_OVERHAUL.md RENDERER_SPLIT.md TREE_CLEANUP.md docs/
-git mv NATIVE_OBJECT_GIT_LEDGER.md SAVED_SEARCH_GIT_LEDGER.md docs/archive/
+git mv docs/archive/NAVIGATION_OVERHAUL.md docs/archive/RENDERER_SPLIT.md docs/archive/TREE_CLEANUP.md docs/
+git mv docs/archive/NATIVE_OBJECT_GIT_LEDGER.md docs/archive/SAVED_SEARCH_GIT_LEDGER.md docs/archive/
 git rm playwright.config.mjs
 ```
 
@@ -689,7 +689,7 @@ Rewrite `README.md` to a short tree map (entrypoints, `lib/*` folders, `test/` m
 
 **After:** `git grep playwright.config.mjs` empty; `npm run test:unit` still 374 (docs-only).
 
-**Status:** done (HEAD before this atom `d84ddba`). Moved `NAVIGATION_OVERHAUL.md`, `RENDERER_SPLIT.md`, `TREE_CLEANUP.md` into `docs/`; `NATIVE_OBJECT_GIT_LEDGER.md` and `SAVED_SEARCH_GIT_LEDGER.md` into `docs/archive/`. Deleted unused `playwright.config.mjs` (pointed at dead `test/e2e`; live config is `playwright.config.js` → `test/smoke`). Rewrote `README.md` to the tree map. No `.js` product files. `git grep playwright.config.mjs` empty.
+**Status:** done (HEAD before this atom `d84ddba`). Moved `docs/archive/NAVIGATION_OVERHAUL.md`, `docs/archive/RENDERER_SPLIT.md`, `docs/archive/TREE_CLEANUP.md` into `docs/`; `docs/archive/NATIVE_OBJECT_GIT_LEDGER.md` and `docs/archive/SAVED_SEARCH_GIT_LEDGER.md` into `docs/archive/`. Deleted unused `playwright.config.mjs` (pointed at dead `test/e2e`; live config is `playwright.config.js` → `test/smoke`). Rewrote `README.md` to the tree map. No `.js` product files. `git grep playwright.config.mjs` empty.
 
 ---
 
@@ -747,7 +747,7 @@ rg -n "path\\.join\\(PROJECT_ROOT, 'injector" renderer/
 - Split `lib/git/query-versions.js` or `renderer/history.js`
 - Dedupe slug helpers / `saved-search-open` vs `dashboard-open`
 - Generate injectors from `lib/objects/splunk-comment.js`
-- Merge `test/dashboard-url-utils.test.js` into `url-utils.test.js`
+- Merge `test/dashboard-url.test.js` into `url-utils.test.js`
 - `src/main` + `src/renderer`, bundler, nested `renderer/ui/`
 - Restore git Source Control panel / restyle CSS / rewrite folder explorer
 

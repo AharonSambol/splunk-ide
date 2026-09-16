@@ -6,7 +6,7 @@ HEAD at plan write: cheap-cut commit on this branch (CSS extract, dead git-view-
 
 Goal: `renderer.js` becomes a thin entry (`<script src="./renderer.js">` stays). Logic moves into `renderer/*.js` by **UI surface**. No behavior change. No bundler. No `lib/` regroup in this wave.
 
-Cheap cuts are done (`NAVIGATION_OVERHAUL.md`). This file is the next execution plan.
+Cheap cuts are done (`docs/archive/NAVIGATION_OVERHAUL.md`). This file is the next execution plan.
 
 ---
 
@@ -81,9 +81,9 @@ Live explorer path (do not rewrite, only **move** the call site):
 
 | File | Role |
 |---|---|
-| `lib/ide-folders.js` | `ide-folders.json` CRUD, `toExplorerInput`, folder ids |
-| `lib/file-tree.js` | `buildFileTree` |
-| `lib/render-explorer.js` | nested explorer DOM |
+| `lib/explorer/ide-folders.js` | `ide-folders.json` CRUD, `toExplorerInput`, folder ids |
+| `lib/explorer/file-tree.js` | `buildFileTree` |
+| `lib/explorer/render-explorer.js` | nested explorer DOM |
 | `test/ide-folders.test.js` | keep passing |
 | `test/file-tree.test.js` | keep passing |
 | `test/render-explorer.test.js` | keep passing |
@@ -125,7 +125,7 @@ Do **not** add `renderer/index.js`, a store class, events/EventTarget, or getter
 ## Out of scope
 
 - `lib/` folders (`git/`, `splunk/`, `explorer/`).
-- Splitting `lib/query-versions.js`.
+- Splitting `lib/git/query-versions.js`.
 - Wiring or deleting folder explorer.
 - Fixing stale smoke (git Source Control tab, `#header` hidden, auto-load `searches`). Record as baseline; do not “fix” in this wave.
 - Deduping slug helpers / saved-search vs dashboard git helpers.
@@ -140,9 +140,9 @@ These **read `renderer.js` as text**. After a splice, point them at the file tha
 
 | Test | What it pins |
 |---|---|
-| `test/plain-restore-dispatch.test.js` | `restorePlainQueryVersion({` after dashboard early return |
-| `test/saved-search-restore-tracked-base.test.js` | `if (trackedHash === hash)` discard-draft branch |
-| `test/saved-search-no-canonical-spl.test.js` | renderer must not contain `getSavedSearchPath` |
+| `test/renderer/plain-restore-dispatch.test.js` | `restorePlainQueryVersion({` after dashboard early return |
+| `test/renderer/saved-search-restore-tracked-base.test.js` | `if (trackedHash === hash)` discard-draft branch |
+| `test/renderer/saved-search-no-canonical-spl.test.js` | renderer must not contain `getSavedSearchPath` |
 
 **Before every splice that touches restore / saved-search:** run those three files. **After:** they still pass, with paths updated if the strings left `renderer.js`.
 
@@ -154,7 +154,7 @@ These **read `renderer.js` as text**. After a splice, point them at the file tha
 cd /Users/ilais/Projects/kedem/splunk-ide.navigation-overhaul
 wc -l renderer.js
 node --check renderer.js
-node --test test/plain-restore-dispatch.test.js test/saved-search-restore-tracked-base.test.js test/saved-search-no-canonical-spl.test.js
+node --test test/renderer/plain-restore-dispatch.test.js test/renderer/saved-search-restore-tracked-base.test.js test/renderer/saved-search-no-canonical-spl.test.js
 node --test test/ide-folders.test.js test/file-tree.test.js test/render-explorer.test.js
 node --test $(find test -name '*.test.js' | sort)
 npx playwright test --list
@@ -306,7 +306,7 @@ Move find DOM construction + `find-in-page` / `stop-find-in-page` IPC used only 
 rg -n "function createFindOverlay" renderer.js
 # expect: no hits
 node --check renderer.js renderer/find-overlay.js
-node --test test/main-find-in-page.test.js
+node --test test/main/find-in-page.test.js
 ```
 
 **Done when** Cmd/Ctrl+F still opens the overlay on an open tab; Escape still closes it and clears find. Shortcut handler in `renderer.js` still references the exported functions.
@@ -333,7 +333,7 @@ node --test test/git-settings.test.js
 
 **Change**
 
-Move modal listeners (`#git-sync-settings-*`). Keep `lib/git-settings.js` as the main-process persistence; this file is renderer UI only.
+Move modal listeners (`#git-sync-settings-*`). Keep `lib/git/git-settings.js` as the main-process persistence; this file is renderer UI only.
 
 **After**
 
@@ -355,7 +355,7 @@ node --check renderer.js renderer/git-settings.js
 **Own:** `renderer/quick-search.js`.  
 **Functions:** `openQuickSearch`, `closeQuickSearch`, `updateQuickSearchResults`, `handleQuickSearchKeydown`, `activateFileFromQuickSearch`.
 
-Keep using `lib/quick-search.js` + `lib/render-quick-search.js`. Do not merge those libs into this file.
+Keep using `lib/ui/quick-search.js` + `lib/ui/render-quick-search.js`. Do not merge those libs into this file.
 
 Shift-Shift remains in the keymap; it only **calls** `openQuickSearch()`.
 
@@ -475,7 +475,7 @@ Split into two files if the splice is huge; still **one** `renderer.js` owner.
 **Before**
 
 ```bash
-node --test test/plain-restore-dispatch.test.js test/saved-search-restore-tracked-base.test.js test/saved-search-no-canonical-spl.test.js test/tabs.test.js test/render-tabs.test.js
+node --test test/renderer/plain-restore-dispatch.test.js test/renderer/saved-search-restore-tracked-base.test.js test/renderer/saved-search-no-canonical-spl.test.js test/tabs.test.js test/render-tabs.test.js
 rg -n "restorePlainQueryVersion|trackedHash === hash" renderer.js
 ```
 
@@ -490,7 +490,7 @@ rg -n "restorePlainQueryVersion|trackedHash === hash" renderer.js
 ```bash
 wc -l renderer.js renderer/*.js
 node --check renderer.js renderer/*.js
-node --test test/plain-restore-dispatch.test.js test/saved-search-restore-tracked-base.test.js test/saved-search-no-canonical-spl.test.js
+node --test test/renderer/plain-restore-dispatch.test.js test/renderer/saved-search-restore-tracked-base.test.js test/renderer/saved-search-no-canonical-spl.test.js
 node --test $(find test -name '*.test.js' | sort)
 ```
 
@@ -526,7 +526,7 @@ Add new `renderer/*.js` paths to `package.json` `test:syntax` (`node --check` ea
 | source-grep tests | pass, paths updated |
 | unit `find` | green; count ≥ Wave 0 |
 | smoke | Wave 0 failures only, plus selection-drag still passing |
-| `lib/ide-folders.js` etc. | untouched except requires if a path were wrong (should be untouched) |
+| `lib/explorer/ide-folders.js` etc. | untouched except requires if a path were wrong (should be untouched) |
 
 **Do not ship if** explorer grouping changed, `ide-folders.json` shape changed, CSS/HTML folder rules changed, restore dispatch skipped auto-save differently, or a source-grep test was deleted to go green.
 

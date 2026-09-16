@@ -197,18 +197,18 @@ thing as editor changes.
 
 | ID | Status | Commit goal | Primary files | Required check |
 | --- | --- | --- | --- | --- |
-| 0 | Done | Land off-HEAD versions and draft stashes | `lib/query-versions.js`, `renderer.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
-| 1 | Done | Canonical saved-search identity/path helper | `lib/saved-search-id.js`, `test/saved-search-id.test.js` | `npm test -- test/saved-search-id.test.js` |
-| 2 | Done | Saved-search commit trailers | `lib/query-versions.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
-| 3 | Done | Explicit git author support for normal and off-HEAD commits | `lib/query-versions.js`, `test/query-versions.test.js` | targeted author tests |
-| 4 | Done | Remote sync helper with exact refspec policy | `lib/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
+| 0 | Done | Land off-HEAD versions and draft stashes | `lib/git/query-versions.js`, `renderer.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
+| 1 | Done | Canonical saved-search identity/path helper | `lib/objects/saved-search-id.js`, `test/saved-search-id.test.js` | `npm test -- test/saved-search-id.test.js` |
+| 2 | Done | Saved-search commit trailers | `lib/git/query-versions.js`, `test/query-versions.test.js` | `npm test -- test/query-versions.test.js` |
+| 3 | Done | Explicit git author support for normal and off-HEAD commits | `lib/git/query-versions.js`, `test/query-versions.test.js` | targeted author tests |
+| 4 | Done | Remote sync helper with exact refspec policy | `lib/git/git-sync.js`, `test/git-sync.test.js` | bare remote tests |
 | 5 | Done | Two-clone sharing proof | `test/git-sync.test.js` or integration test | repo A push, repo B fetch/list |
 | 6 | Done | Saved-search open/import service | small new lib, tests | unit test for import/open logic |
 | 7 | Done | Renderer uses canonical saved-search paths | `renderer.js` | manual smoke + syntax/unit check |
 | 8 | Done | Persist git remote/author settings | `main.js`, small settings helper/tests | settings read/write check |
 | 9 | Done | Settings UI | `index.html`, `renderer.js` | syntax/unit smoke |
-| 10 | Done | Fetch on saved-search open | `renderer.js`, `lib/git-sync.js` | manual smoke |
-| 11 | Done | Push on saved-search save | `renderer.js`, `lib/git-sync.js` | bare remote/manual smoke |
+| 10 | Done | Fetch on saved-search open | `renderer.js`, `lib/git/git-sync.js` | manual smoke |
+| 11 | Done | Push on saved-search save | `renderer.js`, `lib/git/git-sync.js` | bare remote/manual smoke |
 | 12 | Done | Conflict and sync status display | `renderer.js` | manual smoke |
 | 13 | Requires attention | Full two-instance validation | app workflow | checklist at bottom |
 
@@ -425,7 +425,7 @@ After loop:
 - Mark row 6 `Done`.
 - Commit message: `Add saved search open service`.
 
-**Done (2026-07-09):** Added `openSavedSearchHistory` in `lib/saved-search-open.js` — canonical path, ensureRepo/fetch/checkout, worktree-wins import, git restore, first-open commit with trailers; fetch failure returns warning without blocking local open. Six unit tests pass.
+**Done (2026-07-09):** Added `openSavedSearchHistory` in `lib/objects/saved-search-open.js` — canonical path, ensureRepo/fetch/checkout, worktree-wins import, git restore, first-open commit with trailers; fetch failure returns warning without blocking local open. Six unit tests pass.
 
 ## Loop 7 — renderer canonical path wiring
 
@@ -480,7 +480,7 @@ After loop:
 - Mark row 8 `Done`.
 - Commit message: `Persist git sync settings`.
 
-**Done (2026-07-09):** Added `lib/git-settings.js` with defaults, normalize, and userData JSON read/write; IPC handlers `get-git-sync-settings` / `set-git-sync-settings` in `main.js`. Eight unit tests pass.
+**Done (2026-07-09):** Added `lib/git/git-settings.js` with defaults, normalize, and userData JSON read/write; IPC handlers `get-git-sync-settings` / `set-git-sync-settings` in `main.js`. Eight unit tests pass.
 
 ## Loop 9 — settings UI
 

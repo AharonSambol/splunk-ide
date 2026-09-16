@@ -12,7 +12,7 @@ renderer/               UI modules
 styles.css
 webview-preload.js
 injectors/              guest IIFEs
-lib/url-utils.js        shared
+lib/splunk-url.js        shared
 lib/main/               main-process helpers
 lib/git/
 lib/objects/

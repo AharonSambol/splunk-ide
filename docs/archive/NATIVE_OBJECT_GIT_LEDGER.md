@@ -4,7 +4,7 @@ This file is the handoff contract for loop-based implementation. A subagent
 should be able to open this file, take the first `Open` loop, implement only
 that loop, run its check, update the status row, and commit.
 
-Supersedes the `.spl` canonical-path model in `SAVED_SEARCH_GIT_LEDGER.md` for
+Supersedes the `.spl` canonical-path model in `docs/archive/SAVED_SEARCH_GIT_LEDGER.md` for
 new work. That ledger remains history for completed loops 0–13.
 
 ## Non-negotiables
@@ -363,21 +363,21 @@ Keep sync status separate from draft dirty state.
 
 | ID | Status | Commit goal | Primary files | Required check |
 | --- | --- | --- | --- | --- |
-| 0 | Done | Conf stanza parse / extract / upsert | `lib/conf-stanza.js`, `test/conf-stanza.test.js` | unit: Error Rate replace-in-place, no duplicate |
-| 1 | Done | Native path helpers (conf + dashboard) | `lib/saved-search-id.js` or `lib/object-paths.js`, tests | unit: apps vs users, slug not used for match |
-| 2 | Done | Per-stanza draft stash refs + recompose | `lib/query-versions.js` or `lib/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
-| 3 | Done | Stanza-filtered `listVersions` + diff text | `lib/query-versions.js`, tests | watchdog-like sibling commit hidden |
-| 4 | Done | Save = upsert(HEAD, one stanza) via temp index | `lib/query-versions.js`, tests | sibling draft not in commit blob |
-| 5 | Done | Restore = draft only (no whole-conf checkout) | `lib/query-versions.js`, tests | siblings unchanged; Exact name replace |
+| 0 | Done | Conf stanza parse / extract / upsert | `lib/objects/conf-stanza.js`, `test/conf-stanza.test.js` | unit: Error Rate replace-in-place, no duplicate |
+| 1 | Done | Native path helpers (conf + dashboard) | `lib/objects/saved-search-id.js` or `lib/objects/object-paths.js`, tests | unit: apps vs users, slug not used for match |
+| 2 | Done | Per-stanza draft stash refs + recompose | `lib/git/query-versions.js` or `lib/git/stanza-drafts.js`, tests | multi-draft persist; recompose roundtrip |
+| 3 | Done | Stanza-filtered `listVersions` + diff text | `lib/git/query-versions.js`, tests | watchdog-like sibling commit hidden |
+| 4 | Done | Save = upsert(HEAD, one stanza) via temp index | `lib/git/query-versions.js`, tests | sibling draft not in commit blob |
+| 5 | Done | Restore = draft only (no whole-conf checkout) | `lib/git/query-versions.js`, tests | siblings unchanged; Exact name replace |
 | 6 | Done | Reset / discard one draft | drafts module, tests | other drafts survive |
 | 7 | Done | Serialize ops per conf path | drafts/save module, tests | concurrent save/reset safe |
 | 8 | Done | Stale `baseHash` detection | drafts module, tests | HEAD moved → status / rebase rule |
-| 9 | Done | REST client GET saved search + view | `lib/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
-| 10 | Done | Open/import flow uses conf paths + REST | `lib/saved-search-open.js` (adapt), tests | import upserts stanza |
+| 9 | Done | REST client GET saved search + view | `lib/objects/splunk-rest.js`, tests (mock) | fetch → stanza/view text |
+| 10 | Done | Open/import flow uses conf paths + REST | `lib/objects/saved-search-open.js` (adapt), tests | import upserts stanza |
 | 11 | Done | Renderer: multi-tab save/restore/reset/stash | `renderer.js` | smoke + unit where possible |
 | 12 | Done | Dashboard path + file-scoped history wiring | path helper, renderer, tests | view file roundtrip |
-| 13 | Done | Push/fetch + REST reconcile on diverge | `lib/git-sync.js`, renderer | non-ff → re-export path |
-| 14 | Done | Trailers / tags include object type + stanza | `lib/query-versions.js`, tests | trailer present on IDE save |
+| 13 | Done | Push/fetch + REST reconcile on diverge | `lib/git/git-sync.js`, renderer | non-ff → re-export path |
+| 14 | Done | Trailers / tags include object type + stanza | `lib/git/query-versions.js`, tests | trailer present on IDE save |
 | 15 | Done | Drop `.spl` canonical save path from hot path | renderer, open helpers | no new `.spl` writes for saved searches |
 | 16 | Done | Two-tab independence proof test | integration test | save A leaves B draft intact |
 
@@ -396,7 +396,7 @@ given message. Do not start the next loop until DoD is met.
 safe stanza surgery on a shared conf. Wrong parse = duplicate searches or
 sibling corruption. Pure module first so git/UI cannot paper over parser bugs.
 
-**Scope:** New `lib/conf-stanza.js` only. No git, no renderer, no REST.
+**Scope:** New `lib/objects/conf-stanza.js` only. No git, no renderer, no REST.
 
 ```js
 extractStanza(confText, name) → string | null
@@ -422,7 +422,7 @@ listStanzaNames(confText) → string[]
 
 **Commit:** `Add conf stanza extract/upsert helper`
 
-**Done 2026-07-14:** Added `lib/conf-stanza.js`, `test/conf-stanza.test.js`. `npm test -- test/conf-stanza.test.js` → 13 pass; full `npm test` → exit 0, no regressions.
+**Done 2026-07-14:** Added `lib/objects/conf-stanza.js`, `test/conf-stanza.test.js`. `npm test -- test/conf-stanza.test.js` → 13 pass; full `npm test` → exit 0, no regressions.
 
 ---
 
@@ -432,8 +432,8 @@ listStanzaNames(confText) → string[]
 parallel histories. Separate from Loop 0 so path policy (apps vs users,
 instance prefix) can change without touching the parser.
 
-**Scope:** Path helpers only (`lib/object-paths.js` or extend
-`lib/saved-search-id.js`). Slug for path segments only — never for stanza match.
+**Scope:** Path helpers only (`lib/objects/object-paths.js` or extend
+`lib/objects/saved-search-id.js`). Slug for path segments only — never for stanza match.
 
 ```js
 getSavedSearchConfPath({ instance, app, owner })
@@ -456,7 +456,7 @@ getDashboardViewPath({ instance, app, owner, name, ext })
 
 **Commit:** `Add native Splunk object path helpers`
 
-**Done 2026-07-14:** Added `lib/object-paths.js`, `test/object-paths.test.js`. `npm test -- test/object-paths.test.js` → 8 pass; full `npm test` → 244 pass, exit 0.
+**Done 2026-07-14:** Added `lib/objects/object-paths.js`, `test/object-paths.test.js`. `npm test -- test/object-paths.test.js` → 8 pass; full `npm test` → 244 pass, exit 0.
 
 ---
 
@@ -491,7 +491,7 @@ refs/splunk-ide/stashes/<conf-slug>/<stanza-slug>/<baseHash>
 
 **Commit:** `Add per-stanza durable draft stashes`
 
-**Done 2026-07-14:** Added `lib/stanza-drafts.js`, `test/stanza-drafts.test.js`. `node --test test/stanza-drafts.test.js` → 6 pass; full suite → 250 pass, exit 0.
+**Done 2026-07-14:** Added `lib/git/stanza-drafts.js`, `test/stanza-drafts.test.js`. `node --test test/stanza-drafts.test.js` → 6 pass; full suite → 250 pass, exit 0.
 
 ---
 
@@ -548,7 +548,7 @@ after. No renderer yet if callable from lib tests.
 
 **Commit:** `Commit only the active saved-search stanza`
 
-**Done 2026-07-14:** Added `saveStanzaVersion` and `commitFileContentOnParent` in `lib/query-versions.js`, `test/stanza-save-version.test.js`. `node --test test/stanza-save-version.test.js` → 5 pass; full `node --test test/*.test.js` → 226 pass, exit 0.
+**Done 2026-07-14:** Added `saveStanzaVersion` and `commitFileContentOnParent` in `lib/git/query-versions.js`, `test/stanza-save-version.test.js`. `node --test test/stanza-save-version.test.js` → 5 pass; full `node --test test/*.test.js` → 226 pass, exit 0.
 
 ---
 
@@ -577,7 +577,7 @@ commit/push/REST.
 
 **Commit:** `Restore saved search as stanza draft`
 
-**Done 2026-07-14:** Added `restoreStanzaVersion` in `lib/query-versions.js`, `test/stanza-restore-version.test.js`. `node --test test/stanza-restore-version.test.js` → 5 pass; full `node --test test/*.test.js` → 231 pass, exit 0.
+**Done 2026-07-14:** Added `restoreStanzaVersion` in `lib/git/query-versions.js`, `test/stanza-restore-version.test.js`. `node --test test/stanza-restore-version.test.js` → 5 pass; full `node --test test/*.test.js` → 231 pass, exit 0.
 
 ---
 
@@ -596,7 +596,7 @@ clearing only the active draft.
 
 **Commit:** `Discard a single stanza draft`
 
-**Done 2026-07-14:** Added `discardStanzaDraft` in `lib/query-versions.js`, `test/stanza-discard-draft.test.js`. `node --test test/stanza-discard-draft.test.js` → 3 pass; full `node --test test/*.test.js` → 234 pass, exit 0.
+**Done 2026-07-14:** Added `discardStanzaDraft` in `lib/git/query-versions.js`, `test/stanza-discard-draft.test.js`. `node --test test/stanza-discard-draft.test.js` → 3 pass; full `node --test test/*.test.js` → 234 pass, exit 0.
 
 ---
 
@@ -618,7 +618,7 @@ if contention matters`.
 
 **Commit:** `Serialize stanza ops per conf file`
 
-**Done 2026-07-14:** Added `lib/conf-lock.js` (`withConfLock`), wrapped stanza mutators in `lib/stanza-drafts.js` and `lib/query-versions.js`, `test/stanza-conf-lock.test.js`. `node --test test/stanza-conf-lock.test.js` → 2 pass; full `node --test test/*.test.js` → 236 pass, exit 0.
+**Done 2026-07-14:** Added `lib/git/conf-lock.js` (`withConfLock`), wrapped stanza mutators in `lib/git/stanza-drafts.js` and `lib/git/query-versions.js`, `test/stanza-conf-lock.test.js`. `node --test test/stanza-conf-lock.test.js` → 2 pass; full `node --test test/*.test.js` → 236 pass, exit 0.
 
 ---
 
@@ -644,7 +644,7 @@ changed” prompts → Loop 13.
 
 **Commit:** `Detect stale stanza draft bases`
 
-**Done 2026-07-14:** Added `getStanzaDraftStatus` and `isCommitAncestor` in `lib/stanza-drafts.js`, `test/stanza-draft-status.test.js`. Stale rule: draft exists and `baseHash !== HEAD`. `node --test test/stanza-draft-status.test.js` → 4 pass; full `node --test test/*.test.js` → 240 pass, exit 0.
+**Done 2026-07-14:** Added `getStanzaDraftStatus` and `isCommitAncestor` in `lib/git/stanza-drafts.js`, `test/stanza-draft-status.test.js`. Stale rule: draft exists and `baseHash !== HEAD`. `node --test test/stanza-draft-status.test.js` → 4 pass; full `node --test test/*.test.js` → 240 pass, exit 0.
 
 ---
 
@@ -654,7 +654,7 @@ changed” prompts → Loop 13.
 produce comparable content via REST so both writers share one tree. GET-only in
 this loop (write-back optional later).
 
-**Scope:** `lib/splunk-rest.js` — auth + GET saved search → stanza-ish text; GET
+**Scope:** `lib/objects/splunk-rest.js` — auth + GET saved search → stanza-ish text; GET
 view → body. Mocked HTTP tests. Document key normalization so identical Splunk
 state tends toward identical bytes (reduces noisy midnight commits).
 
@@ -668,7 +668,7 @@ state tends toward identical bytes (reduces noisy midnight commits).
 
 **Commit:** `Add Splunk REST export helpers`
 
-**Done 2026-07-14:** Added `lib/splunk-rest.js`, `test/splunk-rest.test.js`. `node --test test/splunk-rest.test.js` → 7 pass; full `node --test test/*.test.js` → 247 pass, exit 0.
+**Done 2026-07-14:** Added `lib/objects/splunk-rest.js`, `test/splunk-rest.test.js`. `node --test test/splunk-rest.test.js` → 7 pass; full `node --test test/*.test.js` → 247 pass, exit 0.
 
 ---
 
@@ -678,7 +678,7 @@ state tends toward identical bytes (reduces noisy midnight commits).
 place REST + conf + git meet. Without this, Loops 0–8 are unreachable from the
 product open flow.
 
-**Scope:** Adapt `lib/saved-search-open.js` (or successor): resolve conf path,
+**Scope:** Adapt `lib/objects/saved-search-open.js` (or successor): resolve conf path,
 fetch if needed, upsert missing stanza, optional import commit, return path +
 stanza context.
 
@@ -692,7 +692,7 @@ stanza context.
 
 **Commit:** `Open saved searches from native conf paths`
 
-**Done 2026-07-14:** Adapted `lib/saved-search-open.js` to `getSavedSearchConfPath`, draft-first recompose, HEAD stanza reuse, REST import via injectable `fetchSavedSearchStanza`. Rewrote `test/saved-search-open.test.js`. `node --test test/saved-search-open.test.js` → 9 pass; full `node --test test/*.test.js` → 249 pass, exit 0.
+**Done 2026-07-14:** Adapted `lib/objects/saved-search-open.js` to `getSavedSearchConfPath`, draft-first recompose, HEAD stanza reuse, REST import via injectable `fetchSavedSearchStanza`. Rewrote `test/saved-search-open.test.js`. `node --test test/saved-search-open.test.js` → 9 pass; full `node --test test/*.test.js` → 249 pass, exit 0.
 
 ---
 
@@ -737,7 +737,7 @@ drafts OK. URL parse for dashboards as needed.
 
 **Commit:** `Version dashboards as native view files`
 
-**Done 2026-07-14:** Added `parseDashboardFromUrl` in `lib/url-utils.js`, `lib/dashboard-open.js`, `test/dashboard-open.test.js`, `test/dashboard-url-utils.test.js`. Thin `renderer.js` wiring for dashboard open/history/save/restore via native view paths. `node --test test/dashboard-open.test.js test/dashboard-url-utils.test.js` → 11 pass; full `node --test test/*.test.js` → 260 pass, exit 0. Smoke gap: live Splunk dashboard edits are not mirrored into view file bytes until REST write-back (Loop 13+).
+**Done 2026-07-14:** Added `parseDashboardFromUrl` in `lib/splunk-url.js`, `lib/objects/dashboard-open.js`, `test/dashboard-open.test.js`, `test/dashboard-url.test.js`. Thin `renderer.js` wiring for dashboard open/history/save/restore via native view paths. `node --test test/dashboard-open.test.js test/dashboard-url.test.js` → 11 pass; full `node --test test/*.test.js` → 260 pass, exit 0. Smoke gap: live Splunk dashboard edits are not mirrored into view file bytes until REST write-back (Loop 13+).
 
 ---
 
@@ -761,7 +761,7 @@ local drafts survive. Same-stanza remote+local draft → `Stanza conflict` statu
 
 **Commit:** `Reconcile shared conf history from Splunk REST`
 
-**Done 2026-07-14:** Added `lib/reconcile.js` (`reconcileConfFromRest`, `detectStanzaConflicts`), `pushSharedHistoryWithReconcile` in `lib/git-sync.js`, thin renderer push wiring, fixed `isCommitAncestor` to use `execFile` (simple-git `raw` ignored exit 1). `node --test test/reconcile.test.js` → 2 pass; full `node --test test/*.test.js` → 262 pass, exit 0.
+**Done 2026-07-14:** Added `lib/git/reconcile.js` (`reconcileConfFromRest`, `detectStanzaConflicts`), `pushSharedHistoryWithReconcile` in `lib/git/git-sync.js`, thin renderer push wiring, fixed `isCommitAncestor` to use `execFile` (simple-git `raw` ignored exit 1). `node --test test/reconcile.test.js` → 2 pass; full `node --test test/*.test.js` → 262 pass, exit 0.
 
 ---
 
@@ -806,7 +806,7 @@ and save hot paths. Orphan cleanup optional/later (YAGNI unless it confuses UI).
 
 **Commit:** `Stop using URL .spl files for saved searches`
 
-**Done 2026-07-14:** Removed `getSavedSearchPath` from `renderer.js` hot paths; `createFileWithUrl` / `applySavedSearchToFile` keep tab URL on user-named `.spl` files; git ops still use `getSavedSearchConfPath` via `getRelativePath`. Added `test/saved-search-no-canonical-spl.test.js`. `node --test test/saved-search-no-canonical-spl.test.js` → 2 pass; full `npm test` → exit 0.
+**Done 2026-07-14:** Removed `getSavedSearchPath` from `renderer.js` hot paths; `createFileWithUrl` / `applySavedSearchToFile` keep tab URL on user-named `.spl` files; git ops still use `getSavedSearchConfPath` via `getRelativePath`. Added `test/renderer/saved-search-no-canonical-spl.test.js`. `node --test test/renderer/saved-search-no-canonical-spl.test.js` → 2 pass; full `npm test` → exit 0.
 
 ---
 
@@ -852,7 +852,7 @@ dirty A + dirty B
 
 ## Implementation notes for subagents
 
-- Prefer extending `lib/query-versions.js` patterns (`commitFileOnParent`,
+- Prefer extending `lib/git/query-versions.js` patterns (`commitFileOnParent`,
   stash refs) over new branch machinery.
 - One loop per commit unless the ledger row says otherwise.
 - After each loop: mark status `Done`, note date, run the row’s check.
