@@ -1,4 +1,6 @@
         /* Dark theme IDE styling */
+/* ============================ shell + sidebars ============================ */
+
         body {
             display: flex;
             flex-direction: column;
@@ -188,6 +190,8 @@
             padding: 10px 12px;
         }
 
+/* ============================ history tabs + tag popup ======================= */
+
         #query-history-tabs {
             display: flex;
             border-bottom: 1px solid #333;
@@ -291,6 +295,8 @@
             color: #fff;
         }
 
+/* ============================ query sidebar ============================ */
+
         #query-sidebar {
             width: 320px;
             background: #252526;
@@ -348,6 +354,8 @@
             cursor: ew-resize !important;
             user-select: none !important;
         }
+
+/* ============================ history panel ============================ */
 
         #query-history-header {
             display: flex;
@@ -621,6 +629,8 @@
             cursor: not-allowed;
         }
 
+/* ============================ status bar + explorer items ============================ */
+
         #status-bar {
             display: flex;
             align-items: center;
@@ -753,6 +763,8 @@
             background: rgba(255, 255, 255, 0.06);
             color: #bbb;
         }
+
+/* ============================ main area, tabs, webviews ============================ */
 
         #main-area {
             flex: 1;
@@ -928,6 +940,8 @@
             pointer-events: auto;
         }
 
+/* ============================ quick search overlay ============================ */
+
         #quick-search-overlay {
             position: absolute;
             inset: 0;
@@ -997,6 +1011,8 @@
             line-height: 1.35;
             white-space: pre-wrap;
         }
+
+/* ============================ modals ============================ */
 
         #new-file-modal {
             position: absolute;
@@ -1202,6 +1218,8 @@
         .modal-button.primary:hover {
             background: #0098ff;
         }
+
+/* ============================ quick search items (appended) ============================ */
 
         .quick-search-item:last-child {
             border-bottom: none;
