@@ -790,6 +790,20 @@
             fill: rgb(210, 210, 210);
         }
 
+        button.project-action.project-action-pad {
+            padding: 5px 15px;
+        }
+
+        button.project-action.tab-nav-btn {
+            font-size: larger;
+            padding: 0 10px;
+        }
+
+        button.project-action.tab-action-btn {
+            margin-right: 0;
+            padding: 5px 10px;
+        }
+
         button.project-action:hover,
         #new-file-btn:hover {
             background: #0098ff;
