@@ -66,6 +66,15 @@ const {
     updateProjectDisplay,
 } = require('./explorer/project');
 
+let createTab;
+let createView;
+let closeTab;
+let switchToFile;
+let initializeQueryVersions;
+let onQueryFileChanged;
+let applySavedSearchToFile;
+let updateTabLabel;
+
 function createFileWithUrl(name, url, parentFolder = '') {
     if (!state.currentProjectPath) {
         alert('Please create or open a project before creating files.');
