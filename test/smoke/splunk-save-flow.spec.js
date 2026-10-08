@@ -1,59 +1,68 @@
 'use strict';
 
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
+const os = require('node:os');
 const { test, expect } = require('@playwright/test');
 const { simpleGit } = require('simple-git');
 const {
     REPO_ROOT,
     launchApp,
     closeApp,
-    createTempProjectDir,
-    removeTempDir,
-    mockProjectFolderDialog,
+    workspacePath,
+    writeGitSyncSettings,
+    waitForAutoLoad,
 } = require('./helpers/launch-app');
 
-const CONF_PATH = 'unknown-instance/apps/search/local/savedsearches.conf';
+// Saved-search .spl files get their URL rewritten onto the configured
+// splunkUrl origin (withSplunkOrigin), so the webview can only ever reach a
+// real http(s) endpoint. This suite points splunkUrl at a local HTTP server
+// that serves the saved-search mock fixture for every GET.
+// slugHostname keeps dots, so instance dir = '127.0.0.1'.
+const CONF_PATH = '127.0.0.1/apps/search/local/savedsearches.conf';
 const HEAD_CONF = `[Error Rate]
 search = index=main
 disabled = 0
 
 `;
 
-function savedSearchFixtureUrl(fixturePath) {
-    const sParam = encodeURIComponent('[nobody:search:Error Rate]');
-    return `file://${fixturePath}?s=${sParam}`;
+const FIXTURE_PATH = path.join(REPO_ROOT, 'test/fixtures/splunk-saved-search-mock.html');
+const FIXTURE_HTML = fs.readFileSync(FIXTURE_PATH, 'utf8');
+
+async function startFixtureServer() {
+    const server = http.createServer((req, res) => {
+        if (req.method === 'GET') {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(FIXTURE_HTML);
+        } else {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end('{}');
+        }
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    return { server, splunkUrl: `http://127.0.0.1:${port}` };
 }
 
-async function setupSavedSearchProject(projectPath) {
-    const confAbsolute = path.join(projectPath, CONF_PATH);
+async function seedWorkspaceProject(projectDir, splunkUrl) {
+    const confAbsolute = path.join(projectDir, CONF_PATH);
     fs.mkdirSync(path.dirname(confAbsolute), { recursive: true });
     fs.writeFileSync(confAbsolute, HEAD_CONF, 'utf8');
 
-    const git = simpleGit(projectPath);
+    const git = simpleGit(projectDir);
     await git.init();
     await git.addConfig('user.name', 'Smoke Test');
     await git.addConfig('user.email', 'smoke@example.com');
     await git.add('.');
     await git.commit('Initial conf');
 
-    const fixturePath = path.join(REPO_ROOT, 'test/fixtures/splunk-saved-search-mock.html');
-    const splUrl = savedSearchFixtureUrl(fixturePath);
-    fs.writeFileSync(path.join(projectPath, 'error-rate.spl'), splUrl, 'utf8');
+    // servicesNS form: isSplunkSearchRunnerPage matches s=%2FservicesNS%2F...
+    const sParam = encodeURIComponent('/servicesNS/nobody/search/saved/searches/Error Rate');
+    const splUrl = `${splunkUrl}/en-US/app/search/search?s=${sParam}`;
+    fs.writeFileSync(path.join(projectDir, 'error-rate.spl'), `${splUrl}\n`);
 
     return git;
-}
-
-async function openProject(window, electronApp, projectPath) {
-    await mockProjectFolderDialog(electronApp, projectPath);
-    await window.evaluate(() => {
-        const header = document.getElementById('header');
-        if (header) {
-            header.hidden = false;
-        }
-        document.getElementById('open-project-btn').click();
-    });
-    await expect(window.locator('#project-name')).toHaveText(path.basename(projectPath));
 }
 
 async function waitForGuestHooks(window) {
@@ -86,8 +95,8 @@ async function editGuestQuery(window, suffix) {
 
 test.describe('Splunk save IPC and git commit', () => {
     let electronApp;
-    let tempProjectPath;
     let userDataDir;
+    let server;
 
     test.afterEach(async () => {
         if (electronApp) {
@@ -95,19 +104,30 @@ test.describe('Splunk save IPC and git commit', () => {
             electronApp = undefined;
             userDataDir = undefined;
         }
-        removeTempDir(tempProjectPath);
-        tempProjectPath = undefined;
+        if (server) {
+            await new Promise(resolve => server.close(resolve));
+            server = undefined;
+        }
     });
 
+    async function launchWithSeededWorkspace() {
+        userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'splunk-ide-smoke-user-'));
+        ({ server, splunkUrl } = await startFixtureServer());
+        const ws = workspacePath(userDataDir);
+        fs.mkdirSync(ws, { recursive: true });
+        const git = await seedWorkspaceProject(ws, splunkUrl);
+        writeGitSyncSettings(userDataDir, { splunkUrl });
+        ({ electronApp } = await launchApp({ userDataDir }));
+        const window = await electronApp.firstWindow();
+        await waitForAutoLoad(window);
+        return { window, git };
+    }
+    let splunkUrl;
+
     test('guest Cmd+S does not commit until Splunk REST save succeeds', async () => {
-        tempProjectPath = createTempProjectDir();
-        const git = await setupSavedSearchProject(tempProjectPath);
+        const { window, git } = await launchWithSeededWorkspace();
         const commitsBefore = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
 
-        ({ electronApp, userDataDir } = await launchApp());
-        const window = await electronApp.firstWindow();
-
-        await openProject(window, electronApp, tempProjectPath);
         await openSavedSearchTab(window);
         await editGuestQuery(window, ' | stats count');
 
@@ -145,14 +165,9 @@ test.describe('Splunk save IPC and git commit', () => {
     });
 
     test('Save dialog confirm in webview commits saved-search stanza', async () => {
-        tempProjectPath = createTempProjectDir();
-        const git = await setupSavedSearchProject(tempProjectPath);
+        const { window, git } = await launchWithSeededWorkspace();
         const commitsBefore = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
 
-        ({ electronApp, userDataDir } = await launchApp());
-        const window = await electronApp.firstWindow();
-
-        await openProject(window, electronApp, tempProjectPath);
         await openSavedSearchTab(window);
         await editGuestQuery(window, ' | stats count');
         await window.evaluate(async () => {
@@ -167,14 +182,9 @@ test.describe('Splunk save IPC and git commit', () => {
     });
 
     test('toolbar Save without dialog confirm does not commit', async () => {
-        tempProjectPath = createTempProjectDir();
-        const git = await setupSavedSearchProject(tempProjectPath);
+        const { window, git } = await launchWithSeededWorkspace();
         const commitsBefore = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
 
-        ({ electronApp, userDataDir } = await launchApp());
-        const window = await electronApp.firstWindow();
-
-        await openProject(window, electronApp, tempProjectPath);
         await openSavedSearchTab(window);
         await editGuestQuery(window, ' | stats count');
         await window.evaluate(async () => {
@@ -183,7 +193,6 @@ test.describe('Splunk save IPC and git commit', () => {
         });
 
         await new Promise((resolve) => setTimeout(resolve, 1500));
-        const commitsAfter = Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim());
-        expect(commitsAfter).toBe(commitsBefore);
+        expect(Number((await git.raw(['rev-list', '--count', 'HEAD'])).trim())).toBe(commitsBefore);
     });
 });

@@ -6,45 +6,39 @@ const { test, expect } = require('@playwright/test');
 const {
     launchApp,
     closeApp,
-    createTempProjectDir,
-    removeTempDir,
-    mockProjectFolderDialog,
+    workspacePath,
+    waitForAutoLoad,
 } = require('./helpers/launch-app');
 
 test.describe('Project and sidebar flows', () => {
     let electronApp;
-    let tempProjectPath;
+    let userDataDir;
 
     test.afterEach(async () => {
         if (electronApp) {
-            await closeApp(electronApp);
+            await closeApp(electronApp, userDataDir);
             electronApp = undefined;
+            userDataDir = undefined;
         }
-        removeTempDir(tempProjectPath);
-        tempProjectPath = undefined;
     });
 
-    test('creates a temp project via mocked folder dialog', async () => {
-        tempProjectPath = createTempProjectDir();
-        ({ electronApp } = await launchApp());
+    // The app auto-loads <userData>/searches and seeds 'Search 1' when empty;
+    // the project header buttons are hidden UI, so flows run on that workspace.
+    test('auto-loads the default workspace and seeds Search 1', async () => {
+        ({ electronApp, userDataDir } = await launchApp());
         const window = await electronApp.firstWindow();
 
-        await mockProjectFolderDialog(electronApp, tempProjectPath);
-        await window.click('#new-project-btn');
-
-        await expect(window.locator('#project-name')).toHaveText(path.basename(tempProjectPath));
+        await waitForAutoLoad(window);
+        await expect(window.locator('#project-name')).toHaveText('searches');
+        await expect(window.locator('.explorer-item .file-name', { hasText: 'Search 1' })).toBeVisible();
+        expect(fs.existsSync(path.join(workspacePath(userDataDir), 'Search 1.spl'))).toBe(true);
         await expect(window.locator('#new-file-btn')).toBeEnabled();
-        await window.click('#new-file-btn');
-        await expect(window.locator('#new-folder-btn')).toBeEnabled();
     });
 
     test('creates a file that appears in the explorer', async () => {
-        tempProjectPath = createTempProjectDir();
-        ({ electronApp } = await launchApp());
+        ({ electronApp, userDataDir } = await launchApp());
         const window = await electronApp.firstWindow();
-
-        await mockProjectFolderDialog(electronApp, tempProjectPath);
-        await window.click('#new-project-btn');
+        await waitForAutoLoad(window);
         await expect(window.locator('#new-file-btn')).toBeEnabled();
 
         await window.click('#new-file-btn');
@@ -55,46 +49,39 @@ test.describe('Project and sidebar flows', () => {
 
         await expect(window.locator('.explorer-item .file-name', { hasText: 'smoke-search' })).toBeVisible();
 
-        const createdFilePath = path.join(tempProjectPath, 'smoke-search.spl');
+        const createdFilePath = path.join(workspacePath(userDataDir), 'smoke-search.spl');
         expect(fs.existsSync(createdFilePath)).toBe(true);
     });
 
     test('opens quick search overlay with double-shift', async () => {
-        tempProjectPath = createTempProjectDir();
-        ({ electronApp } = await launchApp());
+        ({ electronApp, userDataDir } = await launchApp());
         const window = await electronApp.firstWindow();
+        await waitForAutoLoad(window);
+        await expect(window.locator('.explorer-item .file-name', { hasText: 'Search 1' })).toBeVisible();
 
-        await mockProjectFolderDialog(electronApp, tempProjectPath);
-        await window.click('#new-project-btn');
-        await window.click('#new-file-btn');
-        await window.click('#new-search-choice');
-        await window.fill('#new-file-modal-input', 'quick-search-target');
-        await window.click('#new-file-create');
-        await expect(window.locator('.explorer-item .file-name', { hasText: 'quick-search-target' })).toBeVisible();
-
-        await window.keyboard.press('Shift');
-        await window.keyboard.press('Shift');
+        // Real Shift keypresses are forwarded via before-input-event ->
+        // 'app-keydown' IPC, but only while the main frame (not a webview)
+        // holds focus — which is unreliable under test. Send the same IPC
+        // directly; the input filtering itself is unit-tested.
+        await electronApp.evaluate(({ BrowserWindow }) => {
+            const win = BrowserWindow.getAllWindows()[0];
+            win.webContents.send('app-keydown', { key: 'Shift', code: 'ShiftLeft' });
+            win.webContents.send('app-keydown', { key: 'Shift', code: 'ShiftRight' });
+        });
 
         await expect(window.locator('#quick-search-overlay.visible')).toBeVisible();
-        await window.fill('#quick-search-input', 'quick-search-target');
-        await expect(window.locator('.quick-search-item', { hasText: 'quick-search-target' })).toBeVisible();
+        await window.fill('#quick-search-input', 'Search 1');
+        await expect(window.locator('.quick-search-item', { hasText: 'Search 1' })).toBeVisible();
     });
 
-    test('loads the git panel without crashing', async () => {
-        tempProjectPath = createTempProjectDir();
-        ({ electronApp } = await launchApp());
+    test('opens the git sync settings modal', async () => {
+        ({ electronApp, userDataDir } = await launchApp());
         const window = await electronApp.firstWindow();
+        await waitForAutoLoad(window);
 
-        await mockProjectFolderDialog(electronApp, tempProjectPath);
-        await window.click('#new-project-btn');
-        await window.click('.sidebar-tab[data-view="git"]');
+        await window.click('#git-sync-settings-btn');
 
-        await expect(window.locator('#git-view.active')).toBeVisible();
-        await expect(window.locator('#git-changes-tab.active')).toBeVisible();
-        await expect(window.locator('#git-commit')).toBeVisible();
-        await expect(window.locator('#git-status')).toBeVisible();
-        await expect(window.locator('#git-status .git-file-item, #git-status div')).toHaveCount(1, {
-            timeout: 15_000,
-        });
+        await expect(window.locator('#git-sync-settings-modal.visible')).toBeVisible();
+        await expect(window.locator('#git-sync-settings-modal-box input').first()).toBeVisible();
     });
 });

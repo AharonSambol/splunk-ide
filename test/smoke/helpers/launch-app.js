@@ -57,11 +57,35 @@ async function closeApp(electronApp, userDataDir) {
     }
 }
 
+// The app always auto-loads <userDataDir>/searches at startup and creates
+// 'Search 1' when the workspace is empty. Seed files there before launch.
+function workspacePath(userDataDir) {
+    return path.join(userDataDir, 'searches');
+}
+
+function writeGitSyncSettings(userDataDir, settings) {
+    fs.writeFileSync(
+        path.join(userDataDir, 'git-sync-settings.json'),
+        JSON.stringify(settings)
+    );
+}
+
+async function waitForAutoLoad(window) {
+    await window.waitForFunction(
+        () => document.getElementById('project-name').textContent !== 'No project loaded',
+        undefined,
+        { timeout: 15_000 }
+    );
+}
+
 module.exports = {
     REPO_ROOT,
     launchApp,
     createTempProjectDir,
     removeTempDir,
     mockProjectFolderDialog,
+    workspacePath,
+    writeGitSyncSettings,
+    waitForAutoLoad,
     closeApp,
 };

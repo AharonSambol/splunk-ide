@@ -1,7 +1,7 @@
 'use strict';
 
 const { test, expect } = require('@playwright/test');
-const { launchApp, closeApp } = require('./helpers/launch-app');
+const { launchApp, closeApp, waitForAutoLoad } = require('./helpers/launch-app');
 
 test.describe('Electron app launch', () => {
     let electronApp;
@@ -28,21 +28,23 @@ test.describe('Electron app launch', () => {
         ({ electronApp } = await launchApp());
         const window = await electronApp.firstWindow();
 
-        await expect(window.locator('#new-project-btn')).toBeVisible();
+        // The project header is hidden by design; the project buttons exist but are not shown.
+        await expect(window.locator('#header')).toBeHidden();
         await expect(window.locator('#new-project-btn')).toHaveText('New Project');
-        await expect(window.locator('#open-project-btn')).toBeVisible();
         await expect(window.locator('#open-project-btn')).toHaveText('Open Project');
         await expect(window.locator('#new-file-btn')).toBeVisible();
         await expect(window.locator('#new-folder-btn')).toBeAttached();
-        await expect(window.locator('.sidebar-tab[data-view="git"]')).toHaveText('Source Control');
+        await expect(window.locator('#git-sync-settings-btn')).toBeAttached();
     });
 
-    test('starts with no project loaded', async () => {
+    test('auto-loads the default workspace', async () => {
         ({ electronApp } = await launchApp());
         const window = await electronApp.firstWindow();
 
-        await expect(window.locator('#project-name')).toHaveText('No project loaded');
-        await expect(window.locator('#new-file-btn')).toBeDisabled();
-        await expect(window.locator('#new-folder-btn')).toBeDisabled();
+        // window.onload loads <userData>/searches and seeds 'Search 1' when empty.
+        await waitForAutoLoad(window);
+        await expect(window.locator('#project-name')).toHaveText('searches');
+        await expect(window.locator('#new-file-btn')).toBeEnabled();
+        await expect(window.locator('.explorer-item .file-name', { hasText: 'Search 1' })).toBeVisible();
     });
 });
